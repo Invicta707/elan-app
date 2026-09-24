@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyWebhookSignature, type StreamWebhookPayload } from "../../../../lib/cloudflare";
 import { getSupabaseAdmin } from "../../../../lib/supabase-server";
+import { markVideoReadyAndActivateVehicle } from "../../../../lib/video-activation";
 
 // POST /api/webhooks/cloudflare
 //
@@ -12,10 +13,6 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-server";
 //
 // Cloudflare aynı bildirimi birden fazla gönderebilir; tüm güncellemeler tekrar
 // çalıştırılabilir (idempotent). 5xx dönülen bildirimler tekrar denenebilir.
-
-// Video hazır olunca sadece bu durumlardaki ilanlar yayına alınır. Satılmış,
-// arşivlenmiş ya da zaten yayındaki ilanların durumuna dokunulmaz.
-const ACTIVATABLE_VEHICLE_STATUSES = ["draft", "pending_video"];
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
@@ -51,45 +48,26 @@ export async function POST(request: Request) {
 
   // --- Video hazır ---
   if (state === "ready" && payload.readyToStream && payload.playback?.hls) {
-    const { data: video, error: videoError } = await supabase
-      .from("videos")
-      .update({
-        status: "ready",
-        hls_url: payload.playback.hls,
-        thumbnail_url: payload.thumbnail ?? null,
-        duration_seconds:
-          typeof payload.duration === "number" && payload.duration > 0
-            ? Math.round(payload.duration)
-            : null,
-      })
-      .eq("stream_uid", streamUid)
-      .select("vehicle_id")
-      .maybeSingle();
+    const result = await markVideoReadyAndActivateVehicle(supabase, {
+      streamUid,
+      hlsUrl: payload.playback.hls,
+      thumbnailUrl: payload.thumbnail ?? null,
+      durationSeconds:
+        typeof payload.duration === "number" && payload.duration > 0
+          ? Math.round(payload.duration)
+          : null,
+    });
 
-    if (videoError) {
-      console.error("Video 'ready' olarak güncellenemedi:", streamUid, videoError);
-      return json(500, { error: "database_error" });
-    }
-    if (!video) {
-      // Bu uygulamanın açmadığı (ya da satıcının sildiği) bir video: onayla ve geç
-      console.warn("Webhook: kayıtlı olmayan video uid'si, yok sayıldı:", streamUid);
-      return json(200, { ok: true, ignored: "unknown_video" });
-    }
-
-    // Satılmış ilanın, sonradan işlenen bir videoyla yeniden açılmasını önleyen koşul
-    const { data: activated, error: vehicleError } = await supabase
-      .from("vehicles")
-      .update({ status: "active" })
-      .eq("id", video.vehicle_id)
-      .in("status", ACTIVATABLE_VEHICLE_STATUSES)
-      .select("id");
-
-    if (vehicleError) {
-      console.error("İlan yayına alınamadı:", video.vehicle_id, vehicleError);
+    if (!result.ok) {
+      if (result.error === "unknown_video") {
+        // Bu uygulamanın açmadığı (ya da satıcının sildiği) bir video: onayla ve geç
+        console.warn("Webhook: kayıtlı olmayan video uid'si, yok sayıldı:", streamUid);
+        return json(200, { ok: true, ignored: "unknown_video" });
+      }
       return json(500, { error: "database_error" });
     }
 
-    return json(200, { ok: true, vehicleActivated: (activated?.length ?? 0) > 0 });
+    return json(200, { ok: true, vehicleActivated: result.vehicleActivated });
   }
 
   // --- Video işlenemedi ---

@@ -199,6 +199,53 @@ export async function getDirectUploadUrl(request: DirectUploadRequest): Promise<
   return { uploadUrl, streamUid, expiresAt, maxDurationSeconds };
 }
 
+export type StreamVideoDetails = {
+  state: string | undefined;
+  readyToStream: boolean;
+  hlsUrl: string | null;
+  thumbnailUrl: string | null;
+  durationSeconds: number | null;
+};
+
+/**
+ * Cloudflare'deki bir videonun güncel işlenme durumunu sorgular (GET /stream/{uid}).
+ * Üretimde bu bilgiyi Cloudflare webhook'u proaktif olarak gönderir; yerel
+ * geliştirmede webhook localhost'a ulaşamadığı için app/api/dev/complete-upload
+ * bu fonksiyonla durumu kendisi sorar (bkz. o dosyadaki açıklama).
+ */
+export async function getStreamVideoDetails(streamUid: string): Promise<StreamVideoDetails> {
+  const { accountId, apiToken } = getStreamConfig();
+  const response = await fetch(
+    `${API_BASE}/accounts/${accountId}/stream/${encodeURIComponent(streamUid)}`,
+    { headers: { Authorization: `Bearer ${apiToken}` }, cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new CloudflareStreamError(await readErrorMessage(response), response.status);
+  }
+
+  const body = (await response.json()) as {
+    result?: {
+      readyToStream?: boolean;
+      status?: { state?: string };
+      thumbnail?: string;
+      duration?: number;
+      playback?: { hls?: string };
+    };
+  };
+  const result = body.result ?? {};
+
+  return {
+    state: result.status?.state,
+    readyToStream: result.readyToStream ?? false,
+    hlsUrl: result.playback?.hls ?? null,
+    thumbnailUrl: result.thumbnail ?? null,
+    durationSeconds:
+      typeof result.duration === "number" && result.duration > 0
+        ? Math.round(result.duration)
+        : null,
+  };
+}
+
 /** Videoyu Cloudflare'den siler (kayıt açılamadığında yetim video kalmasın diye). */
 export async function deleteStreamVideo(streamUid: string): Promise<void> {
   const { accountId, apiToken } = getStreamConfig();

@@ -93,6 +93,7 @@ type SubmitPhase =
   | "uploading-photos"
   | "requesting-upload-url"
   | "uploading-video"
+  | "processing-video"
   | "done";
 
 type PickedVideo = {
@@ -120,6 +121,7 @@ export default function SellPage() {
   const [phase, setPhase] = useState<SubmitPhase>("idle");
   const [uploadPercent, setUploadPercent] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [devNotice, setDevNotice] = useState<string | null>(null);
 
   const uploadAbortRef = useRef<(() => void) | null>(null);
 
@@ -248,6 +250,8 @@ export default function SellPage() {
     photos: PickedPhoto[],
   ) {
     try {
+      setDevNotice(null);
+
       // 1) WhatsApp numarasını profile yaz. NOT: "profiles" tablosunun
       // (id uuid = auth.uid(), whatsapp_number text) Supabase projende
       // mevcut olması gerekir; get_seller_whatsapp RPC'si buradan okuyor olmalı.
@@ -312,7 +316,7 @@ export default function SellPage() {
       });
 
       const body = (await response.json().catch(() => null)) as
-        | { uploadUrl?: string; error?: { message?: string; details?: string } }
+        | { videoId?: string; uploadUrl?: string; error?: { message?: string; details?: string } }
         | null;
 
       if (!response.ok || !body?.uploadUrl) {
@@ -330,6 +334,37 @@ export default function SellPage() {
       uploadAbortRef.current = handle.abort;
       await handle.done;
       uploadAbortRef.current = null;
+
+      // 6) Yerel geliştirmede Cloudflare webhook'u localhost'a ulaşamaz; video
+      // Cloudflare'de işlendikten sonra videos/vehicles satırlarını burada
+      // doğrudan biz güncelliyoruz (bkz. app/api/dev/complete-upload — prod'da
+      // 404 döner, orada gerçek webhook devreye girer).
+      if (process.env.NODE_ENV !== "production" && body.videoId) {
+        setPhase("processing-video");
+        try {
+          const devResponse = await fetch("/api/dev/complete-upload", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ videoId: body.videoId }),
+          });
+          const devBody = (await devResponse.json().catch(() => null)) as
+            | { ok?: boolean; error?: { message?: string } }
+            | null;
+
+          if (!devResponse.ok || !devBody?.ok) {
+            setDevNotice(
+              devBody?.error?.message ??
+                "Video Cloudflare'de henüz işlenmedi; ilan otomatik yayına alınamadı (yerel geliştirme).",
+            );
+          }
+        } catch (error) {
+          console.error("Dev tamamlama isteği başarısız:", error);
+          setDevNotice("Yerel geliştirme: video durumu Cloudflare'den alınamadı.");
+        }
+      }
 
       setPhase("done");
     } catch (error) {
@@ -350,6 +385,11 @@ export default function SellPage() {
           <p className="text-[15px] text-[#5B616B]">
             Video işlenir işlenmez ilanın yayına girecek. Bu genelde birkaç dakika sürer.
           </p>
+          {devNotice && (
+            <p className="max-w-xs rounded-md bg-[#FEF6E7] px-3 py-2 text-[13px] text-[#8A6116]">
+              {devNotice}
+            </p>
+          )}
           <Link
             href="/"
             className="mt-2 h-12 rounded-md bg-[#003399] px-6 text-[16px] font-semibold leading-[3rem] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
@@ -467,6 +507,8 @@ function phaseLabel(phase: SubmitPhase, uploadPercent: number): string {
       return "Video yüklemesi hazırlanıyor…";
     case "uploading-video":
       return `Video yükleniyor… %${uploadPercent}`;
+    case "processing-video":
+      return "Video işleniyor…";
     default:
       return "";
   }
