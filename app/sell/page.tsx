@@ -13,7 +13,8 @@ import {
 import AuthModal from "../../components/AuthModal";
 import FeedHeader from "../../components/FeedHeader";
 import { useSupabaseSession } from "../../lib/auth";
-import { fetchCatalog, TURKISH_CITIES, type Catalog } from "../../lib/search";
+import type { FuelType, TransmissionType } from "../../lib/feed";
+import { fetchCatalog, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
 import { supabase } from "../../lib/supabase";
 import { uploadVideoToCloudflare } from "../../lib/tus-upload";
 
@@ -34,6 +35,9 @@ type Draft = {
   mileageKm: string;
   price: string;
   city: string;
+  bodyType: BodyType | "";
+  fuelType: FuelType | "";
+  transmission: TransmissionType | "";
   damageStatus: DamageStatus;
   description: string;
   whatsapp: string;
@@ -46,10 +50,38 @@ const EMPTY_DRAFT: Draft = {
   mileageKm: "",
   price: "",
   city: "",
+  bodyType: "",
+  fuelType: "",
+  transmission: "",
   damageStatus: "none",
   description: "",
   whatsapp: "",
 };
+
+const BODY_TYPE_OPTIONS: { value: BodyType; label: string }[] = [
+  { value: "sedan", label: "Sedan" },
+  { value: "hatchback", label: "Hatchback" },
+  { value: "suv", label: "SUV" },
+  { value: "crossover", label: "Crossover" },
+  { value: "coupe", label: "Coupe" },
+  { value: "cabrio", label: "Cabrio" },
+  { value: "station_wagon", label: "Station Wagon" },
+  { value: "pickup", label: "Pickup" },
+  { value: "minivan", label: "Minivan" },
+];
+
+const FUEL_OPTIONS: { value: FuelType; label: string }[] = [
+  { value: "benzin", label: "Benzin" },
+  { value: "dizel", label: "Dizel" },
+  { value: "hibrit", label: "Hibrit" },
+  { value: "elektrik", label: "Elektrik" },
+  { value: "lpg", label: "LPG" },
+];
+
+const TRANSMISSION_OPTIONS: { value: TransmissionType; label: string }[] = [
+  { value: "otomatik", label: "Otomatik" },
+  { value: "manuel", label: "Manuel" },
+];
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "");
 const fieldClass =
@@ -238,6 +270,9 @@ export default function SellPage() {
           price: Number(onlyDigits(draft.price)),
           currency: "TRY",
           city: draft.city,
+          body_type: draft.bodyType,
+          fuel_type: draft.fuelType,
+          transmission: draft.transmission,
           has_heavy_damage: draft.damageStatus === "heavy",
           description: draft.description.trim() || null,
           status: "pending_video",
@@ -277,11 +312,15 @@ export default function SellPage() {
       });
 
       const body = (await response.json().catch(() => null)) as
-        | { uploadUrl?: string; error?: { message?: string } }
+        | { uploadUrl?: string; error?: { message?: string; details?: string } }
         | null;
 
       if (!response.ok || !body?.uploadUrl) {
-        throw new Error(body?.error?.message ?? "Video yükleme bağlantısı alınamadı.");
+        // details: Cloudflare'in ham hata mesajı (varsa) — message'dan daha
+        // açıklayıcı olduğu için ekranda öncelikli gösterilir.
+        throw new Error(
+          body?.error?.details ?? body?.error?.message ?? "Video yükleme bağlantısı alınamadı.",
+        );
       }
 
       // 5) Videoyu doğrudan Cloudflare'e yükle (ilerleme yüzdesiyle)
@@ -440,6 +479,9 @@ function validateDraft(draft: Draft, video: PickedVideo | null): string | null {
   if (!onlyDigits(draft.mileageKm)) return "Kilometreyi gir.";
   if (!onlyDigits(draft.price)) return "Fiyatı gir.";
   if (!draft.city.trim()) return "Şehir seç ya da yaz.";
+  if (!draft.bodyType) return "Kasa tipi seç.";
+  if (!draft.fuelType) return "Yakıt türü seç.";
+  if (!draft.transmission) return "Vites tipi seç.";
   if (onlyDigits(draft.whatsapp).length < 10) return "Geçerli bir WhatsApp numarası gir.";
   if (!video) return "Bir video seçmelisin.";
   return null;
@@ -615,6 +657,9 @@ function VehicleFields({
   const priceId = useId();
   const cityId = useId();
   const cityListId = useId();
+  const bodyTypeId = useId();
+  const fuelTypeId = useId();
+  const transmissionLabelId = useId();
   const damageLabelId = useId();
   const descriptionId = useId();
 
@@ -732,6 +777,74 @@ function VehicleFields({
             <option key={city} value={city} />
           ))}
         </datalist>
+      </div>
+
+      <div>
+        <label htmlFor={bodyTypeId} className="mb-1.5 block text-[14px] font-semibold">
+          Kasa tipi
+        </label>
+        <select
+          id={bodyTypeId}
+          value={draft.bodyType}
+          disabled={disabled}
+          onChange={(event) => onChange((d) => ({ ...d, bodyType: event.target.value as BodyType }))}
+          className={fieldClass}
+        >
+          <option value="">Seç</option>
+          {BODY_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor={fuelTypeId} className="mb-1.5 block text-[14px] font-semibold">
+            Yakıt türü
+          </label>
+          <select
+            id={fuelTypeId}
+            value={draft.fuelType}
+            disabled={disabled}
+            onChange={(event) =>
+              onChange((d) => ({ ...d, fuelType: event.target.value as FuelType }))
+            }
+            className={fieldClass}
+          >
+            <option value="">Seç</option>
+            {FUEL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <span id={transmissionLabelId} className="mb-1.5 block text-[14px] font-semibold">
+            Vites
+          </span>
+          <div role="group" aria-labelledby={transmissionLabelId} className="flex gap-2">
+            {TRANSMISSION_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange((d) => ({ ...d, transmission: option.value }))}
+                aria-pressed={draft.transmission === option.value}
+                className={`h-12 flex-1 rounded-md border text-[14px] font-semibold ${
+                  draft.transmission === option.value
+                    ? "border-[#003399] bg-[#EAEFF7] text-[#003399]"
+                    : "border-[#C9CED6] bg-white text-[#15181C]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div>

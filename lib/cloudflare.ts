@@ -112,6 +112,16 @@ function toTusMetadata(values: Record<string, string | undefined>): string {
 
 async function readErrorMessage(response: Response): Promise<string> {
   const text = await response.text().catch(() => "");
+
+  // Cloudflare'in tam yanıtı (durum kodu + ham gövde) sunucu loguna düşer;
+  // istemciye giden mesaj bundan türetilen, kısaltılmış bir özettir.
+  console.error("Cloudflare Stream API hatası:", {
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url,
+    body: text,
+  });
+
   try {
     const body = JSON.parse(text) as { errors?: { code?: number; message?: string }[] };
     const first = body.errors?.[0];

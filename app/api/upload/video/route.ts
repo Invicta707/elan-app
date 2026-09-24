@@ -37,8 +37,11 @@ const MAX_PENDING_UPLOADS_PER_USER = 5;
 // Satılmış ya da arşivlenmiş ilana video eklenmez
 const LOCKED_VEHICLE_STATUSES = new Set(["sold", "archived"]);
 
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
+// details: hata ayıklama için Cloudflare'in ham mesajı (varsa). message zaten
+// kullanıcıya gösterilebilir bir metin; details onu Cloudflare'in orijinal
+// yanıtıyla değiştirir/zenginleştirir (bkz. lib/cloudflare.ts readErrorMessage).
+function errorResponse(status: number, code: string, message: string, details?: string) {
+  return NextResponse.json({ error: { code, message, details } }, { status });
 }
 
 export async function POST(request: Request) {
@@ -134,10 +137,15 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Cloudflare yükleme bağlantısı oluşturulamadı:", error);
+    // CloudflareStreamError.message "Cloudflare <status>: <mesaj> (<kod>)" biçiminde
+    // (bkz. lib/cloudflare.ts readErrorMessage). Ortam değişkeni eksikse getStreamConfig
+    // düz bir Error fırlatır; o mesaj da (sır içermediği için) details'e yansıtılır.
+    const details = error instanceof Error ? error.message : undefined;
     return errorResponse(
       502,
       "upload_provider_error",
       "Video yükleme bağlantısı oluşturulamadı. Biraz sonra tekrar dene.",
+      details,
     );
   }
 
