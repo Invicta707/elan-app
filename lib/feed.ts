@@ -170,9 +170,7 @@ export async function getSellerWhatsAppUrl(vehicle: FeedVehicle): Promise<string
   const number = typeof data === "string" ? toWhatsAppNumber(data) : null;
   if (!number) return null;
 
-  const message =
-    `Merhaba, Elan'da gördüğüm ${vehicle.year} ${vehicle.brandName} ` +
-    `${vehicle.modelName} ilanınız hakkında bilgi almak istiyorum.`;
+  const message = `Merhaba, Elan'daki ${vehicle.year} ${vehicle.brandName} ${vehicle.modelName} ilanınızla ilgileniyorum.`;
 
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type Hls from "hls.js";
 import {
   getSellerWhatsAppUrl,
@@ -331,17 +331,13 @@ export default function VideoCard({
               {title}
             </h2>
 
-            <ul className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] font-medium text-white/90">
-              <li>{vehicle.year} model</li>
-              <li>{amountFormatter.format(vehicle.mileageKm)} km</li>
-              <li>
-                {FUEL_LABELS[vehicle.fuelType]} {TRANSMISSION_LABELS[vehicle.transmission]}
-              </li>
+            <ul aria-label="Araç özellikleri" className="mt-2.5 flex flex-wrap gap-1.5">
+              <Tag>{vehicle.year}</Tag>
+              <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
+              <Tag>{FUEL_LABELS[vehicle.fuelType]}</Tag>
+              <Tag>{TRANSMISSION_LABELS[vehicle.transmission]}</Tag>
               {vehicle.city && (
-                <li className="flex items-center gap-1">
-                  <PinIcon className="h-4 w-4 text-white/70" />
-                  {vehicle.city}
-                </li>
+                <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>
               )}
             </ul>
 
@@ -397,6 +393,17 @@ export default function VideoCard({
         </div>
       </div>
     </article>
+  );
+}
+
+// Yıl / km / yakıt / vites / şehir rozetleri: yarı saydam, ince bir kenarlıkla
+// videonun üstünde de okunur kalan küçük etiketler
+function Tag({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+  return (
+    <li className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[12.5px] font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-[2px]">
+      {icon}
+      {children}
+    </li>
   );
 }
 
