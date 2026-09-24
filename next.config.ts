@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.supabase.co",
       },
+      {
+        // Cloudflare Stream video kapakları (videos.thumbnail_url)
+        protocol: "https",
+        hostname: "**.cloudflarestream.com",
+      },
     ],
   },
 };

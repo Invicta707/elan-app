@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { FOCUS_PARAM } from "../lib/search";
 
 type FeedHeaderProps = {
-  /** Hangi sekmenin etkin olduğu; "sell" hiçbir sekmeyi etkin göstermez */
-  activeTab?: "feed" | "search" | "sell";
+  /** Hangi sekmenin etkin olduğu; "sell" ve "my-listings" hiçbir sekmeyi etkin göstermez */
+  activeTab?: "feed" | "search" | "sell" | "my-listings";
   /**
    * overlay: dikey videonun üstünde, yarı saydam (ana sayfa)
    * solid: açık zeminli sayfalarda normal akışta (arama sayfası)

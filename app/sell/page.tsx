@@ -342,6 +342,12 @@ export default function SellPage() {
           >
             Akışa dön
           </Link>
+          <Link
+            href="/my-listings"
+            className="rounded-sm text-[15px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+          >
+            İlanlarımı gör
+          </Link>
         </div>
       </main>
     );
@@ -355,7 +361,15 @@ export default function SellPage() {
         onSubmit={handleSubmit}
         className="mx-auto flex max-w-md flex-col gap-6 px-4 pb-32 pt-4"
       >
-        <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlan Ver</h1>
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlan Ver</h1>
+          <Link
+            href="/my-listings"
+            className="rounded-sm text-[14px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+          >
+            İlanlarım
+          </Link>
+        </div>
 
         <Section title="Video">
           <VideoPicker
