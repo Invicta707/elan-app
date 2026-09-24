@@ -1,0 +1,116 @@
+import { NextResponse } from "next/server";
+import { verifyWebhookSignature, type StreamWebhookPayload } from "../../../../lib/cloudflare";
+import { getSupabaseAdmin } from "../../../../lib/supabase-server";
+
+// POST /api/webhooks/cloudflare
+//
+// Cloudflare Stream, video işlenince (ready) ya da işlenemeyince (error) buraya
+// imzalı bir POST gönderir. Hesap başına tek webhook adresi olabilir:
+//   PUT https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/stream/webhook
+//   {"notificationUrl": "https://<alan-adın>/api/webhooks/cloudflare"}
+// Yanıttaki "secret" değeri CLOUDFLARE_STREAM_WEBHOOK_SECRET olarak saklanır.
+//
+// Cloudflare aynı bildirimi birden fazla gönderebilir; tüm güncellemeler tekrar
+// çalıştırılabilir (idempotent). 5xx dönülen bildirimler tekrar denenebilir.
+
+// Video hazır olunca sadece bu durumlardaki ilanlar yayına alınır. Satılmış,
+// arşivlenmiş ya da zaten yayındaki ilanların durumuna dokunulmaz.
+const ACTIVATABLE_VEHICLE_STATUSES = ["draft", "pending_video"];
+
+function json(status: number, body: Record<string, unknown>) {
+  return NextResponse.json(body, { status });
+}
+
+export async function POST(request: Request) {
+  const secret = process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error("CLOUDFLARE_STREAM_WEBHOOK_SECRET tanımlı değil; webhook işlenemiyor.");
+    return json(500, { error: "webhook_not_configured" });
+  }
+
+  // İmza ham gövde üzerinden doğrulanır; JSON'a çevirmeden önce byte olarak okunuyor
+  const rawBody = Buffer.from(await request.arrayBuffer());
+  if (!verifyWebhookSignature(rawBody, request.headers.get("webhook-signature"), secret)) {
+    return json(401, { error: "invalid_signature" });
+  }
+
+  let payload: StreamWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody.toString("utf8")) as StreamWebhookPayload;
+  } catch {
+    return json(400, { error: "invalid_json" });
+  }
+
+  const streamUid = payload.uid;
+  if (typeof streamUid !== "string" || streamUid === "") {
+    return json(400, { error: "missing_uid" });
+  }
+
+  const supabase = getSupabaseAdmin();
+  const state = payload.status?.state;
+
+  // --- Video hazır ---
+  if (state === "ready" && payload.readyToStream && payload.playback?.hls) {
+    const { data: video, error: videoError } = await supabase
+      .from("videos")
+      .update({
+        status: "ready",
+        hls_url: payload.playback.hls,
+        thumbnail_url: payload.thumbnail ?? null,
+        duration_seconds:
+          typeof payload.duration === "number" && payload.duration > 0
+            ? Math.round(payload.duration)
+            : null,
+      })
+      .eq("stream_uid", streamUid)
+      .select("vehicle_id")
+      .maybeSingle();
+
+    if (videoError) {
+      console.error("Video 'ready' olarak güncellenemedi:", streamUid, videoError);
+      return json(500, { error: "database_error" });
+    }
+    if (!video) {
+      // Bu uygulamanın açmadığı (ya da satıcının sildiği) bir video: onayla ve geç
+      console.warn("Webhook: kayıtlı olmayan video uid'si, yok sayıldı:", streamUid);
+      return json(200, { ok: true, ignored: "unknown_video" });
+    }
+
+    // Satılmış ilanın, sonradan işlenen bir videoyla yeniden açılmasını önleyen koşul
+    const { data: activated, error: vehicleError } = await supabase
+      .from("vehicles")
+      .update({ status: "active" })
+      .eq("id", video.vehicle_id)
+      .in("status", ACTIVATABLE_VEHICLE_STATUSES)
+      .select("id");
+
+    if (vehicleError) {
+      console.error("İlan yayına alınamadı:", video.vehicle_id, vehicleError);
+      return json(500, { error: "database_error" });
+    }
+
+    return json(200, { ok: true, vehicleActivated: (activated?.length ?? 0) > 0 });
+  }
+
+  // --- Video işlenemedi ---
+  if (state === "error") {
+    const reason =
+      payload.status?.errorReasonCode || payload.status?.errReasonCode || "ERR_UNKNOWN";
+
+    const { error } = await supabase
+      .from("videos")
+      .update({ status: "failed" })
+      .eq("stream_uid", streamUid);
+
+    if (error) {
+      console.error("Video 'failed' olarak güncellenemedi:", streamUid, error);
+      return json(500, { error: "database_error" });
+    }
+
+    console.warn(`Cloudflare videoyu işleyemedi (${streamUid}): ${reason}`);
+    return json(200, { ok: true, reason });
+  }
+
+  // Diğer durumlar (queued, inprogress vb.) için yapılacak bir şey yok
+  return json(200, { ok: true, ignored: state ?? "unknown_state" });
+}
