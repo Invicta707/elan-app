@@ -1,3 +1,4 @@
+import { normalizeTurkishPhone } from "./phone";
 import { supabase } from "./supabase";
 
 // Bu dosya UI'dan bağımsızdır: ileride React Native uygulaması da
@@ -177,15 +178,5 @@ export async function getSellerWhatsAppUrl(vehicle: FeedVehicle): Promise<string
 
 // wa.me, numarayı başında + olmadan uluslararası formatta ister: 905321234567
 function toWhatsAppNumber(raw: string): string | null {
-  let digits = raw.replace(/\D/g, "");
-
-  if (digits.startsWith("00")) {
-    digits = digits.slice(2); // 0090532... → 90532...
-  } else if (digits.startsWith("0")) {
-    digits = `90${digits.slice(1)}`; // 0532... → 90532...
-  } else if (digits.length === 10 && digits.startsWith("5")) {
-    digits = `90${digits}`; // 532... → 90532...
-  }
-
-  return digits.length >= 11 ? digits : null;
+  return normalizeTurkishPhone(raw);
 }

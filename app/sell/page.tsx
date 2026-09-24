@@ -14,6 +14,7 @@ import AuthModal from "../../components/AuthModal";
 import FeedHeader from "../../components/FeedHeader";
 import { useSupabaseSession } from "../../lib/auth";
 import type { FuelType, TransmissionType } from "../../lib/feed";
+import { normalizeTurkishPhone } from "../../lib/phone";
 import { fetchCatalog, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
 import { supabase } from "../../lib/supabase";
 import { uploadVideoToCloudflare } from "../../lib/tus-upload";
@@ -252,13 +253,19 @@ export default function SellPage() {
     try {
       setDevNotice(null);
 
-      // 1) WhatsApp numarasını profile yaz. NOT: "profiles" tablosunun
-      // (id uuid = auth.uid(), whatsapp_number text) Supabase projende
-      // mevcut olması gerekir; get_seller_whatsapp RPC'si buradan okuyor olmalı.
+      // 1) WhatsApp numarasını profile yaz. "profiles" tablosunun (id uuid =
+      // auth.uid(), whatsapp_number text) Supabase projende mevcut olduğu
+      // doğrulandı; get_seller_whatsapp RPC'si buradan okuyor. Numara her
+      // zaman 90XXXXXXXXXX (ülke kodlu, + işaretsiz) formatında yazılır —
+      // validateDraft zaten geçersiz numarayı burada elemiş olsa da, draft
+      // AuthModal açıkken değişmiş olabileceğinden burada tekrar doğrulanır.
       setPhase("creating-listing");
+      const whatsappNumber = normalizeTurkishPhone(draft.whatsapp);
+      if (!whatsappNumber) throw new Error("Geçerli bir WhatsApp numarası gir.");
+
       const { error: profileError } = await supabase
         .from("profiles")
-        .upsert({ id: userId, whatsapp_number: onlyDigits(draft.whatsapp) });
+        .upsert({ id: userId, whatsapp_number: whatsappNumber });
       if (profileError) throw new Error("İletişim numaran kaydedilemedi: " + profileError.message);
 
       // 2) İlan (vehicle) taslağı. status: "pending_video" — webhook video
@@ -524,7 +531,7 @@ function validateDraft(draft: Draft, video: PickedVideo | null): string | null {
   if (!draft.bodyType) return "Kasa tipi seç.";
   if (!draft.fuelType) return "Yakıt türü seç.";
   if (!draft.transmission) return "Vites tipi seç.";
-  if (onlyDigits(draft.whatsapp).length < 10) return "Geçerli bir WhatsApp numarası gir.";
+  if (!normalizeTurkishPhone(draft.whatsapp)) return "Geçerli bir WhatsApp numarası gir.";
   if (!video) return "Bir video seçmelisin.";
   return null;
 }
