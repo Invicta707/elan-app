@@ -279,10 +279,9 @@ export default function SellPage() {
         throw new Error("İlan oluşturulamadı: " + (vehicleError?.message ?? "bilinmeyen hata"));
       }
 
-      // 3) Fotoğraflar (varsa): Supabase Storage'daki "vehicle-photos" bucket'ına
-      // yüklenir. NOT: bu bucket ve "vehicle_photos" tablosu (vehicle_id, url,
-      // order_index) projende yoksa oluşturman gerekir; olmadan bu adım hata
-      // verir ama ilan ve video akışı bundan etkilenmez.
+      // 3) Fotoğraflar (varsa): public "vehicle-photos" bucket'ına yüklenir,
+      // kayıtları vehicle_images'a yazılır. Bu adım başarısız olsa da ilan ve
+      // video akışı sürer.
       if (photos.length > 0) {
         setPhase("uploading-photos");
         await uploadPhotos(vehicle.id, photos).catch((error) =>
@@ -521,7 +520,12 @@ function validateDraft(draft: Draft, video: PickedVideo | null): string | null {
 }
 
 async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<void> {
-  const rows: { vehicle_id: string; url: string; order_index: number }[] = [];
+  const rows: {
+    vehicle_id: string;
+    image_url: string;
+    display_order: number;
+    is_primary: boolean;
+  }[] = [];
 
   for (let i = 0; i < photos.length; i += 1) {
     // Dosya adı anahtara konmaz: Supabase Storage ASCII dışı karakterli
@@ -534,10 +538,11 @@ async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<v
     if (uploadError) throw uploadError;
 
     const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(path);
-    rows.push({ vehicle_id: vehicleId, url: data.publicUrl, order_index: i });
+    // İlk fotoğraf kapak: arama sonuçlarında (search_vehicles.cover_image_url) görünür
+    rows.push({ vehicle_id: vehicleId, image_url: data.publicUrl, display_order: i, is_primary: i === 0 });
   }
 
-  const { error: insertError } = await supabase.from("vehicle_photos").insert(rows);
+  const { error: insertError } = await supabase.from("vehicle_images").insert(rows);
   if (insertError) throw insertError;
 }
 
