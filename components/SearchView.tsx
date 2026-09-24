@@ -14,8 +14,14 @@ import {
   type KeyboardEvent,
 } from "react";
 import FeedHeader from "./FeedHeader";
+import type { FuelType, TransmissionType } from "../lib/feed";
 import {
+  BODY_TYPES,
   EMPTY_FILTERS,
+  FUEL_TYPES,
+  MIN_SEARCH_YEAR,
+  SORT_LABELS,
+  TRANSMISSIONS,
   TURKISH_CITIES,
   countActiveFilters,
   currencySpoken,
@@ -24,11 +30,15 @@ import {
   formatAmount,
   normalizeTr,
   parsePrice,
+  parseYear,
   searchVehicles,
+  type BodyType,
   type Catalog,
   type SearchFilters,
+  type SortOrder,
   type VehicleSearchResult,
 } from "../lib/search";
+import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
 type SearchViewProps = {
   catalog: Catalog;
@@ -147,7 +157,7 @@ export default function SearchView({
               title="Bu filtrelere uyan ilan yok."
               detail="Fiyat aralığını genişletmeyi ya da bir filtreyi kaldırmayı dene."
               actionLabel="Filtreleri temizle"
-              onAction={() => applyFilters(EMPTY_FILTERS)}
+              onAction={() => applyFilters({ ...EMPTY_FILTERS, sort: filters.sort })}
             />
           ) : (
             <StatusMessage
@@ -157,6 +167,11 @@ export default function SearchView({
           )
         ) : (
           <>
+            <SortControl
+              value={filters.sort}
+              disabled={isNavigating}
+              onChange={(sort) => applyFilters({ ...filters, sort })}
+            />
             <ul className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 lg:grid-cols-4">
               {results.map((vehicle, index) => (
                 <li key={vehicle.id}>
@@ -311,6 +326,38 @@ function SmallPricePlate({
   );
 }
 
+function SortControl({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: SortOrder;
+  disabled: boolean;
+  onChange: (sort: SortOrder) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="mb-4 flex items-center justify-end gap-2">
+      <label htmlFor={id} className="text-[14px] text-[#5B616B]">
+        Sırala
+      </label>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as SortOrder)}
+        className="h-10 rounded-md border border-[#C9CED6] bg-white px-2 text-[14px] font-semibold text-[#15181C] focus-visible:border-[#003399] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]/30"
+      >
+        {(Object.keys(SORT_LABELS) as SortOrder[]).map((sort) => (
+          <option key={sort} value={sort}>
+            {SORT_LABELS[sort]}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function StatusMessage({
   title,
   detail,
@@ -357,6 +404,15 @@ function priceRangeLabel(filters: SearchFilters): string {
   return `En çok ₺${formatAmount(maxPrice ?? 0)}`;
 }
 
+function yearRangeLabel(filters: SearchFilters): string {
+  const { minYear, maxYear } = filters;
+  if (minYear !== null && maxYear !== null) {
+    return minYear === maxYear ? `${minYear} model` : `${minYear}–${maxYear} model`;
+  }
+  if (minYear !== null) return `${minYear} ve sonrası`;
+  return `${maxYear} ve öncesi`;
+}
+
 function ActiveFilterChips({
   catalog,
   filters,
@@ -386,8 +442,50 @@ function ActiveFilterChips({
   }
   if (filters.city)
     chips.push({ key: "city", label: filters.city, next: { ...filters, city: null } });
+  if (filters.minYear !== null || filters.maxYear !== null) {
+    chips.push({
+      key: "year",
+      label: yearRangeLabel(filters),
+      next: { ...filters, minYear: null, maxYear: null },
+    });
+  }
+  if (filters.maxMileage !== null) {
+    chips.push({
+      key: "mileage",
+      label: `En çok ${formatAmount(filters.maxMileage)} km`,
+      next: { ...filters, maxMileage: null },
+    });
+  }
+  if (filters.fuelTypes.length > 0) {
+    chips.push({
+      key: "fuel",
+      label: filters.fuelTypes.map((v) => FUEL_LABELS[v]).join(", "),
+      next: { ...filters, fuelTypes: [] },
+    });
+  }
+  if (filters.transmissions.length > 0) {
+    chips.push({
+      key: "transmission",
+      label: filters.transmissions.map((v) => TRANSMISSION_LABELS[v]).join(", "),
+      next: { ...filters, transmissions: [] },
+    });
+  }
+  if (filters.bodyTypes.length > 0) {
+    chips.push({
+      key: "body",
+      label: filters.bodyTypes.map((v) => BODY_TYPE_LABELS[v]).join(", "),
+      next: { ...filters, bodyTypes: [] },
+    });
+  }
   if (filters.videoOnly) {
     chips.push({ key: "video", label: "Sadece videolu", next: { ...filters, videoOnly: false } });
+  }
+  if (filters.hideHeavyDamage) {
+    chips.push({
+      key: "heavy-damage",
+      label: "Ağır hasarsız",
+      next: { ...filters, hideHeavyDamage: false },
+    });
   }
 
   if (chips.length === 0) return null;
@@ -414,7 +512,7 @@ function ActiveFilterChips({
         <li className="shrink-0">
           <button
             type="button"
-            onClick={() => onChange(EMPTY_FILTERS)}
+            onClick={() => onChange({ ...EMPTY_FILTERS, sort: filters.sort })}
             className="h-8 rounded-sm px-2 text-[13px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
           >
             Tümünü temizle
@@ -619,20 +717,37 @@ type Draft = {
   maxPrice: string;
   city: string;
   videoOnly: boolean;
+  minYear: string;
+  maxYear: string;
+  maxMileage: string;
+  fuelTypes: FuelType[];
+  transmissions: TransmissionType[];
+  bodyTypes: BodyType[];
+  hideHeavyDamage: boolean;
 };
+
+const numberText = (value: number | null) => (value !== null ? String(value) : "");
 
 function toDraft(filters: SearchFilters): Draft {
   return {
     brandId: filters.brandId ?? "",
     modelId: filters.modelId ?? "",
-    minPrice: filters.minPrice !== null ? String(filters.minPrice) : "",
-    maxPrice: filters.maxPrice !== null ? String(filters.maxPrice) : "",
+    minPrice: numberText(filters.minPrice),
+    maxPrice: numberText(filters.maxPrice),
     city: filters.city ?? "",
     videoOnly: filters.videoOnly,
+    minYear: numberText(filters.minYear),
+    maxYear: numberText(filters.maxYear),
+    maxMileage: numberText(filters.maxMileage),
+    fuelTypes: filters.fuelTypes,
+    transmissions: filters.transmissions,
+    bodyTypes: filters.bodyTypes,
+    hideHeavyDamage: filters.hideHeavyDamage,
   };
 }
 
-function fromDraft(draft: Draft): SearchFilters {
+// Sıralama panelde değil sonuç listesinin üstünde seçilir; panel onu korur
+function fromDraft(draft: Draft, sort: SortOrder): SearchFilters {
   return {
     brandId: draft.brandId || null,
     modelId: draft.brandId && draft.modelId ? draft.modelId : null,
@@ -640,7 +755,21 @@ function fromDraft(draft: Draft): SearchFilters {
     maxPrice: parsePrice(draft.maxPrice),
     city: draft.city.trim() || null,
     videoOnly: draft.videoOnly,
+    minYear: parseYear(draft.minYear),
+    maxYear: parseYear(draft.maxYear),
+    maxMileage: parsePrice(draft.maxMileage),
+    fuelTypes: draft.fuelTypes,
+    transmissions: draft.transmissions,
+    bodyTypes: draft.bodyTypes,
+    hideHeavyDamage: draft.hideHeavyDamage,
+    sort,
   };
+}
+
+/** Seçiliyse çıkarır, değilse ekler; sıra seçeneklerin sırasıyla aynı kalır. */
+function toggleIn<T extends string>(list: T[], value: T, order: readonly T[]): T[] {
+  const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+  return order.filter((option) => next.includes(option));
 }
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "").slice(0, 12);
@@ -670,6 +799,11 @@ function FilterSheet({
   const cityId = useId();
   const cityListId = useId();
   const videoLabelId = useId();
+  const minYearId = useId();
+  const maxYearId = useId();
+  const yearErrorId = useId();
+  const mileageId = useId();
+  const heavyDamageLabelId = useId();
 
   // Panel her açılışta yeniden oluşturulur; taslak o anki filtrelerden başlar
   const [draft, setDraft] = useState<Draft>(() => toDraft(filters));
@@ -685,6 +819,17 @@ function FilterSheet({
     minPrice !== null && maxPrice !== null && minPrice > maxPrice
       ? "En az fiyat, en çok fiyattan büyük olamaz."
       : null;
+
+  const maxAllowedYear = new Date().getFullYear() + 1;
+  const minYear = parseYear(draft.minYear);
+  const maxYear = parseYear(draft.maxYear);
+  const yearError =
+    (draft.minYear && minYear === null) || (draft.maxYear && maxYear === null)
+      ? `Yıl ${MIN_SEARCH_YEAR} ile ${maxAllowedYear} arasında olmalı.`
+      : minYear !== null && maxYear !== null && minYear > maxYear
+        ? "En eski yıl, en yeni yıldan büyük olamaz."
+        : null;
+  const hasError = Boolean(priceError || yearError);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -707,8 +852,8 @@ function FilterSheet({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (priceError) return;
-    onApply(fromDraft(draft));
+    if (hasError) return;
+    onApply(fromDraft(draft, filters.sort));
   }
 
   return (
@@ -828,6 +973,70 @@ function FilterSheet({
             )}
           </fieldset>
 
+          <fieldset>
+            <legend className="mb-1.5 text-[14px] font-semibold">Model yılı</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor={minYearId} className="sr-only">
+                  En eski yıl
+                </label>
+                <input
+                  id={minYearId}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="En eski"
+                  value={draft.minYear}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, minYear: onlyDigits(event.target.value).slice(0, 4) }))
+                  }
+                  aria-invalid={yearError ? true : undefined}
+                  aria-describedby={yearError ? yearErrorId : undefined}
+                  className={fieldClass}
+                />
+              </div>
+              <div>
+                <label htmlFor={maxYearId} className="sr-only">
+                  En yeni yıl
+                </label>
+                <input
+                  id={maxYearId}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="En yeni"
+                  value={draft.maxYear}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, maxYear: onlyDigits(event.target.value).slice(0, 4) }))
+                  }
+                  aria-invalid={yearError ? true : undefined}
+                  aria-describedby={yearError ? yearErrorId : undefined}
+                  className={fieldClass}
+                />
+              </div>
+            </div>
+            {yearError && (
+              <p id={yearErrorId} className="mt-1.5 text-[13px] text-[#B42318]">
+                {yearError}
+              </p>
+            )}
+          </fieldset>
+
+          <div>
+            <label htmlFor={mileageId} className="mb-1.5 block text-[14px] font-semibold">
+              En çok kilometre
+            </label>
+            <input
+              id={mileageId}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="Örn. 150.000"
+              value={groupDigits(draft.maxMileage)}
+              onChange={(event) =>
+                setDraft((d) => ({ ...d, maxMileage: onlyDigits(event.target.value) }))
+              }
+              className={fieldClass}
+            />
+          </div>
+
           <div>
             <label htmlFor={cityId} className="mb-1.5 block text-[14px] font-semibold">
               Şehir
@@ -848,28 +1057,52 @@ function FilterSheet({
             </datalist>
           </div>
 
-          <div className="flex items-center justify-between gap-4">
-            <span id={videoLabelId} className="text-[15px] font-semibold">
-              Sadece videolu ilanlar
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={draft.videoOnly}
-              aria-labelledby={videoLabelId}
-              onClick={() => setDraft((d) => ({ ...d, videoOnly: !d.videoOnly }))}
-              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 ${
-                draft.videoOnly ? "bg-[#E5484D]" : "bg-[#C9CED6]"
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform ${
-                  draft.videoOnly ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </div>
+          <ChipGroup
+            legend="Yakıt türü"
+            options={FUEL_TYPES}
+            labels={FUEL_LABELS}
+            selected={draft.fuelTypes}
+            onToggle={(value) =>
+              setDraft((d) => ({ ...d, fuelTypes: toggleIn(d.fuelTypes, value, FUEL_TYPES) }))
+            }
+          />
+
+          <ChipGroup
+            legend="Vites"
+            options={TRANSMISSIONS}
+            labels={TRANSMISSION_LABELS}
+            selected={draft.transmissions}
+            onToggle={(value) =>
+              setDraft((d) => ({
+                ...d,
+                transmissions: toggleIn(d.transmissions, value, TRANSMISSIONS),
+              }))
+            }
+          />
+
+          <ChipGroup
+            legend="Kasa tipi"
+            options={BODY_TYPES}
+            labels={BODY_TYPE_LABELS}
+            selected={draft.bodyTypes}
+            onToggle={(value) =>
+              setDraft((d) => ({ ...d, bodyTypes: toggleIn(d.bodyTypes, value, BODY_TYPES) }))
+            }
+          />
+
+          <SwitchRow
+            labelId={videoLabelId}
+            label="Sadece videolu ilanlar"
+            checked={draft.videoOnly}
+            onToggle={() => setDraft((d) => ({ ...d, videoOnly: !d.videoOnly }))}
+          />
+
+          <SwitchRow
+            labelId={heavyDamageLabelId}
+            label="Ağır hasar kayıtlıları gizle"
+            checked={draft.hideHeavyDamage}
+            onToggle={() => setDraft((d) => ({ ...d, hideHeavyDamage: !d.hideHeavyDamage }))}
+          />
         </div>
 
         <div className="flex gap-3 border-t border-[#E3E6EA] px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -882,7 +1115,7 @@ function FilterSheet({
           </button>
           <button
             type="submit"
-            disabled={Boolean(priceError)}
+            disabled={hasError}
             className="h-12 flex-[2] rounded-md bg-[#003399] text-[16px] font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
           >
             İlanları göster
@@ -890,6 +1123,84 @@ function FilterSheet({
         </div>
       </form>
     </dialog>
+  );
+}
+
+// Çoklu seçim: hiçbiri seçili değilse filtre uygulanmaz
+function ChipGroup<T extends string>({
+  legend,
+  options,
+  labels,
+  selected,
+  onToggle,
+}: {
+  legend: string;
+  options: readonly T[];
+  labels: Record<T, string>;
+  selected: T[];
+  onToggle: (value: T) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-1.5 text-[14px] font-semibold">{legend}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const isSelected = selected.includes(option);
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => onToggle(option)}
+              className={`h-10 rounded-full border px-4 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 ${
+                isSelected
+                  ? "border-[#003399] bg-[#EAEFF7] text-[#003399]"
+                  : "border-[#C9CED6] bg-white text-[#15181C]"
+              }`}
+            >
+              {labels[option]}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function SwitchRow({
+  labelId,
+  label,
+  checked,
+  onToggle,
+}: {
+  labelId: string;
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span id={labelId} className="text-[15px] font-semibold">
+        {label}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-labelledby={labelId}
+        onClick={onToggle}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 ${
+          checked ? "bg-[#E5484D]" : "bg-[#C9CED6]"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform ${
+            checked ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
   );
 }
 

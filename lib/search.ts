@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { FuelType, TransmissionType } from "./feed";
+import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "./vehicle-labels";
 
 // UI'dan bağımsız: React Native uygulaması da aynı tipleri ve sorguyu kullanabilir.
 
@@ -20,7 +21,20 @@ export type BodyType =
 
 export type VideoStatus = "pending" | "processing" | "ready" | "failed";
 
-/** Arama filtreleri. null = filtre uygulanmıyor. Marka/model id'leri RPC'ye gider. */
+export type SortOrder = "newest" | "price_asc" | "price_desc" | "mileage_asc";
+
+export const SORT_LABELS: Record<SortOrder, string> = {
+  newest: "En yeni",
+  price_asc: "Fiyat: düşükten yükseğe",
+  price_desc: "Fiyat: yüksekten düşüğe",
+  mileage_asc: "Kilometre: düşükten yükseğe",
+};
+
+/**
+ * Arama filtreleri. null / boş liste = filtre uygulanmıyor. Marka/model
+ * id'leri RPC'ye gider. Listelerde (yakıt, vites, kasa) seçeneklerden
+ * herhangi biri eşleşirse ilan gelir.
+ */
 export type SearchFilters = {
   brandId: string | null;
   modelId: string | null;
@@ -28,6 +42,15 @@ export type SearchFilters = {
   maxPrice: number | null;
   city: string | null;
   videoOnly: boolean;
+  minYear: number | null;
+  maxYear: number | null;
+  maxMileage: number | null;
+  fuelTypes: FuelType[];
+  transmissions: TransmissionType[];
+  bodyTypes: BodyType[];
+  hideHeavyDamage: boolean;
+  /** Filtre sayılmaz: sonuçların sırası */
+  sort: SortOrder;
 };
 
 export const EMPTY_FILTERS: SearchFilters = {
@@ -37,7 +60,19 @@ export const EMPTY_FILTERS: SearchFilters = {
   maxPrice: null,
   city: null,
   videoOnly: false,
+  minYear: null,
+  maxYear: null,
+  maxMileage: null,
+  fuelTypes: [],
+  transmissions: [],
+  bodyTypes: [],
+  hideHeavyDamage: false,
+  sort: "newest",
 };
+
+export const FUEL_TYPES = Object.keys(FUEL_LABELS) as FuelType[];
+export const TRANSMISSIONS = Object.keys(TRANSMISSION_LABELS) as TransmissionType[];
+export const BODY_TYPES = Object.keys(BODY_TYPE_LABELS) as BodyType[];
 
 /** Arama listesindeki bir ilan (search_vehicles satırının camelCase hâli). */
 export type VehicleSearchResult = {
@@ -82,7 +117,8 @@ export type BrandOption = { id: string; name: string; slug: string };
 export type ModelOption = { id: string; brandId: string; name: string; slug: string };
 export type Catalog = { brands: BrandOption[]; models: ModelOption[] };
 
-// search_vehicles RPC'sinin imzası ve dönüş satırı (003 migration ile birebir)
+// search_vehicles RPC'sinin imzası ve dönüş satırı. p_min_year'dan p_sort'a
+// kadarki parametreler, 003'teki sürümü genişleten migration ile eklendi.
 type SearchVehiclesArgs = {
   p_brand_id: string | null;
   p_model_id: string | null;
@@ -90,6 +126,14 @@ type SearchVehiclesArgs = {
   p_max_price: number | null;
   p_city: string | null;
   p_has_video_only: boolean;
+  p_min_year: number | null;
+  p_max_year: number | null;
+  p_max_mileage: number | null;
+  p_fuel_types: FuelType[] | null;
+  p_transmissions: TransmissionType[] | null;
+  p_body_types: BodyType[] | null;
+  p_hide_heavy_damage: boolean;
+  p_sort: SortOrder;
   p_limit: number;
   p_offset: number;
 };
@@ -146,6 +190,15 @@ export async function searchVehicles(
     p_max_price: filters.maxPrice,
     p_city: filters.city,
     p_has_video_only: filters.videoOnly,
+    p_min_year: filters.minYear,
+    p_max_year: filters.maxYear,
+    p_max_mileage: filters.maxMileage,
+    // Boş liste "filtre yok" demek; SQL tarafında null ile ayırt etmek daha basit
+    p_fuel_types: filters.fuelTypes.length > 0 ? filters.fuelTypes : null,
+    p_transmissions: filters.transmissions.length > 0 ? filters.transmissions : null,
+    p_body_types: filters.bodyTypes.length > 0 ? filters.bodyTypes : null,
+    p_hide_heavy_damage: filters.hideHeavyDamage,
+    p_sort: filters.sort,
     p_limit: size + 1,
     p_offset: Math.max(0, offset),
   };
@@ -241,6 +294,8 @@ export async function fetchCatalog(): Promise<Catalog> {
 // URL <-> filtre dönüşümü
 // Adres çubuğunda okunabilir ve paylaşılabilir parametreler:
 //   /search?marka=volkswagen&model=passat&minFiyat=500000&maxFiyat=1000000&sehir=İstanbul&video=1
+//     &minYil=2015&maxYil=2020&maxKm=150000&yakit=dizel,hibrit&vites=otomatik&kasa=suv
+//     &hasarsiz=1&sirala=fiyat-artan
 // ---------------------------------------------------------------
 
 export type RawSearchParams = Record<string, string | string[] | undefined>;
@@ -252,7 +307,24 @@ const PARAM = {
   maxPrice: "maxFiyat",
   city: "sehir",
   videoOnly: "video",
+  minYear: "minYil",
+  maxYear: "maxYil",
+  maxMileage: "maxKm",
+  fuelTypes: "yakit",
+  transmissions: "vites",
+  bodyTypes: "kasa",
+  hideHeavyDamage: "hasarsiz",
+  sort: "sirala",
 } as const;
+
+// Varsayılan sıra (en yeni) URL'e yazılmaz
+const SORT_SLUGS: Record<Exclude<SortOrder, "newest">, string> = {
+  price_asc: "fiyat-artan",
+  price_desc: "fiyat-azalan",
+  mileage_asc: "km-artan",
+};
+
+export const MIN_SEARCH_YEAR = 1970;
 
 /** FeedHeader'daki hızlı arama butonu bu parametreyle gelir: arama kutusu odaklanır */
 export const FOCUS_PARAM = "odak";
@@ -265,6 +337,25 @@ function firstValue(value: string | string[] | undefined): string | undefined {
 export function parsePrice(value: string | null | undefined): number | null {
   const digits = (value ?? "").replace(/\D/g, "").slice(0, 12);
   return digits ? Number(digits) : null;
+}
+
+/** Dört haneli ve makul aralıktaki (1970 – gelecek yıl) model yılı, yoksa null. */
+export function parseYear(value: string | null | undefined, now: Date = new Date()): number | null {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (digits.length !== 4) return null;
+  const year = Number(digits);
+  return year >= MIN_SEARCH_YEAR && year <= now.getFullYear() + 1 ? year : null;
+}
+
+/** "dizel,hibrit" → izin verilen değerler, tekrarsız ve seçenek sırasıyla. */
+function parseList<T extends string>(value: string | undefined, allowed: readonly T[]): T[] {
+  const picked = new Set((value ?? "").split(",").map((v) => v.trim()));
+  return allowed.filter((option) => picked.has(option));
+}
+
+function parseSort(value: string | undefined): SortOrder {
+  const match = (Object.entries(SORT_SLUGS) as [SortOrder, string][]).find(([, slug]) => slug === value);
+  return match?.[0] ?? "newest";
 }
 
 export function filtersFromSearchParams(params: RawSearchParams, catalog: Catalog): SearchFilters {
@@ -289,6 +380,12 @@ export function filtersFromSearchParams(params: RawSearchParams, catalog: Catalo
     ? (TURKISH_CITIES.find((c) => normalizeTr(c) === normalizeTr(rawCity)) ?? rawCity)
     : null;
 
+  let minYear = parseYear(firstValue(params[PARAM.minYear]));
+  let maxYear = parseYear(firstValue(params[PARAM.maxYear]));
+  if (minYear !== null && maxYear !== null && minYear > maxYear) {
+    [minYear, maxYear] = [maxYear, minYear];
+  }
+
   return {
     brandId: brand?.id ?? null,
     modelId: model?.id ?? null,
@@ -296,6 +393,14 @@ export function filtersFromSearchParams(params: RawSearchParams, catalog: Catalo
     maxPrice,
     city,
     videoOnly: firstValue(params[PARAM.videoOnly]) === "1",
+    minYear,
+    maxYear,
+    maxMileage: parsePrice(firstValue(params[PARAM.maxMileage])),
+    fuelTypes: parseList(firstValue(params[PARAM.fuelTypes]), FUEL_TYPES),
+    transmissions: parseList(firstValue(params[PARAM.transmissions]), TRANSMISSIONS),
+    bodyTypes: parseList(firstValue(params[PARAM.bodyTypes]), BODY_TYPES),
+    hideHeavyDamage: firstValue(params[PARAM.hideHeavyDamage]) === "1",
+    sort: parseSort(firstValue(params[PARAM.sort])),
   };
 }
 
@@ -310,17 +415,32 @@ export function filtersToSearchParams(filters: SearchFilters, catalog: Catalog):
   if (filters.maxPrice !== null) params.set(PARAM.maxPrice, String(filters.maxPrice));
   if (filters.city) params.set(PARAM.city, filters.city);
   if (filters.videoOnly) params.set(PARAM.videoOnly, "1");
+  if (filters.minYear !== null) params.set(PARAM.minYear, String(filters.minYear));
+  if (filters.maxYear !== null) params.set(PARAM.maxYear, String(filters.maxYear));
+  if (filters.maxMileage !== null) params.set(PARAM.maxMileage, String(filters.maxMileage));
+  if (filters.fuelTypes.length > 0) params.set(PARAM.fuelTypes, filters.fuelTypes.join(","));
+  if (filters.transmissions.length > 0) params.set(PARAM.transmissions, filters.transmissions.join(","));
+  if (filters.bodyTypes.length > 0) params.set(PARAM.bodyTypes, filters.bodyTypes.join(","));
+  if (filters.hideHeavyDamage) params.set(PARAM.hideHeavyDamage, "1");
+  if (filters.sort !== "newest") params.set(PARAM.sort, SORT_SLUGS[filters.sort]);
 
   return params;
 }
 
+/** Filtre rozetindeki sayı. Sıralama filtre sayılmaz. */
 export function countActiveFilters(filters: SearchFilters): number {
   return (
     (filters.brandId ? 1 : 0) +
     (filters.modelId ? 1 : 0) +
     (filters.minPrice !== null || filters.maxPrice !== null ? 1 : 0) +
     (filters.city ? 1 : 0) +
-    (filters.videoOnly ? 1 : 0)
+    (filters.videoOnly ? 1 : 0) +
+    (filters.minYear !== null || filters.maxYear !== null ? 1 : 0) +
+    (filters.maxMileage !== null ? 1 : 0) +
+    (filters.fuelTypes.length > 0 ? 1 : 0) +
+    (filters.transmissions.length > 0 ? 1 : 0) +
+    (filters.bodyTypes.length > 0 ? 1 : 0) +
+    (filters.hideHeavyDamage ? 1 : 0)
   );
 }
 
