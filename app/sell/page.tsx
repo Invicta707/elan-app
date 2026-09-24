@@ -13,8 +13,18 @@ import {
 import AuthModal from "../../components/AuthModal";
 import FeedHeader from "../../components/FeedHeader";
 import { useSupabaseSession } from "../../lib/auth";
-import type { FuelType, TransmissionType } from "../../lib/feed";
-import { normalizeTurkishPhone } from "../../lib/phone";
+import type { FuelType } from "../../lib/feed";
+import {
+  EMPTY_LISTING_DRAFT,
+  PHOTO_BUCKET,
+  buildListingRecords,
+  buildVehicleImageRow,
+  onlyDigits,
+  photoStoragePath,
+  validateListingDraft,
+  type ListingDraft as Draft,
+  type VehicleImageRow,
+} from "../../lib/listing";
 import { fetchCatalog, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
 import { supabase } from "../../lib/supabase";
 import { uploadVideoToCloudflare } from "../../lib/tus-upload";
@@ -28,38 +38,6 @@ const MAX_VIDEO_FILE_BYTES = 500 * 1024 * 1024;
 const MAX_PHOTOS = 10;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
-type DamageStatus = "none" | "heavy";
-
-type Draft = {
-  brandId: string;
-  modelId: string;
-  year: string;
-  mileageKm: string;
-  price: string;
-  city: string;
-  bodyType: BodyType | "";
-  fuelType: FuelType | "";
-  transmission: TransmissionType | "";
-  damageStatus: DamageStatus;
-  description: string;
-  whatsapp: string;
-};
-
-const EMPTY_DRAFT: Draft = {
-  brandId: "",
-  modelId: "",
-  year: "",
-  mileageKm: "",
-  price: "",
-  city: "",
-  bodyType: "",
-  fuelType: "",
-  transmission: "",
-  damageStatus: "none",
-  description: "",
-  whatsapp: "",
-};
-
 function toOptions<T extends string>(labels: Record<T, string>): { value: T; label: string }[] {
   return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }));
 }
@@ -68,7 +46,6 @@ const BODY_TYPE_OPTIONS = toOptions(BODY_TYPE_LABELS);
 const FUEL_OPTIONS = toOptions(FUEL_LABELS);
 const TRANSMISSION_OPTIONS = toOptions(TRANSMISSION_LABELS);
 
-const onlyDigits = (value: string) => value.replace(/\D/g, "");
 const fieldClass =
   "h-12 w-full rounded-md border border-[#C9CED6] bg-white px-3 text-base text-[#15181C] disabled:bg-[#EEF0F3] disabled:text-[#7A808A] focus-visible:border-[#003399] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]/30";
 
@@ -96,7 +73,7 @@ export default function SellPage() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [catalogError, setCatalogError] = useState(false);
 
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<Draft>(EMPTY_LISTING_DRAFT);
   const [video, setVideo] = useState<PickedVideo | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
@@ -203,7 +180,7 @@ export default function SellPage() {
     });
   }
 
-  const formError = validateDraft(draft, video);
+  const formError = validateListingDraft(draft) ?? (video ? null : "Bir video seçmelisin.");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -237,41 +214,20 @@ export default function SellPage() {
     try {
       setDevNotice(null);
 
-      // 1) WhatsApp numarasını profile yaz. "profiles" tablosunun (id uuid =
-      // auth.uid(), whatsapp_number text) Supabase projende mevcut olduğu
-      // doğrulandı; get_seller_whatsapp RPC'si buradan okuyor. Numara her
-      // zaman 90XXXXXXXXXX (ülke kodlu, + işaretsiz) formatında yazılır —
-      // validateDraft zaten geçersiz numarayı burada elemiş olsa da, draft
-      // AuthModal açıkken değişmiş olabileceğinden burada tekrar doğrulanır.
+      // Taslak, doğrulamadan sonra (giriş penceresi açıkken) değişmiş olabilir;
+      // buildListingRecords yeniden doğrular ve geçersizse hata fırlatır.
       setPhase("creating-listing");
-      const whatsappNumber = normalizeTurkishPhone(draft.whatsapp);
-      if (!whatsappNumber) throw new Error("Geçerli bir WhatsApp numarası gir.");
+      const records = buildListingRecords(userId, draft);
 
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert({ id: userId, whatsapp_number: whatsappNumber });
+      // 1) WhatsApp numarası (90XXXXXXXXXX) profile yazılır; get_seller_whatsapp buradan okur
+      const { error: profileError } = await supabase.from("profiles").upsert(records.profile);
       if (profileError) throw new Error("İletişim numaran kaydedilemedi: " + profileError.message);
 
-      // 2) İlan (vehicle) taslağı. status: "pending_video" — webhook video
-      // hazır olunca ilanı otomatik "active" yapar (bkz. app/api/webhooks/cloudflare/route.ts).
+      // 2) İlan "pending_video" durumunda açılır; video hazır olunca webhook
+      // (bkz. app/api/webhooks/cloudflare/route.ts) "active" yapar.
       const { data: vehicle, error: vehicleError } = await supabase
         .from("vehicles")
-        .insert({
-          seller_id: userId,
-          brand_id: draft.brandId,
-          model_id: draft.modelId,
-          year: Number(draft.year),
-          mileage_km: Number(onlyDigits(draft.mileageKm)),
-          price: Number(onlyDigits(draft.price)),
-          currency: "TRY",
-          city: draft.city,
-          body_type: draft.bodyType,
-          fuel_type: draft.fuelType,
-          transmission: draft.transmission,
-          has_heavy_damage: draft.damageStatus === "heavy",
-          description: draft.description.trim() || null,
-          status: "pending_video",
-        })
+        .insert(records.vehicle)
         .select("id")
         .single();
 
@@ -504,42 +460,18 @@ function phaseLabel(phase: SubmitPhase, uploadPercent: number): string {
   }
 }
 
-function validateDraft(draft: Draft, video: PickedVideo | null): string | null {
-  if (!draft.brandId || !draft.modelId) return "Marka ve model seçmelisin.";
-  const year = Number(draft.year);
-  if (!year || year < 1970 || year > new Date().getFullYear() + 1) return "Geçerli bir yıl gir.";
-  if (!onlyDigits(draft.mileageKm)) return "Kilometreyi gir.";
-  if (!onlyDigits(draft.price)) return "Fiyatı gir.";
-  if (!draft.city.trim()) return "Şehir seç ya da yaz.";
-  if (!draft.bodyType) return "Kasa tipi seç.";
-  if (!draft.fuelType) return "Yakıt türü seç.";
-  if (!draft.transmission) return "Vites tipi seç.";
-  if (!normalizeTurkishPhone(draft.whatsapp)) return "Geçerli bir WhatsApp numarası gir.";
-  if (!video) return "Bir video seçmelisin.";
-  return null;
-}
-
 async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<void> {
-  const rows: {
-    vehicle_id: string;
-    image_url: string;
-    display_order: number;
-    is_primary: boolean;
-  }[] = [];
+  const rows: VehicleImageRow[] = [];
 
   for (let i = 0; i < photos.length; i += 1) {
-    // Dosya adı anahtara konmaz: Supabase Storage ASCII dışı karakterli
-    // (ş, ğ, ı…) anahtarları "Invalid key" hatasıyla reddeder.
-    const extension = photos[i].file.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "jpg";
-    const path = `${vehicleId}/${i}.${extension}`;
+    const path = photoStoragePath(vehicleId, i, photos[i].file.type);
     const { error: uploadError } = await supabase.storage
-      .from("vehicle-photos")
+      .from(PHOTO_BUCKET)
       .upload(path, photos[i].file, { upsert: true });
     if (uploadError) throw uploadError;
 
-    const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(path);
-    // İlk fotoğraf kapak: arama sonuçlarında (search_vehicles.cover_image_url) görünür
-    rows.push({ vehicle_id: vehicleId, image_url: data.publicUrl, display_order: i, is_primary: i === 0 });
+    const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+    rows.push(buildVehicleImageRow(vehicleId, data.publicUrl, i));
   }
 
   const { error: insertError } = await supabase.from("vehicle_images").insert(rows);
