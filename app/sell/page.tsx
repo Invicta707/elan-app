@@ -18,6 +18,7 @@ import { normalizeTurkishPhone } from "../../lib/phone";
 import { fetchCatalog, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
 import { supabase } from "../../lib/supabase";
 import { uploadVideoToCloudflare } from "../../lib/tus-upload";
+import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/vehicle-labels";
 
 // Cloudflare tarafındaki gerçek sınırlar lib/cloudflare.ts'de tanımlı ("server-only",
 // istemciye import edilemez); burada sadece kullanıcıya erken geri bildirim için
@@ -59,30 +60,13 @@ const EMPTY_DRAFT: Draft = {
   whatsapp: "",
 };
 
-const BODY_TYPE_OPTIONS: { value: BodyType; label: string }[] = [
-  { value: "sedan", label: "Sedan" },
-  { value: "hatchback", label: "Hatchback" },
-  { value: "suv", label: "SUV" },
-  { value: "crossover", label: "Crossover" },
-  { value: "coupe", label: "Coupe" },
-  { value: "cabrio", label: "Cabrio" },
-  { value: "station_wagon", label: "Station Wagon" },
-  { value: "pickup", label: "Pickup" },
-  { value: "minivan", label: "Minivan" },
-];
+function toOptions<T extends string>(labels: Record<T, string>): { value: T; label: string }[] {
+  return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }));
+}
 
-const FUEL_OPTIONS: { value: FuelType; label: string }[] = [
-  { value: "benzin", label: "Benzin" },
-  { value: "dizel", label: "Dizel" },
-  { value: "hibrit", label: "Hibrit" },
-  { value: "elektrik", label: "Elektrik" },
-  { value: "lpg", label: "LPG" },
-];
-
-const TRANSMISSION_OPTIONS: { value: TransmissionType; label: string }[] = [
-  { value: "otomatik", label: "Otomatik" },
-  { value: "manuel", label: "Manuel" },
-];
+const BODY_TYPE_OPTIONS = toOptions(BODY_TYPE_LABELS);
+const FUEL_OPTIONS = toOptions(FUEL_LABELS);
+const TRANSMISSION_OPTIONS = toOptions(TRANSMISSION_LABELS);
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "");
 const fieldClass =
@@ -540,7 +524,10 @@ async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<v
   const rows: { vehicle_id: string; url: string; order_index: number }[] = [];
 
   for (let i = 0; i < photos.length; i += 1) {
-    const path = `${vehicleId}/${i}-${photos[i].file.name}`;
+    // Dosya adı anahtara konmaz: Supabase Storage ASCII dışı karakterli
+    // (ş, ğ, ı…) anahtarları "Invalid key" hatasıyla reddeder.
+    const extension = photos[i].file.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "jpg";
+    const path = `${vehicleId}/${i}.${extension}`;
     const { error: uploadError } = await supabase.storage
       .from("vehicle-photos")
       .upload(path, photos[i].file, { upsert: true });

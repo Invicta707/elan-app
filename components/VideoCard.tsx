@@ -2,12 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type Hls from "hls.js";
-import {
-  getSellerWhatsAppUrl,
-  type FeedVehicle,
-  type FuelType,
-  type TransmissionType,
-} from "../lib/feed";
+import VehicleDetailSheet from "./VehicleDetailSheet";
+import { getSellerWhatsAppUrl, type FeedVehicle } from "../lib/feed";
+import { FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
 type VideoCardProps = {
   vehicle: FeedVehicle;
@@ -34,19 +31,6 @@ const CURRENCIES: Record<string, { symbol: string; spoken: string }> = {
   TRY: { symbol: "₺", spoken: "TL" },
   USD: { symbol: "$", spoken: "dolar" },
   EUR: { symbol: "€", spoken: "euro" },
-};
-
-const FUEL_LABELS: Record<FuelType, string> = {
-  benzin: "Benzin",
-  dizel: "Dizel",
-  lpg: "LPG",
-  hibrit: "Hibrit",
-  elektrik: "Elektrik",
-};
-
-const TRANSMISSION_LABELS: Record<TransmissionType, string> = {
-  manuel: "manuel",
-  otomatik: "otomatik",
 };
 
 // Ekspertiz raporlarındaki parça renk kodları: orijinal / boyalı / değişen
@@ -87,6 +71,7 @@ export default function VideoCard({
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const [isContacting, setIsContacting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isDetailsOpen, setDetailsOpen] = useState(false);
 
   const hasVideoError = failedUrl === vehicle.hlsUrl;
 
@@ -186,18 +171,21 @@ export default function VideoCard({
     };
   }, [shouldLoad, vehicle.hlsUrl, tryPlay]);
 
-  // 2) Aktif kartsa oynat, değilse durdurup başa sar
+  // 2) Aktif kartsa oynat, değilse durdurup başa sar. Detay çekmecesi açıkken
+  // sadece duraklatılır (başa sarılmaz); kapanınca kaldığı yerden sürer.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    if (isActive) {
-      void tryPlay();
-    } else {
+    if (!isActive) {
       video.pause();
       video.currentTime = 0;
+    } else if (isDetailsOpen) {
+      video.pause();
+    } else {
+      void tryPlay();
     }
-  }, [isActive, tryPlay]);
+  }, [isActive, isDetailsOpen, tryPlay]);
 
   // 3) Ortak ses durumunu bu karta uygula
   useEffect(() => {
@@ -327,11 +315,24 @@ export default function VideoCard({
               spoken={currency.spoken}
             />
 
-            <h2 className="mt-3 truncate text-[1.75rem] font-semibold leading-none [font-family:var(--font-display)]">
-              {title}
+            <h2 className="mt-3 text-[1.75rem] font-semibold leading-none [font-family:var(--font-display)]">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(true)}
+                aria-haspopup="dialog"
+                className="pointer-events-auto block max-w-full truncate rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                {title}
+              </button>
             </h2>
 
-            <ul aria-label="Araç özellikleri" className="mt-2.5 flex flex-wrap gap-1.5">
+            {/* Rozetlere dokunmak da detayları açar (klavye/ekran okuyucu için
+                başlık ve "Detaylar" butonu var) */}
+            <ul
+              aria-label="Araç özellikleri"
+              onClick={() => setDetailsOpen(true)}
+              className="pointer-events-auto mt-2.5 flex cursor-pointer flex-wrap gap-1.5"
+            >
               <Tag>{vehicle.year}</Tag>
               <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
               <Tag>{FUEL_LABELS[vehicle.fuelType]}</Tag>
@@ -382,16 +383,43 @@ export default function VideoCard({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleToggleMute}
-            aria-label={muted ? "Sesi aç" : "Sesi kapat"}
-            className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            {muted ? <SpeakerOffIcon className="h-5 w-5" /> : <SpeakerOnIcon className="h-5 w-5" />}
-          </button>
+          <div className="flex shrink-0 flex-col items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(true)}
+              aria-haspopup="dialog"
+              aria-label="İlan detayları ve fotoğraflar"
+              className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
+                <PhotosIcon className="h-5 w-5" />
+              </span>
+              <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                Detaylar
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToggleMute}
+              aria-label={muted ? "Sesi aç" : "Sesi kapat"}
+              className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              {muted ? <SpeakerOffIcon className="h-5 w-5" /> : <SpeakerOnIcon className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {isDetailsOpen && (
+        <VehicleDetailSheet
+          vehicle={vehicle}
+          onClose={() => setDetailsOpen(false)}
+          onContact={handleContact}
+          isContacting={isContacting}
+          notice={notice}
+        />
+      )}
     </article>
   );
 }
@@ -490,6 +518,25 @@ function PinIcon({ className }: IconProps) {
     >
       <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" />
       <circle cx="12" cy="10" r="2.25" />
+    </svg>
+  );
+}
+
+function PhotosIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3.5" y="5.5" width="13" height="13" rx="2" />
+      <path d="M20.5 8.5v10a2 2 0 0 1-2 2h-10" />
+      <path d="m3.5 15 3.5-3.5 3 3 2-2 4.5 4.5" />
     </svg>
   );
 }

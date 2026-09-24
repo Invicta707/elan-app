@@ -1,4 +1,5 @@
 import { normalizeTurkishPhone } from "./phone";
+import type { BodyType } from "./search";
 import { supabase } from "./supabase";
 
 // Bu dosya UI'dan bağımsızdır: ileride React Native uygulaması da
@@ -155,6 +156,38 @@ function toFeedVehicle(row: FeedRow): FeedVehicle | null {
     changedPartsCount: row.changed_parts_count,
     hlsUrl: video.hls_url,
     thumbnailUrl: video.thumbnail_url,
+  };
+}
+
+export type VehicleDetails = {
+  bodyType: BodyType | null;
+  description: string | null;
+  photoUrls: string[];
+};
+
+// Detay çekmecesi açılınca istenir: akış sorgusunun taşımadığı alanlar (kasa
+// tipi, açıklama) ve fotoğraflar. Fotoğraflar /sell akışının yazdığı
+// vehicle_photos tablosundan gelir (vehicle_images tablosu şu an kullanılmıyor).
+export async function fetchVehicleDetails(vehicleId: string): Promise<VehicleDetails> {
+  const [vehicleResult, photosResult] = await Promise.all([
+    supabase.from("vehicles").select("body_type, description").eq("id", vehicleId).maybeSingle(),
+    supabase
+      .from("vehicle_photos")
+      .select("url")
+      .eq("vehicle_id", vehicleId)
+      .order("order_index", { ascending: true }),
+  ]);
+
+  if (vehicleResult.error) throw vehicleResult.error;
+  if (photosResult.error) throw photosResult.error;
+
+  const row = vehicleResult.data as { body_type: BodyType | null; description: string | null } | null;
+  const photos = (photosResult.data ?? []) as { url: string | null }[];
+
+  return {
+    bodyType: row?.body_type ?? null,
+    description: row?.description?.trim() || null,
+    photoUrls: photos.map((p) => p.url).filter((url): url is string => Boolean(url)),
   };
 }
 
