@@ -3,6 +3,16 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Mobil alt gezinme çubuğunun kapladığı yükseklik (components/BottomNav.tsx).
+     Sayfalar alttaki boşluğu ve akışın yüksekliğini buna göre ayarlar;
+     md ve üstünde çubuk yok, değer 0. */
+  --bottom-nav-height: calc(4rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --bottom-nav-height: 0px;
+  }
 }
 
 @theme inline {

@@ -140,7 +140,7 @@ export default function SearchView({
       <section
         aria-label="Arama sonuçları"
         aria-busy={isNavigating}
-        className={`mx-auto max-w-5xl px-4 pt-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] transition-opacity duration-200 ${
+        className={`mx-auto max-w-5xl px-4 pt-4 pb-[max(2.5rem,calc(var(--bottom-nav-height)+1.5rem),env(safe-area-inset-bottom))] transition-opacity duration-200 ${
           isNavigating ? "opacity-50" : "opacity-100"
         }`}
       >

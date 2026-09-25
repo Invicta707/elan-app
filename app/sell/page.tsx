@@ -359,7 +359,7 @@ export default function SellPage() {
 
       <form
         onSubmit={handleSubmit}
-        className="mx-auto flex max-w-md flex-col gap-6 px-4 pb-32 pt-4"
+        className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-4 pb-[calc(8rem+var(--bottom-nav-height))]"
       >
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlan Ver</h1>
@@ -417,7 +417,8 @@ export default function SellPage() {
           )}
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E6EA] bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {/* Mobilde alt gezinme çubuğunun hemen üstünde; güvenli alanı çubuk karşılar */}
+        <div className="fixed inset-x-0 bottom-[var(--bottom-nav-height)] z-30 border-t border-[#E3E6EA] bg-white px-4 pt-3 pb-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto max-w-md">
             {isSubmitting && (
               <p className="mb-2 text-center text-[13px] font-medium text-[#5B616B]">

@@ -51,7 +51,8 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
           {activeTab !== "sell" && (
             <Link
               href="/sell"
-              className={`pointer-events-auto inline-flex h-11 items-center rounded-full px-4 text-[15px] font-semibold ${
+              // Mobilde alt gezinme çubuğunun ortadaki "+" butonu aynı işi görür
+              className={`pointer-events-auto hidden h-11 items-center rounded-full px-4 text-[15px] font-semibold md:inline-flex ${
                 overlay
                   ? "border border-white/40 bg-black/35 text-white"
                   : "border border-[#15181C] bg-white text-[#15181C]"

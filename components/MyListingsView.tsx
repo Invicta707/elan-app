@@ -22,7 +22,7 @@ export default function MyListingsView() {
   return (
     <>
       <FeedHeader activeTab="my-listings" tone="solid" />
-      <div className="mx-auto max-w-2xl px-4 pt-2 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto max-w-2xl px-4 pt-2 pb-[max(2.5rem,calc(var(--bottom-nav-height)+1.5rem),env(safe-area-inset-bottom))]">
         <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlanlarım</h1>
 
         {isLoading ? (

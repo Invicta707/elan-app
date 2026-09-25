@@ -306,7 +306,8 @@ export default function VideoCard({
 
       {/* Bilgi katmanı: metne yapılan dokunuşlar alttaki oynat/duraklat
           butonuna geçer, sadece bu katmandaki butonlar tıklanabilir */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.5)_55%,rgba(0,0,0,0)_100%)] px-4 pt-28 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      {/* Mobilde ekranın altındaki güvenli alanı alt gezinme çubuğu karşılar */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.5)_55%,rgba(0,0,0,0)_100%)] px-4 pt-28 pb-5 md:pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="flex items-end gap-3">
           <div className="min-w-0 flex-1">
             <PricePlate

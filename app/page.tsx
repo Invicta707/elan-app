@@ -29,7 +29,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <main
-      className={`${displayFont.variable} ${bodyFont.variable} relative h-dvh w-full overflow-hidden bg-black text-white [font-family:var(--font-body)]`}
+      // Mobilde akış alt gezinme çubuğunun üstünde biter: videonun alt kısmındaki
+      // butonlar (WhatsApp, ses, Detaylar) çubuğun altında kalmaz
+      className={`${displayFont.variable} ${bodyFont.variable} relative h-[calc(100dvh-var(--bottom-nav-height))] w-full overflow-hidden bg-black text-white [font-family:var(--font-body)]`}
     >
       {/* key: başka bir ilanla gelindiğinde akış sıfırdan kurulur */}
       <VideoFeed key={initialVehicleId ?? "feed"} initialVehicleId={initialVehicleId} />
