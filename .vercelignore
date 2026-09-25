@@ -1,0 +1,8 @@
+# `vercel deploy` (CLI) git'e değil yerel klasöre bakar: bunlar yüklenmez.
+# Vercel varsayılan olarak sadece .env.local ve .env.*.local'ı atlar; gizli
+# değer içerebilecek tüm env dosyaları burada dışarıda tutulur.
+.env*
+!.env.example
+
+# Supabase CLI'ın yerel bağlantı bilgileri; build'e gerekmez
+supabase/.temp
