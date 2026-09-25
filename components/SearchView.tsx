@@ -38,6 +38,7 @@ import {
   type SortOrder,
   type VehicleSearchResult,
 } from "../lib/search";
+import { vehiclePath } from "../lib/share";
 import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
 type SearchViewProps = {
@@ -273,20 +274,17 @@ function ResultCard({ vehicle, eager }: { vehicle: VehicleSearchResult; eager: b
     </>
   );
 
-  // Videolu ilan: dikey akışta bu ilanla başlar (/?v=<id>)
-  if (vehicle.hasPlayableVideo) {
-    return (
-      <Link
-        href={`/?v=${vehicle.id}`}
-        className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F2F3F5]"
-      >
-        {body}
-        <span className="sr-only">, videoyu akışta izle</span>
-      </Link>
-    );
-  }
-
-  return <article aria-label={title}>{body}</article>;
+  // Her kart ilanın kalıcı sayfasına gider; videolu ilanda oradaki
+  // "Videoyu akışta izle" bağlantısı akışı bu ilanla açar (/?v=<id>)
+  return (
+    <Link
+      href={vehiclePath(vehicle.id)}
+      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F2F3F5]"
+    >
+      {body}
+      <span className="sr-only">, ilan detayını aç</span>
+    </Link>
+  );
 }
 
 function VideoBadge() {

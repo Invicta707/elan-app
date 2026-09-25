@@ -23,7 +23,7 @@ type HomePageProps = {
 };
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  // Arama sayfasındaki videolu karttan gelindiyse (/?v=<ilan-id>) akış o ilanla başlar
+  // "Videoyu akışta izle" bağlantısından gelindiyse (/?v=<ilan-id>) akış o ilanla başlar
   const { v } = await searchParams;
   const initialVehicleId = isUuid(v) ? v : null;
 

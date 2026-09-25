@@ -26,7 +26,7 @@ async function fetchFeedBatch(cursor: FeedCursor | null, pinnedId: string | null
 }
 
 type VideoFeedProps = {
-  /** Arama sayfasından gelindiyse (/?v=<id>) akışın ilk sırada göstereceği ilan */
+  /** "Videoyu akışta izle" bağlantısından gelindiyse (/?v=<id>) akışın ilk sırada göstereceği ilan */
   initialVehicleId?: string | null;
 };
 

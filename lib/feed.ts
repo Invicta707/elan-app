@@ -115,7 +115,7 @@ export function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value);
 }
 
-// Arama sonucundan akışa geçişte (/?v=<id>) ilk sırada gösterilecek ilan.
+// İlan sayfasından akışa geçişte (/?v=<id>) ilk sırada gösterilecek ilan.
 // Aktif değilse ya da oynatılabilir videosu yoksa null döner.
 export async function fetchFeedVehicle(id: string): Promise<FeedVehicle | null> {
   if (!isUuid(id)) return null;
