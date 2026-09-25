@@ -195,7 +195,10 @@ export async function fetchVehicleDetails(vehicleId: string): Promise<VehicleDet
 // Satıcının numarası feed'de taşınmaz; sadece butona basıldığında
 // get_seller_whatsapp RPC'si ile alınır (bkz. 002_seller_contact_rpc.sql).
 // Numara yoksa ya da ilan artık aktif değilse null döner.
-export async function getSellerWhatsAppUrl(vehicle: FeedVehicle): Promise<string | null> {
+/** WhatsApp bağlantısı ve hazır mesaj için gereken alanlar */
+export type SellerContactVehicle = Pick<FeedVehicle, "id" | "year" | "brandName" | "modelName">;
+
+export async function getSellerWhatsAppUrl(vehicle: SellerContactVehicle): Promise<string | null> {
   const { data, error } = await supabase.rpc("get_seller_whatsapp", {
     p_vehicle_id: vehicle.id,
   });

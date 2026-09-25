@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { NAV_ITEMS, isNavItemActive } from "./navigation";
+import { NAV_ITEMS, isNavItemActive, shouldNavigateBack } from "./navigation";
+
+describe("shouldNavigateBack", () => {
+  const origin = "https://elan.test";
+
+  it("sitenin başka sayfasından gelindiyse geri gider", () => {
+    expect(shouldNavigateBack("https://elan.test/search?kasa=suv", origin, 3)).toBe(true);
+  });
+
+  it("paylaşılan linkle doğrudan gelindiyse ana sayfaya gider", () => {
+    expect(shouldNavigateBack("", origin, 1)).toBe(false);
+    expect(shouldNavigateBack("", origin, 2)).toBe(false);
+  });
+
+  it("başka siteden (ör. WhatsApp web) gelindiyse siteden çıkarmaz", () => {
+    expect(shouldNavigateBack("https://web.whatsapp.com/", origin, 3)).toBe(false);
+  });
+
+  it("geçmiş yoksa ya da referrer bozuksa ana sayfaya gider", () => {
+    expect(shouldNavigateBack("https://elan.test/", origin, 1)).toBe(false);
+    expect(shouldNavigateBack("not a url", origin, 3)).toBe(false);
+  });
+});
 
 function activeKeys(pathname: string | null) {
   return NAV_ITEMS.filter((item) => isNavItemActive(item.href, pathname)).map((item) => item.key);

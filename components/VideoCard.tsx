@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type Hls from "hls.js";
 import VehicleDetailSheet from "./VehicleDetailSheet";
-import { getSellerWhatsAppUrl, type FeedVehicle } from "../lib/feed";
+import { useSellerContact } from "./vehicle/useSellerContact";
+import type { FeedVehicle } from "../lib/feed";
 import { FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
 type VideoCardProps = {
@@ -69,8 +70,7 @@ export default function VideoCard({
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const [isContacting, setIsContacting] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { contact: handleContact, isContacting, notice } = useSellerContact(vehicle);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
 
   const hasVideoError = failedUrl === vehicle.hlsUrl;
@@ -193,13 +193,6 @@ export default function VideoCard({
     if (video) video.muted = muted;
   }, [muted]);
 
-  // 4) Bilgi mesajını birkaç saniye sonra kaldır
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 3500);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
   function handleTogglePlay() {
     const video = videoRef.current;
     if (!video) return;
@@ -225,29 +218,6 @@ export default function VideoCard({
     // hls.js kendi hatalarını yönetiyor; bu olay sadece yerleşik HLS yolu için
     if (usingNativeHlsRef.current && videoRef.current?.error) {
       setFailedUrl(vehicle.hlsUrl);
-    }
-  }
-
-  async function handleContact() {
-    if (isContacting) return;
-    setIsContacting(true);
-
-    try {
-      const url = await getSellerWhatsAppUrl(vehicle);
-      if (!url) {
-        setNotice("Bu ilan için WhatsApp numarası bulunamadı.");
-        return;
-      }
-      // Safari, beklemeden (await) sonra açılan yeni sekmeleri engelleyebilir;
-      // o durumda WhatsApp aynı sekmede açılır
-      const opened = window.open(url, "_blank");
-      if (opened) opened.opener = null;
-      else window.location.href = url;
-    } catch (error) {
-      console.error("Satıcı iletişim bilgisi alınamadı:", error);
-      setNotice("Satıcının numarası alınamadı. İnternet bağlantını kontrol edip tekrar dene.");
-    } finally {
-      setIsContacting(false);
     }
   }
 

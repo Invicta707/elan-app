@@ -13,6 +13,20 @@ export const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 /**
+ * "Geri dön": kullanıcı sitenin başka bir sayfasından geldiyse tarayıcı
+ * geçmişinde geri gidilir; paylaşılan linkle doğrudan geldiyse (referrer
+ * başka site ya da yok) geri gitmek siteden çıkarırdı, o yüzden ana sayfaya.
+ */
+export function shouldNavigateBack(referrer: string, origin: string, historyLength: number): boolean {
+  if (historyLength <= 1 || !referrer) return false;
+  try {
+    return new URL(referrer).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Sekme, kendi yolunda ya da onun alt yollarında etkindir: "/search" için
  * "/search" ve "/search/..." evet, "/searches" hayır. Akış ("/") sadece tam
  * eşleşmede etkindir, yoksa her sayfada etkin görünürdü.
