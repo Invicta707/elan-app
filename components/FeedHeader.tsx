@@ -26,7 +26,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
     >
       {/* Üstteki video sütunuyla aynı genişlikte; masaüstünde ortalanır */}
       <div
-        className={`@container mx-auto grid h-14 grid-cols-[1fr_auto_1fr] items-center px-3 ${
+        className={`@container mx-auto grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-x-3 px-3 ${
           overlay ? "max-w-[calc(100dvh*9/16)]" : "max-w-5xl"
         }`}
       >
@@ -47,15 +47,18 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
           </Tab>
         </nav>
 
+        {/* Akışta başlık video genişliğinde (kısa pencerede dar) ve sekmelerin
+            ortada kalması için yan sütunlar alanı eşit paylaşır. Sağ sütun bu
+            yüzden genişliğe göre küçülür: dar başlıkta "İlan Ver" yuvarlak "+"
+            ikonuna döner, çok darda (≈610px'ten kısa pencere) kalp, en darda
+            (≈520px) arama kısayolu da gizlenir.
+            Butonlar asla alt satıra kırılmaz. Mobilde üçü de alt gezinme çubuğunda. */}
         <div className="flex items-center justify-self-end gap-2">
-          {/* Mobilde alt gezinme çubuğunda. Akışta başlık video genişliğinde ve
-              yan sütunlar alanı eşit paylaşıyor: sağ sütuna kalp + "İlan Ver" +
-              arama sığmıyorsa (kısa pencereler) gizlenir, diğer butonlar sıkışmasın */}
           <Link
             href="/favorites"
             aria-label="Favorilerim"
             aria-current={activeTab === "favorites" ? "page" : undefined}
-            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[34rem]:flex ${
+            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[20rem]:flex ${
               overlay ? "bg-black/35" : "bg-white"
             } ${focusRing(overlay)}`}
           >
@@ -68,23 +71,26 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
           {activeTab !== "sell" && (
             <Link
               href="/sell"
-              // Mobilde alt gezinme çubuğunun ortadaki "+" butonu aynı işi görür
-              className={`pointer-events-auto hidden h-11 items-center rounded-full px-4 text-[15px] font-semibold md:inline-flex ${
+              // Metin dar başlıkta gizlendiği için ad her iki hâlde de buradan gelir
+              aria-label="İlan Ver"
+              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[15px] font-semibold md:inline-flex @min-[32.5rem]:w-auto @min-[32.5rem]:px-4 ${
                 overlay
                   ? "border border-white/40 bg-black/35 text-white"
                   : "border border-[#15181C] bg-white text-[#15181C]"
               } ${focusRing(overlay)}`}
             >
-              + İlan Ver
+              <PlusIcon className="h-5 w-5 @min-[32.5rem]:hidden" />
+              <span className="hidden @min-[32.5rem]:inline">+ İlan Ver</span>
             </Link>
           )}
 
           {activeTab === "feed" && (
-            // Hızlı arama: arama sayfasını, arama kutusu odaklanmış hâlde açar
+            // Hızlı arama: arama sayfasını, arama kutusu odaklanmış hâlde açar.
+            // En dar başlıkta sığmayınca gizlenir; "Ara" sekmesi aynı sayfaya gider.
             <Link
               href={`/search?${FOCUS_PARAM}=1`}
               aria-label="Marka veya model ara"
-              className={`pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
+              className={`pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full @max-[16.75rem]:hidden ${
                 overlay ? "bg-black/35" : "bg-white"
               } ${focusRing(overlay)}`}
             >
@@ -149,6 +155,22 @@ function HeartIcon({ filled, className }: { filled: boolean; className?: string 
       aria-hidden="true"
     >
       <path d="M12 20.5s-7.5-4.6-9.2-9.4A5.1 5.1 0 0 1 12 6.6a5.1 5.1 0 0 1 9.2 4.5C19.5 15.9 12 20.5 12 20.5Z" />
+    </svg>
+  );
+}
+
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }
