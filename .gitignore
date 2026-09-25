@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Değer içermeyen şablon: hangi değişkenlerin gerektiğini gösterir
+!.env.example
 
 # vercel
 .vercel
