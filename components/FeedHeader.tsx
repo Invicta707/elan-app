@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { FOCUS_PARAM } from "../lib/search";
 
 type FeedHeaderProps = {
-  /** Hangi sekmenin etkin olduğu; "sell" ve "my-listings" hiçbir sekmeyi etkin göstermez */
-  activeTab?: "feed" | "search" | "sell" | "my-listings";
+  /** Hangi sekmenin etkin olduğu; "sell", "favorites" ve "my-listings" hiçbir metin sekmesini etkin göstermez */
+  activeTab?: "feed" | "search" | "sell" | "favorites" | "my-listings";
   /**
    * overlay: dikey videonun üstünde, yarı saydam (ana sayfa)
    * solid: açık zeminli sayfalarda normal akışta (arama sayfası)
@@ -26,7 +26,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
     >
       {/* Üstteki video sütunuyla aynı genişlikte; masaüstünde ortalanır */}
       <div
-        className={`mx-auto grid h-14 grid-cols-[1fr_auto_1fr] items-center px-3 ${
+        className={`@container mx-auto grid h-14 grid-cols-[1fr_auto_1fr] items-center px-3 ${
           overlay ? "max-w-[calc(100dvh*9/16)]" : "max-w-5xl"
         }`}
       >
@@ -48,6 +48,23 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
         </nav>
 
         <div className="flex items-center justify-self-end gap-2">
+          {/* Mobilde alt gezinme çubuğunda. Akışta başlık video genişliğinde ve
+              yan sütunlar alanı eşit paylaşıyor: sağ sütuna kalp + "İlan Ver" +
+              arama sığmıyorsa (kısa pencereler) gizlenir, diğer butonlar sıkışmasın */}
+          <Link
+            href="/favorites"
+            aria-label="Favorilerim"
+            aria-current={activeTab === "favorites" ? "page" : undefined}
+            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[34rem]:flex ${
+              overlay ? "bg-black/35" : "bg-white"
+            } ${focusRing(overlay)}`}
+          >
+            <HeartIcon
+              filled={activeTab === "favorites"}
+              className={`h-5 w-5 ${activeTab === "favorites" && !overlay ? "text-[#E5484D]" : ""}`}
+            />
+          </Link>
+
           {activeTab !== "sell" && (
             <Link
               href="/sell"
@@ -117,6 +134,23 @@ function focusRing(overlay: boolean) {
   return overlay
     ? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
     : "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]";
+}
+
+function HeartIcon({ filled, className }: { filled: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 20.5s-7.5-4.6-9.2-9.4A5.1 5.1 0 0 1 12 6.6a5.1 5.1 0 0 1 9.2 4.5C19.5 15.9 12 20.5 12 20.5Z" />
+    </svg>
+  );
 }
 
 function SearchIcon({ className }: { className?: string }) {

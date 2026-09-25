@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { bodyFont, displayFont } from "../app/fonts";
 import { fetchVehicleDetails, type FeedVehicle, type VehicleDetails } from "../lib/feed";
 import { buildVehicleShareText } from "../lib/vehicle-page";
+import FavoriteButton from "./FavoriteButton";
 import PhotoGallery, { GallerySkeleton } from "./vehicle/PhotoGallery";
 import ShareButton from "./vehicle/ShareButton";
 import SpecsTable, { formatVehiclePrice } from "./vehicle/SpecsTable";
@@ -244,14 +245,17 @@ function Sheet({ vehicle, onClose, onContact, isContacting, notice }: VehicleDet
                 {price}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label="Detayları kapat"
-              className="-mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F2F3F5] hover:bg-[#E6E8EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
-            >
-              <CloseIcon className="h-5 w-5" />
-            </button>
+            <div className="-mr-1 flex shrink-0 items-center gap-2">
+              <FavoriteButton vehicleId={vehicle.id} variant="sheet" />
+              <button
+                type="button"
+                onClick={requestClose}
+                aria-label="Detayları kapat"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F2F3F5] hover:bg-[#E6E8EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+              >
+                <CloseIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 

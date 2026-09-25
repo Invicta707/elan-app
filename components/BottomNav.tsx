@@ -21,7 +21,7 @@ export default function BottomNav() {
       }`}
     >
       {/* 1px üst kenarlıkla birlikte tam 4rem: --bottom-nav-height ile aynı */}
-      <ul className="mx-auto grid h-[calc(4rem-1px)] max-w-lg grid-cols-4">
+      <ul className="mx-auto grid h-[calc(4rem-1px)] max-w-lg grid-cols-5">
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(item.href, pathname);
           return (
@@ -79,6 +79,9 @@ function NavIcon({ itemKey, active }: { itemKey: NavItemKey; active: boolean }) 
       return <CompassIcon className={className} strokeWidth={strokeWidth} />;
     case "search":
       return <SearchIcon className={className} strokeWidth={strokeWidth} />;
+    case "favorites":
+      // Etkin sekmede kalbin içi de dolar
+      return <HeartIcon className={className} strokeWidth={strokeWidth} filled={active} />;
     default:
       return <CarIcon className={className} strokeWidth={strokeWidth} />;
   }
@@ -98,6 +101,21 @@ function SearchIcon({ className, strokeWidth }: IconProps & { strokeWidth: numbe
     <svg viewBox="0 0 24 24" {...strokeProps} strokeWidth={strokeWidth} className={className} aria-hidden="true">
       <circle cx="11" cy="11" r="6.5" />
       <path d="m20 20-4.2-4.2" />
+    </svg>
+  );
+}
+
+function HeartIcon({ className, strokeWidth, filled }: IconProps & { strokeWidth: number; filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      {...strokeProps}
+      fill={filled ? "currentColor" : "none"}
+      strokeWidth={strokeWidth}
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 20.5s-7.5-4.6-9.2-9.4A5.1 5.1 0 0 1 12 6.6a5.1 5.1 0 0 1 9.2 4.5C19.5 15.9 12 20.5 12 20.5Z" />
     </svg>
   );
 }

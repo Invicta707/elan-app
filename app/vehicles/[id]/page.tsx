@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import FavoriteButton from "../../../components/FavoriteButton";
 import BackButton from "../../../components/vehicle/BackButton";
 import SpecsTable, { formatVehiclePrice } from "../../../components/vehicle/SpecsTable";
 import { VehiclePageActions, VehiclePageGallery } from "../../../components/vehicle/VehiclePageClient";
@@ -70,8 +71,9 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
       className={`${displayFont.variable} ${bodyFont.variable} min-h-dvh w-full bg-[#F2F3F5] text-[#15181C] [font-family:var(--font-body)]`}
     >
       <div className="mx-auto max-w-2xl px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(6rem+var(--bottom-nav-height))]">
-        <div className="-ml-2 flex h-14 items-center">
+        <div className="-ml-2 flex h-14 items-center justify-between">
           <BackButton />
+          <FavoriteButton vehicleId={vehicle.id} variant="page" />
         </div>
 
         {vehicle.photoUrls.length > 0 ? (

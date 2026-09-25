@@ -32,6 +32,7 @@ describe("isNavItemActive", () => {
     ["/", ["feed"]],
     ["/search", ["search"]],
     ["/sell", ["sell"]],
+    ["/favorites", ["favorites"]],
     ["/my-listings", ["my-listings"]],
   ])("%s → yalnızca %j etkin", (pathname, expected) => {
     expect(activeKeys(pathname)).toEqual(expected);
@@ -47,7 +48,7 @@ describe("isNavItemActive", () => {
   });
 
   it("akış başka sayfalarda etkin görünmez", () => {
-    for (const pathname of ["/search", "/sell", "/my-listings", "/bilinmeyen"]) {
+    for (const pathname of ["/search", "/sell", "/favorites", "/my-listings", "/bilinmeyen"]) {
       expect(isNavItemActive("/", pathname)).toBe(false);
     }
   });
@@ -56,11 +57,12 @@ describe("isNavItemActive", () => {
     expect(activeKeys(null)).toEqual([]);
   });
 
-  it("dört sekme, sırası sabit", () => {
+  it("beş sekme, sırası sabit; İlan Ver ortada", () => {
     expect(NAV_ITEMS.map((i) => [i.href, i.label])).toEqual([
       ["/", "Akış"],
       ["/search", "Ara"],
       ["/sell", "İlan Ver"],
+      ["/favorites", "Favoriler"],
       ["/my-listings", "İlanlarım"],
     ]);
   });

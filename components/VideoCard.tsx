@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type Hls from "hls.js";
+import FavoriteButton from "./FavoriteButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
@@ -355,6 +356,8 @@ export default function VideoCard({
           </div>
 
           <div className="flex shrink-0 flex-col items-center gap-4">
+            <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
+
             <button
               type="button"
               onClick={() => setDetailsOpen(true)}

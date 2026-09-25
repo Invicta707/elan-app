@@ -102,9 +102,25 @@ export type VehicleSearchResult = {
   videoHlsUrl: string | null;
   videoThumbnailUrl: string | null;
   videoStatus: VideoStatus | null;
-  /** Video işlenmiş ve oynatılabilir: kart dikey akışa yönlendirir */
+  /** Video işlenmiş ve oynatılabilir: kartta "Video" rozeti görünür */
   hasPlayableVideo: boolean;
 };
+
+/** Grid kartının (arama sonuçları, favoriler) ihtiyaç duyduğu alanlar. */
+export type VehicleCardData = Pick<
+  VehicleSearchResult,
+  | "id"
+  | "brandName"
+  | "modelName"
+  | "year"
+  | "price"
+  | "currency"
+  | "mileageKm"
+  | "city"
+  | "coverImageUrl"
+  | "videoThumbnailUrl"
+  | "hasPlayableVideo"
+>;
 
 export type SearchPage = {
   items: VehicleSearchResult[];
