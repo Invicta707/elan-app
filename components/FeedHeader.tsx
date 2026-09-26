@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { FOCUS_PARAM } from "../lib/search";
+import AuthGatedLink from "./AuthGatedLink";
+import HeaderProfileButton from "./HeaderProfileButton";
 import Logo from "./Logo";
 
 type FeedHeaderProps = {
@@ -13,7 +14,9 @@ type FeedHeaderProps = {
   tone?: "overlay" | "solid";
 };
 
-// Kancasız (hook'suz) bir bileşen: hem sunucu hem istemci bileşenlerinin içinde kullanılabilir.
+// Kancasız (hook'suz) bir bileşen: hem sunucu hem istemci bileşenlerinin içinde
+// kullanılabilir. Oturuma bakan parçalar (profil, "+ İlan Ver") kendi istemci
+// bileşenlerindedir.
 export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: FeedHeaderProps) {
   const overlay = tone === "overlay";
 
@@ -34,11 +37,10 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
         <Link
           href="/"
           aria-label="gözüyle ana sayfa"
-          className={`pointer-events-auto justify-self-start rounded-sm px-1 leading-none [font-family:var(--font-display)] ${focusRing(overlay)}`}
+          className={`pointer-events-auto flex h-11 items-center justify-self-start rounded-sm px-1 ${focusRing(overlay)}`}
         >
-          {/* Renk verilmez: başlığın rengini alır (akışta beyaz, açık sayfalarda koyu).
-              En dar başlıkta yazı gizlenir, göz simgesi kalır (erişilebilir ad aria-label'da). */}
-          <Logo className="h-7" textClassName="@max-[16.5rem]:hidden" />
+          {/* Sadece göz simgesi; renk başlıktan gelir (akışta beyaz, açık sayfalarda koyu) */}
+          <Logo className="h-7" showText={false} />
         </Link>
 
         <nav aria-label="Ana gezinme" className="pointer-events-auto flex items-center gap-6">
@@ -54,15 +56,15 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
             ortada kalması için yan sütunlar alanı eşit paylaşır. Sağ sütun bu
             yüzden genişliğe göre küçülür (eşikler logo + sekmeler + butonların
             ölçülmüş genişliğine göre): dar başlıkta "İlan Ver" yuvarlak "+"
-            ikonuna döner; masaüstünde ≈700px'ten kısa pencerede kalp, ≈600px'ten
-            kısada arama kısayolu, ≈510px'ten kısada logonun yazısı gizlenir.
-            Butonlar asla alt satıra kırılmaz. Mobilde kalp ve "İlan Ver" alt gezinme çubuğunda. */}
+            ikonuna döner; masaüstünde ≈580px'ten kısa pencerede kalp, ≈490px'ten
+            kısada "+" gizlenir. Profil her zaman görünür. Butonlar asla alt
+            satıra kırılmaz. Mobilde kalp ve "+" alt gezinme çubuğunda. */}
         <div className="flex items-center justify-self-end gap-2">
           <Link
             href="/favorites"
             aria-label="Favorilerim"
             aria-current={activeTab === "favorites" ? "page" : undefined}
-            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[23rem]:flex ${
+            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[19rem]:flex ${
               overlay ? "bg-black/35" : "bg-white"
             } ${focusRing(overlay)}`}
           >
@@ -73,11 +75,12 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
           </Link>
 
           {activeTab !== "sell" && (
-            <Link
+            // Misafirde giriş penceresini açar, giriş yapılınca ilan formuna geçer.
+            // Metin dar başlıkta gizlendiği için ad her iki hâlde de aria-label'dan gelir.
+            <AuthGatedLink
               href="/sell"
-              // Metin dar başlıkta gizlendiği için ad her iki hâlde de buradan gelir
               aria-label="İlan Ver"
-              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[15px] font-semibold md:inline-flex @min-[32.5rem]:w-auto @min-[32.5rem]:px-4 ${
+              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[15px] font-semibold md:inline-flex md:@max-[15.75rem]:hidden @min-[32.5rem]:w-auto @min-[32.5rem]:px-4 ${
                 overlay
                   ? "border border-white/40 bg-black/35 text-white"
                   : "border border-[#15181C] bg-white text-[#15181C]"
@@ -85,23 +88,10 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
             >
               <PlusIcon className="h-5 w-5 @min-[32.5rem]:hidden" />
               <span className="hidden @min-[32.5rem]:inline">+ İlan Ver</span>
-            </Link>
+            </AuthGatedLink>
           )}
 
-          {activeTab === "feed" && (
-            // Hızlı arama: arama sayfasını, arama kutusu odaklanmış hâlde açar.
-            // Masaüstünde "+" ile birlikte sığmayınca gizlenir; "Ara" sekmesi aynı
-            // sayfaya gider. Mobilde sağda tek buton olduğu için hep görünür.
-            <Link
-              href={`/search?${FOCUS_PARAM}=1`}
-              aria-label="Marka veya model ara"
-              className={`pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full md:@max-[19.75rem]:hidden ${
-                overlay ? "bg-black/35" : "bg-white"
-              } ${focusRing(overlay)}`}
-            >
-              <SearchIcon className="h-5 w-5" />
-            </Link>
-          )}
+          <HeaderProfileButton overlay={overlay} />
         </div>
       </div>
     </header>
@@ -176,24 +166,6 @@ function PlusIcon({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="6.5" />
-      <path d="m20 20-4.2-4.2" />
     </svg>
   );
 }

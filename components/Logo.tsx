@@ -3,11 +3,11 @@
 // rengi. className'de renk verilmezse varsayılan beyaz.
 export default function Logo({
   className = "h-7 text-white",
-  textClassName = "",
+  showText = true,
 }: {
   className?: string;
-  /** Yazıya ek sınıf (ör. dar başlıkta yazıyı gizleyip sadece simgeyi bırakmak) */
-  textClassName?: string;
+  /** false: sadece göz simgesi (üst çubuk). Erişilebilir ad kullanıldığı yerde verilir. */
+  showText?: boolean;
 }) {
   return (
     <div className={`flex items-center gap-2.5 font-bold tracking-tight select-none ${className}`}>
@@ -26,7 +26,7 @@ export default function Logo({
         />
         <polygon points="45,39 65,50 45,61" fill="currentColor" />
       </svg>
-      <span className={`text-xl font-bold tracking-tight lowercase ${textClassName}`}>gözüyle</span>
+      {showText && <span className="text-xl font-bold tracking-tight lowercase">gözüyle</span>}
     </div>
   );
 }

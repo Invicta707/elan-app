@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { bodyFont } from "../app/fonts";
 import { NAV_ITEMS, isNavItemActive, type NavItemKey } from "../lib/navigation";
+import AuthGatedLink from "./AuthGatedLink";
 
 // Mobil alt gezinme çubuğu (md ve üstünde gizli). Yüksekliği app/globals.css'teki
 // --bottom-nav-height ile aynıdır: sayfalar alt boşluklarını ve akış
@@ -24,16 +25,15 @@ export default function BottomNav() {
       <ul className="mx-auto grid h-[calc(4rem-1px)] max-w-lg grid-cols-5">
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(item.href, pathname);
-          return (
-            <li key={item.key} className="flex">
-              <Link
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset ${
-                  dark ? "focus-visible:ring-white" : "focus-visible:ring-[#003399]"
-                } ${toneFor(active, dark)}`}
-              >
-                {item.key === "sell" ? (
+          const className = `flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset ${
+            dark ? "focus-visible:ring-white" : "focus-visible:ring-[#003399]"
+          } ${toneFor(active, dark)}`;
+
+          if (item.key === "sell") {
+            // Misafirde giriş penceresini açar, giriş yapılınca ilan formuna geçer
+            return (
+              <li key={item.key} className="flex">
+                <AuthGatedLink href={item.href} aria-current={active ? "page" : undefined} className={className}>
                   <span
                     className={`flex h-9 w-11 items-center justify-center rounded-xl bg-[#003399] text-white shadow-[0_2px_8px_rgba(0,51,153,0.35)] ${
                       active
@@ -43,9 +43,16 @@ export default function BottomNav() {
                   >
                     <PlusIcon className="h-5 w-5" />
                   </span>
-                ) : (
-                  <NavIcon itemKey={item.key} active={active} />
-                )}
+                  <span>{item.label}</span>
+                </AuthGatedLink>
+              </li>
+            );
+          }
+
+          return (
+            <li key={item.key} className="flex">
+              <Link href={item.href} aria-current={active ? "page" : undefined} className={className}>
+                <NavIcon itemKey={item.key} active={active} />
                 <span>{item.label}</span>
               </Link>
             </li>
