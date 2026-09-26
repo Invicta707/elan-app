@@ -17,8 +17,28 @@ export type ReportReason = keyof typeof REPORT_REASONS;
 
 export const MAX_REPORT_DETAILS = 500;
 
-/** /api/reports istek sınırı: aynı IP'den pencere başına en fazla `limit` istek */
-export const REPORT_RATE_LIMIT = { limit: 5, windowMs: 60_000 } as const;
+/**
+ * /api/reports kalıcı istek sınırı (veritabanı sayacı; bkz. lib/rate-limit-server.ts).
+ * Giriş yapmış kullanıcı kendi hesabına göre sayılır. IP sınırı, aynı IP'yi
+ * paylaşan mobil kullanıcılar (CGNAT) birbirini engellemesin diye gevşektir.
+ */
+export const REPORT_RATE_RULES = {
+  anonymous: [
+    { scope: "ip", limit: 5, windowSeconds: 60 },
+    { scope: "ip", limit: 20, windowSeconds: 60 * 60 },
+  ],
+  authenticated: [
+    { scope: "user", limit: 5, windowSeconds: 60 },
+    { scope: "user", limit: 30, windowSeconds: 24 * 60 * 60 },
+    { scope: "ip", limit: 30, windowSeconds: 60 },
+  ],
+} as const satisfies Record<string, readonly { scope: "ip" | "user"; limit: number; windowSeconds: number }[]>;
+
+/**
+ * Bellek içi ön sınır (sunucu örneği başına): ani seriyi veritabanına ve oturum
+ * doğrulamaya gitmeden keser. Kalıcı kuralların en gevşek IP sınırına eşit.
+ */
+export const REPORT_BURST_LIMIT = { limit: 30, windowMs: 60_000 } as const;
 
 export type ReportInput = {
   vehicleId: string;

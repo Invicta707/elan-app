@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { clientIp, createRateLimiter } from "../../../lib/rate-limit";
-import { REPORT_RATE_LIMIT, parseReportInput } from "../../../lib/reports";
+import { clientIp, createRateLimiter, rateLimitSubject } from "../../../lib/rate-limit";
+import { consumeRateLimit, rateLimitSecret } from "../../../lib/rate-limit-server";
+import { REPORT_BURST_LIMIT, REPORT_RATE_RULES, parseReportInput } from "../../../lib/reports";
 import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-server";
 
 // POST /api/reports
@@ -10,7 +11,12 @@ import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-
 //   body:    { vehicleId, reason, details? }
 //
 // Yanıt: 201 { ok: true } | 200 { ok: true, alreadyReported: true } | 4xx/5xx { error }
-//        429 { error } + Retry-After: aynı IP'den dakikada 5'ten fazla istek
+//        429 { error } + Retry-After: istek sınırı aşıldı (lib/reports.ts REPORT_RATE_RULES)
+//
+// İstek sınırı iki katmanlı. Önce bellek içi ön sınır gelir: sunucu örneği
+// başına çalışır ve ucuzdur. Sonra veritabanındaki kalıcı sayaç: bütün
+// örnekler için ortaktır, IP ve kullanıcı özetle saklanır.
+// Geçersiz istekler de sayılır.
 //
 // reports tablosuna tarayıcıdan erişim yok (RLS, politika yok); kayıt burada
 // servis anahtarıyla eklenir. Giriş yapmadan da bildirilebilir; oturum varsa
@@ -19,23 +25,41 @@ import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-
 const UNIQUE_VIOLATION = "23505";
 
 // Sunucu örneği başına sayılır (bkz. lib/rate-limit.ts)
-const checkReportRate = createRateLimiter(REPORT_RATE_LIMIT);
+const checkReportBurst = createRateLimiter(REPORT_BURST_LIMIT);
 
 function errorResponse(status: number, code: string, message: string, headers?: HeadersInit) {
   return NextResponse.json({ error: { code, message } }, { status, headers });
 }
 
+function rateLimited(retryAfterSeconds: number) {
+  return errorResponse(
+    429,
+    "rate_limited",
+    "Kısa sürede çok fazla bildirim gönderildi. Biraz bekleyip tekrar dene.",
+    { "Retry-After": String(retryAfterSeconds) },
+  );
+}
+
 export async function POST(request: Request) {
-  // Sınır her şeyden önce: geçersiz istekler de sayılır ve veritabanına gitmeden kesilir
-  const rate = checkReportRate(clientIp(request.headers));
-  if (!rate.ok) {
-    return errorResponse(
-      429,
-      "rate_limited",
-      "Bu bağlantıdan kısa sürede çok fazla bildirim gönderildi. Biraz bekleyip tekrar dene.",
-      { "Retry-After": String(rate.retryAfterSeconds) },
-    );
-  }
+  const ip = rateLimitSubject(clientIp(request.headers));
+
+  // 1) Ön sınır: veritabanına ve oturum doğrulamaya gitmeden
+  const burst = checkReportBurst(ip);
+  if (!burst.ok) return rateLimited(burst.retryAfterSeconds);
+
+  // Geçersiz ya da süresi dolmuş oturum bildirimi engellemez: anonim sayılır
+  const reporterId = await getAuthenticatedUserId(request);
+  const supabase = getSupabaseAdmin();
+
+  // 2) Kalıcı sınır: oturum varsa kullanıcıya göre de sayılır
+  const rate = await consumeRateLimit(
+    supabase,
+    "reports",
+    reporterId ? REPORT_RATE_RULES.authenticated : REPORT_RATE_RULES.anonymous,
+    { ip, userId: reporterId },
+    rateLimitSecret(),
+  );
+  if (!rate.ok) return rateLimited(rate.retryAfterSeconds);
 
   let body: unknown;
   try {
@@ -47,10 +71,6 @@ export async function POST(request: Request) {
   const parsed = parseReportInput(body);
   if (!parsed.ok) return errorResponse(400, parsed.code, parsed.message);
   const { vehicleId, reason, details } = parsed.value;
-
-  // Geçersiz ya da süresi dolmuş oturum bildirimi engellemez: anonim sayılır
-  const reporterId = await getAuthenticatedUserId(request);
-  const supabase = getSupabaseAdmin();
 
   const { data: vehicle, error: vehicleError } = await supabase
     .from("vehicles")

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp, createRateLimiter } from "./rate-limit";
+import { clientIp, createRateLimiter, rateLimitSubject } from "./rate-limit";
 
 function limiterAt(start: number, options: { limit: number; windowMs: number; maxKeys?: number }) {
   const clock = { now: start };
@@ -74,5 +74,32 @@ describe("clientIp", () => {
   it("başlık yoksa ya da boşsa unknown", () => {
     expect(clientIp(new Headers())).toBe("unknown");
     expect(clientIp(new Headers({ "x-real-ip": " ", "x-forwarded-for": "" }))).toBe("unknown");
+  });
+});
+
+describe("rateLimitSubject", () => {
+  it.each([
+    ["203.0.113.7", "203.0.113.7"],
+    [" 203.0.113.7 ", "203.0.113.7"],
+    ["::ffff:203.0.113.7", "203.0.113.7"],
+    ["2a00:1d35:dd80:7501:8c10:3d50:21ac:c7ae", "2a00:1d35:dd80:7501::/64"],
+    ["2A00:1D35:DD80:7501::1", "2a00:1d35:dd80:7501::/64"],
+    ["2001:db8::1", "2001:db8:0:0::/64"],
+    ["2001:0db8:0000:0042::1", "2001:db8:0:42::/64"],
+    ["fe80::1%eth0", "fe80:0:0:0::/64"],
+    ["::1", "0:0:0:0::/64"],
+    ["unknown", "unknown"],
+  ])("%s → %s", (ip, subject) => {
+    expect(rateLimitSubject(ip)).toBe(subject);
+  });
+
+  it("aynı /64 içindeki adresler aynı özneye, farklı bloklar farklı özneye düşer", () => {
+    expect(rateLimitSubject("2a00:1d35:dd80:7501::a")).toBe(rateLimitSubject("2a00:1d35:dd80:7501:ffff::b"));
+    expect(rateLimitSubject("2a00:1d35:dd80:7501::a")).not.toBe(rateLimitSubject("2a00:1d35:dd80:7502::a"));
+  });
+
+  it("çözümlenemeyen IPv6 olduğu gibi kalır", () => {
+    expect(rateLimitSubject("1::2::3")).toBe("1::2::3");
+    expect(rateLimitSubject("zz::1")).toBe("zz::1");
   });
 });

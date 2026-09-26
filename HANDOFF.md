@@ -17,7 +17,7 @@ _Son güncelleme: 26 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 26 dosya, **370 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 27 dosya, **400 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -38,14 +38,14 @@ _Son güncelleme: 26 Eylül 2026_
 | Google dönüşü | [app/auth/callback/page.tsx](app/auth/callback/page.tsx), [components/AuthCallbackView.tsx](components/AuthCallbackView.tsx), [lib/auth-redirect.ts](lib/auth-redirect.ts) |
 | Webhook | [app/api/webhooks/cloudflare/route.ts](app/api/webhooks/cloudflare/route.ts), [lib/cloudflare.ts](lib/cloudflare.ts) (`verifyWebhookSignature`), [lib/video-activation.ts](lib/video-activation.ts) |
 | Hesap / silme | [components/AccountView.tsx](components/AccountView.tsx), [app/api/user/delete/route.ts](app/api/user/delete/route.ts), [lib/account-deletion.ts](lib/account-deletion.ts) |
-| Bildirim | [components/ReportButton.tsx](components/ReportButton.tsx), [app/api/reports/route.ts](app/api/reports/route.ts), [lib/reports.ts](lib/reports.ts) (`REPORT_RATE_LIMIT`), [lib/rate-limit.ts](lib/rate-limit.ts) |
+| Bildirim | [components/ReportButton.tsx](components/ReportButton.tsx), [app/api/reports/route.ts](app/api/reports/route.ts), [lib/reports.ts](lib/reports.ts) (`REPORT_RATE_RULES`, `REPORT_BURST_LIMIT`), [lib/rate-limit.ts](lib/rate-limit.ts) (bellek içi, `rateLimitSubject`), [lib/rate-limit-server.ts](lib/rate-limit-server.ts) (kalıcı sayaç, HMAC anahtarı), [lib/rate-limit-db.test.ts](lib/rate-limit-db.test.ts) (PGlite) |
 | Moderasyon | [app/admin/reports/page.tsx](app/admin/reports/page.tsx), [components/ModerationView.tsx](components/ModerationView.tsx), [app/api/admin/reports/route.ts](app/api/admin/reports/route.ts), [lib/moderation.ts](lib/moderation.ts), [lib/moderation-server.ts](lib/moderation-server.ts) (`authorizeAdmin`: `ADMIN_EMAILS`, onaylı e-posta) |
 | İlanlarım / durum | [components/MyListingsView.tsx](components/MyListingsView.tsx), [lib/my-listings.ts](lib/my-listings.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
 | Katalog / arama | [lib/search.ts](lib/search.ts) (`fetchCatalog`, `compareCatalogNames`), [components/SearchView.tsx](components/SearchView.tsx), [app/sell/page.tsx](app/sell/page.tsx) |
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | PWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 10 migration, sonuncusu `20260926180000_vehicle_photos_storage_limits.sql`; hepsi uzak veritabanında uygulanmış (son dördü 26 Eylül 2026'da `db push --linked` ile) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 11 migration, sonuncusu `20260926190000_rate_limits.sql`; hepsi uzak veritabanında uygulanmış (son beşi 26 Eylül 2026'da `db push --linked` ile) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
@@ -70,11 +70,16 @@ _Son güncelleme: 26 Eylül 2026_
   - `compareCatalogNames` = `Intl.Collator("tr", { numeric: true, sensitivity: "base" }).compare`.
   - Marka/model listeleri (ilan verme ve arama filtreleri) ve hızlı arama önerileri bununla sıralanıyor. Peugeot: `206, 207, 208, 301, 308, 408, 508, 2008, 3008, 5008`.
   - Türkçe kuralında "I"nın küçüğü "ı": `clio` ile `CLIO` eşit sayılmaz. Bu doğru davranış.
-- **`/api/reports` istek sınırı (`4e1e2a4`):**
-  - Aynı IP'den 60 saniyede en fazla 5 istek. Aşılırsa `429`, `Retry-After` başlığı ve Türkçe mesaj döner.
-  - Sınır her şeyden önce uygulanır: geçersiz istekler de sayılır ve veritabanına gidilmez.
-  - IP, `x-real-ip` başlığından alınır, yoksa `x-forwarded-for`'daki ilk adresten.
-  - Sayaç bellekte ve **sunucu örneği başına** tutulur. Canlıda 30 istekte 5 × 400 ve ardından 25 × 429 alındı. Deploy'dan hemen sonraki ilk 8 istekte 429 gelmemişti.
+- **`/api/reports` istek sınırı: iki katman.** Aşılırsa `429`, `Retry-After` ve Türkçe mesaj döner. Geçersiz istekler de sayılır.
+  - **1. Bellek içi ön sınır** (`4e1e2a4`, [lib/rate-limit.ts](lib/rate-limit.ts)): sunucu örneği başına IP'den dakikada 30 istek (`REPORT_BURST_LIMIT`). Ani seriyi veritabanına ve oturum doğrulamaya gitmeden keser.
+  - **2. Kalıcı sayaç** (migration `20260926190000_rate_limits.sql`, [lib/rate-limit-server.ts](lib/rate-limit-server.ts)): `public.rate_limits` tablosu ve `fn_rate_limit_hit` fonksiyonu. Sabit pencereli sayaç, bütün sunucu örnekleri için ortak. Tek RPC çağrısında bütün kurallar sayılır.
+  - **Kurallar** (`REPORT_RATE_RULES`, [lib/reports.ts](lib/reports.ts)):
+    - Anonim: IP'den dakikada 5, saatte 20.
+    - Giriş yapmış: kullanıcı başına dakikada 5, günde 30; IP'den dakikada 30. IP sınırı, aynı IP'yi paylaşan mobil kullanıcılar (CGNAT) birbirini engellemesin diye gevşek.
+  - **IP:** `x-real-ip` başlığından alınır, yoksa `x-forwarded-for`'daki ilk adresten. IPv6 /64 önekine göre sayılır (`rateLimitSubject`), çünkü adres her istekte değiştirilebilir.
+  - **Gizlilik (KVKK/GDPR):** IP ve kullanıcı id'si veritabanına düz yazılmaz. Anahtar `reports:<ip|user>:<HMAC-SHA256>`, özet anahtarı sunucudaki Supabase gizli anahtarı. Süresi dolan satırlar (en geç 24 saat) her çağrıda silinir.
+  - **Erişim:** tablo ve fonksiyon yalnızca `service_role`'e açık; tabloda RLS açık, politika yok.
+  - **Sayaç okunamazsa istek geçer** ve hata loglanır. Bellek içi sınır yine çalışır; veritabanına ulaşılamıyorsa bildirim de zaten kaydedilemez.
 - **Moderasyon paneli (`614476d`):** `/admin/reports` bildirilen ilanları listeler. "Kaldır" ilanı `rejected` yapar ve ilanın tüm açık bildirimlerini kapatır; "Yoksay" yalnızca bildirimleri kapatır. `rejected` durumuna girmek de çıkmak da yalnızca sunucudan yapılır (`trg_vehicles_guard_moderated_status`). Migration'ları artık uygulandı.
 - **İlan yazma kurallarındaki üç açık kapatıldı (`270d328`, migration `20260926170000_harden_listing_rls.sql`):**
   1. **Durum atlatma:** satıcı `set_vehicle_status`'u atlayıp tabloya doğrudan yazarak (tablo yetkisi + yalnızca sahipliğe bakan `vehicles_update_own`) örneğin satılmış ilanı yeniden yayına alabiliyordu. Artık kullanıcı isteklerinde durum yalnızca geçiş tablosuna göre değişiyor. Yeni ilan yalnızca `draft`/`pending_video` açılıyor; servis anahtarı ve yönetici etkilenmiyor.
@@ -84,9 +89,9 @@ _Son güncelleme: 26 Eylül 2026_
 
 ## 4. Git ve dağıtım durumu
 
-- Son commit "feat: restrict vehicle photo uploads to owners and image types" (Storage sınırları; bu dosya da aynı commit'te güncellendi). Güncel `HEAD` için `git log -1` kullanın.
+- Son commit "feat: add persistent database rate limiting to reports api" (kalıcı istek sınırı; bu dosya da aynı commit'te güncellendi). Güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: 10 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
+- Veritabanı kodla uyumlu: 11 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
 - **DNS** kayıt firmasında (`knuth` / `dijkstra.ihsdns.com`), Vercel nameserver'ları kullanılmıyor: kök alan A `216.198.79.1`, `www` CNAME `cname.vercel-dns.com`. Vercel'deki "Intended Nameservers ☓" uyarısı bu yüzden çıkıyor ve sorun değil.
 - **Yerel `nslookup`:** bu makinenin varsayılan DNS sunucusu yanıt vermiyor; sorgu `nslookup <ad> 1.1.1.1` ile yapılmalı.
@@ -102,7 +107,7 @@ _Son güncelleme: 26 Eylül 2026_
 
 **Kullanıcı tarafında:**
 
-1. **Supabase → URL Configuration:** Site URL `https://gozuyle.com` olmalı; Redirect URLs'te `https://gozuyle.com/**` bulunmalı (`/auth/callback`'i kapsar). Bu doğrulanmadı ve Google girişi buna bağlı.
+1. ✅ **Supabase → URL Configuration: tamamlandı (26 Eylül 2026).** Kullanıcı panelden kontrol etti: Site URL `https://gozuyle.com`, Redirect URLs `https://gozuyle.com/**` (`/auth/callback`'i kapsar).
 2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli, fotoğraflı ilan verme (JPEG/PNG/WebP yüklenmeli; GIF ya da 10 MB üstü dosyada Türkçe hata çıkmalı; iPhone'dan seçilen fotoğraf JPEG olarak gitmeli). Bir de "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
 3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
    - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
@@ -128,8 +133,9 @@ _Son güncelleme: 26 Eylül 2026_
 
 **Teknik ve ürün:**
 
-- `/api/reports` için kalıcı istek sınırı: koddaki sınır sunucu örneği başına çalışıyor. Kesin bir sınır için Vercel Firewall kuralı gerekiyor.
-- Mobil operatörlerde birçok kullanıcı aynı IP'yi paylaşabilir; bu kullanıcılar dakikada 5 bildirim hakkını da paylaşır. Trafik artarsa sınır gözden geçirilmeli.
+- ✅ `/api/reports` için kalıcı istek sınırı: tamamlandı (26 Eylül 2026). Veritabanı sayacı ve kullanıcı bazlı kurallar kuruldu; ayrıntılar 3. bölümde. Hobby planda Vercel Firewall kuralı eklenemiyor.
+  - Kalan küçük not: anonim istekler hâlâ IP'ye göre sayılıyor. CGNAT arkasındaki çok sayıda anonim bildiren aynı IP'nin dakikada 5 hakkını paylaşır. Trafik artarsa anonim sınır gözden geçirilmeli.
+  - Gizlilik politikasına "kötüye kullanımı önlemek için IP adresinin anahtarlı özeti en fazla 24 saat saklanır" benzeri bir cümle eklenmesi düşünülebilir (hukuki inceleme maddesiyle birlikte).
 - Yasal metinler şablon; hukuki inceleme gerekiyor.
 - Google onay ekranında `supabase.co` alan adı görünebilir; istenirse Supabase'e özel alan adı bağlanabilir. Bağlanırsa `fn_is_vehicle_photo_url`'deki sabit proje adresi de yeni bir migration'la güncellenmeli; güncellenmezse yeni fotoğraf eklemeleri reddedilir.
 
