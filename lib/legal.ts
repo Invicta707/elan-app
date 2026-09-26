@@ -1,6 +1,6 @@
 // Yasal sayfaların (/privacy, /terms) ve hesap sayfasının ortak bilgileri.
 
-const DEFAULT_SUPPORT_EMAIL = "destek@elan.app";
+const DEFAULT_SUPPORT_EMAIL = "destek@gozuyle.com";
 
 /** Boş ya da e-postaya benzemeyen değer varsayılana düşer (build asla düşmez) */
 export function resolveSupportEmail(value: string | undefined): string {

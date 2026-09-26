@@ -14,14 +14,15 @@ export type SiteUrlEnv = {
   VERCEL_URL?: string;
 };
 
-const LOCAL_URL = "http://localhost:3000";
+// Alan adı dışarıdan verilmezse ve Vercel dışında çalışılıyorsa
+const DEFAULT_SITE_URL = "https://gozuyle.com";
 
 /**
  * Öncelik:
  *   1. NEXT_PUBLIC_SITE_URL (şemasız yazılırsa https:// eklenir)
  *   2. Vercel önizleme deploy'unda o deploy'un adresi
  *   3. Vercel'de projenin canlı alan adı (özel alan adı bağlıysa o)
- *   4. http://localhost:3000
+ *   4. https://gozuyle.com
  */
 export function resolveSiteUrl(env: SiteUrlEnv): URL {
   const configured = env.NEXT_PUBLIC_SITE_URL?.trim();
@@ -40,7 +41,7 @@ function fallbackUrl(env: SiteUrlEnv): URL {
   const previewHost =
     env.VERCEL_ENV === "preview" ? (env.VERCEL_BRANCH_URL?.trim() || env.VERCEL_URL?.trim()) : undefined;
   const host = previewHost || env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || env.VERCEL_URL?.trim();
-  return (host && parseHttpUrl(host)) || new URL(LOCAL_URL);
+  return (host && parseHttpUrl(host)) || new URL(DEFAULT_SITE_URL);
 }
 
 function parseHttpUrl(value: string): URL | null {

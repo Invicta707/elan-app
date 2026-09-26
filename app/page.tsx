@@ -5,7 +5,7 @@ import { isUuid } from "../lib/feed";
 import { bodyFont, displayFont } from "./fonts";
 
 export const metadata: Metadata = {
-  title: "Elan | Videolu araç ilanları",
+  title: "gözüyle | Videolu araç ilanları",
   description: "Araçları kısa videolarla keşfet, satıcıya tek dokunuşla WhatsApp'tan yaz.",
 };
 

@@ -63,8 +63,8 @@ describe("resolveSiteUrl", () => {
     );
   });
 
-  it("hiçbiri yoksa yerel adres", () => {
-    expect(resolveSiteUrl({}).href).toBe("http://localhost:3000/");
-    expect(resolveSiteUrl({ NEXT_PUBLIC_SITE_URL: undefined, VERCEL_URL: " " }).href).toBe("http://localhost:3000/");
+  it("hiçbiri yoksa gözüyle'nin alan adı", () => {
+    expect(resolveSiteUrl({}).href).toBe("https://gozuyle.com/");
+    expect(resolveSiteUrl({ NEXT_PUBLIC_SITE_URL: undefined, VERCEL_URL: " " }).href).toBe("https://gozuyle.com/");
   });
 });

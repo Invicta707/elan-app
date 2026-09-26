@@ -4,8 +4,8 @@ import LegalPage from "../../components/LegalPage";
 import { LEGAL_CONTACT_EMAIL } from "../../lib/legal";
 
 export const metadata: Metadata = {
-  title: "Gizlilik Politikası | Elan",
-  description: "Elan'ın hangi kişisel verileri neden topladığı, nasıl sakladığı ve haklarını nasıl kullanabileceğin.",
+  title: "Gizlilik Politikası | gözüyle",
+  description: "gözüyle'nin hangi kişisel verileri neden topladığı, nasıl sakladığı ve haklarını nasıl kullanabileceğin.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -13,7 +13,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage title="Gizlilik Politikası">
       <p>
-        Bu politika, Elan web sitesi ve mobil uygulamasını (birlikte &quot;Elan&quot;) kullanırken hangi kişisel
+        Bu politika, gözüyle web sitesi ve mobil uygulamasını (birlikte &quot;gözüyle&quot;) kullanırken hangi kişisel
         verilerinin işlendiğini, neden işlendiğini ve 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK)
         kapsamındaki haklarını açıklar.
       </p>
@@ -64,7 +64,7 @@ export default function PrivacyPage() {
       </p>
 
       <h2>Hizmet sağlayıcılar ve yurt dışına aktarım</h2>
-      <p>Elan&apos;ı çalıştırmak için aşağıdaki hizmet sağlayıcıları kullanıyoruz:</p>
+      <p>gözüyle&apos;yi çalıştırmak için aşağıdaki hizmet sağlayıcıları kullanıyoruz:</p>
       <ul>
         <li>Supabase: veritabanı, kimlik doğrulama ve fotoğraf depolama,</li>
         <li>Cloudflare Stream: videoların saklanması ve oynatılması,</li>
@@ -106,7 +106,7 @@ export default function PrivacyPage() {
       </p>
 
       <h2>Çocuklar</h2>
-      <p>Elan 18 yaşından küçükler için tasarlanmamıştır; bilerek 18 yaş altı kişilerden veri toplamayız.</p>
+      <p>gözüyle 18 yaşından küçükler için tasarlanmamıştır; bilerek 18 yaş altı kişilerden veri toplamayız.</p>
 
       <h2>Değişiklikler</h2>
       <p>

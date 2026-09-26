@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   // OpenGraph/canonical gibi göreli URL'ler bu adrese göre tamamlanır. Özel alan
-  // adında NEXT_PUBLIC_SITE_URL (ör. https://elan.com.tr) tanımlanmalı; boş ya da
+  // adında NEXT_PUBLIC_SITE_URL (ör. https://gozuyle.com) tanımlanmalı; boş ya da
   // bozuksa build düşmez, Vercel'in alan adına düşülür (bkz. lib/site-url.ts).
   metadataBase: resolveSiteUrl({
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
@@ -25,18 +25,18 @@ export const metadata: Metadata = {
     VERCEL_BRANCH_URL: process.env.VERCEL_BRANCH_URL,
     VERCEL_URL: process.env.VERCEL_URL,
   }),
-  title: "Elan | Videolu araç ilanları",
+  title: "gözüyle | Videolu araç ilanları",
   description: "Araçları kısa videolarla keşfet, satıcıya tek dokunuşla WhatsApp'tan yaz.",
   // Ana ekrana ekleme ve Play Store (TWA) paketi bu manifest'i okur
   // (public/manifest.json; ikonlar: scripts/generate-icons.mjs)
   manifest: "/manifest.json",
   icons: { apple: "/icons/apple-touch-icon.png" },
-  appleWebApp: { title: "Elan", statusBarStyle: "black" },
+  appleWebApp: { title: "gözüyle", statusBarStyle: "black" },
 };
 
 // Tarayıcı çubuğu / uygulama başlığı rengi: manifest'teki theme_color ile aynı
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#0A0A0A",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

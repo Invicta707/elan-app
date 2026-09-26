@@ -19,10 +19,10 @@ function pngSize(path: string): string {
 describe("PWA manifest", () => {
   it("kurulabilir uygulama için zorunlu alanlar", () => {
     expect(manifest).toMatchObject({
-      name: "Elan",
+      name: "gözüyle",
       display: "standalone",
       start_url: "/",
-      theme_color: "#000000",
+      theme_color: "#0A0A0A",
     });
     expect(manifest.short_name).toBeTruthy();
   });

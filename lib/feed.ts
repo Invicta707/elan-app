@@ -208,7 +208,7 @@ export async function getSellerWhatsAppUrl(vehicle: SellerContactVehicle): Promi
   const number = typeof data === "string" ? toWhatsAppNumber(data) : null;
   if (!number) return null;
 
-  const message = `Merhaba, Elan'daki ${vehicle.year} ${vehicle.brandName} ${vehicle.modelName} ilanınızla ilgileniyorum.`;
+  const message = `Merhaba, gözüyle'deki ${vehicle.year} ${vehicle.brandName} ${vehicle.modelName} ilanınızla ilgileniyorum.`;
 
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }

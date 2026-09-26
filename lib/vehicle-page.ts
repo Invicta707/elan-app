@@ -120,7 +120,7 @@ export function buildVehicleTitle(v: TitleInput): string {
   return `${v.year} ${v.brandName} ${v.modelName} - ${formatPrice(v.price, v.currency)}`;
 }
 
-/** "85.000 km · Benzin · Otomatik · İstanbul. Elan'da videolu araç ilanı." */
+/** "85.000 km · Benzin · Otomatik · İstanbul. gözüyle'de videolu araç ilanı." */
 export function buildVehicleDescription(
   v: Pick<VehicleSpecs, "mileageKm" | "fuelType" | "transmission" | "city" | "hasHeavyDamage">,
 ): string {
@@ -131,12 +131,12 @@ export function buildVehicleDescription(
     v.city,
   ].filter(Boolean);
   const damage = v.hasHeavyDamage ? " Ağır hasar kayıtlı." : "";
-  return `${parts.join(" · ")}.${damage} Elan'da videolu araç ilanı.`;
+  return `${parts.join(" · ")}.${damage} gözüyle'de videolu araç ilanı.`;
 }
 
 /** Paylaşım menüsünde bağlantının yanında giden kısa metin */
 export function buildVehicleShareText(v: TitleInput): string {
-  return `Elan'da ${buildVehicleTitle(v)}`;
+  return `gözüyle'de ${buildVehicleTitle(v)}`;
 }
 
 /** Paylaşım kartı görseli: kapak fotoğrafı, yoksa video kapağı */

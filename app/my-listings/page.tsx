@@ -3,7 +3,7 @@ import MyListingsView from "../../components/MyListingsView";
 import { bodyFont, displayFont } from "../fonts";
 
 export const metadata: Metadata = {
-  title: "İlanlarım | Elan",
+  title: "İlanlarım | gözüyle",
   robots: { index: false },
 };
 

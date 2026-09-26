@@ -42,7 +42,7 @@ describe("getSellerWhatsAppUrl", () => {
       const parsed = new URL(url!);
       expect(parsed.origin + parsed.pathname).toBe("https://wa.me/905445673430");
       expect(parsed.searchParams.get("text")).toBe(
-        "Merhaba, Elan'daki 2021 Porsche 911 Carrera S ilanınızla ilgileniyorum.",
+        "Merhaba, gözüyle'deki 2021 Porsche 911 Carrera S ilanınızla ilgileniyorum.",
       );
     },
   );

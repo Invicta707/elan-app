@@ -30,7 +30,7 @@ const getVehicle = cache(fetchVehiclePage);
 export async function generateMetadata({ params }: VehiclePageProps): Promise<Metadata> {
   const { id } = await params;
   const vehicle = await getVehicle(id);
-  if (!vehicle) return { title: "İlan bulunamadı | Elan" };
+  if (!vehicle) return { title: "İlan bulunamadı | gözüyle" };
 
   const title = buildVehicleTitle(vehicle);
   const description = buildVehicleDescription(vehicle);
@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: VehiclePageProps): Promise<Me
     // WhatsApp ve sosyal medyada link, aracın fotoğrafıyla kart olarak görünür
     openGraph: {
       type: "website",
-      siteName: "Elan",
+      siteName: "gözüyle",
       locale: "tr_TR",
       url: path,
       title,

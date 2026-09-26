@@ -3,7 +3,7 @@ import AccountView from "../../components/AccountView";
 import { bodyFont, displayFont } from "../fonts";
 
 export const metadata: Metadata = {
-  title: "Hesabım | Elan",
+  title: "Hesabım | gözüyle",
   description: "Hesap bilgilerin, çıkış yapma ve hesabını silme.",
   robots: { index: false },
 };

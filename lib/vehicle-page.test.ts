@@ -80,18 +80,18 @@ describe("SEO ve paylaşım metinleri", () => {
 
   it("açıklama: km, yakıt, vites ve il", () => {
     expect(buildVehicleDescription(vehicle)).toBe(
-      "85.000 km · Benzin · Otomatik · İstanbul. Elan'da videolu araç ilanı.",
+      "85.000 km · Benzin · Otomatik · İstanbul. gözüyle'de videolu araç ilanı.",
     );
   });
 
   it("şehir yoksa atlanır, ağır hasar belirtilir", () => {
     expect(buildVehicleDescription({ ...vehicle, city: null, hasHeavyDamage: true })).toBe(
-      "85.000 km · Benzin · Otomatik. Ağır hasar kayıtlı. Elan'da videolu araç ilanı.",
+      "85.000 km · Benzin · Otomatik. Ağır hasar kayıtlı. gözüyle'de videolu araç ilanı.",
     );
   });
 
   it("paylaşım metni", () => {
-    expect(buildVehicleShareText(vehicle)).toBe("Elan'da 2021 Porsche 911 Carrera S - ₺3.450.000");
+    expect(buildVehicleShareText(vehicle)).toBe("gözüyle'de 2021 Porsche 911 Carrera S - ₺3.450.000");
   });
 
   it("OG görseli: kapak fotoğrafı, yoksa video kapağı, o da yoksa yok", () => {

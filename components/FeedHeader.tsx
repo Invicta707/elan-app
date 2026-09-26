@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { FOCUS_PARAM } from "../lib/search";
+import Logo from "./Logo";
 
 type FeedHeaderProps = {
   /** Hangi sekmenin etkin olduğu; "sell", "favorites" ve "my-listings" hiçbir metin sekmesini etkin göstermez */
@@ -32,10 +33,12 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
       >
         <Link
           href="/"
-          aria-label="Elan ana sayfa"
-          className={`pointer-events-auto justify-self-start rounded-sm px-1 text-[1.6rem] font-extrabold leading-none tracking-[0.01em] [font-family:var(--font-display)] ${focusRing(overlay)}`}
+          aria-label="gözüyle ana sayfa"
+          className={`pointer-events-auto justify-self-start rounded-sm px-1 leading-none [font-family:var(--font-display)] ${focusRing(overlay)}`}
         >
-          Elan
+          {/* Renk verilmez: başlığın rengini alır (akışta beyaz, açık sayfalarda koyu).
+              En dar başlıkta yazı gizlenir, göz simgesi kalır (erişilebilir ad aria-label'da). */}
+          <Logo className="h-7" textClassName="@max-[16.5rem]:hidden" />
         </Link>
 
         <nav aria-label="Ana gezinme" className="pointer-events-auto flex items-center gap-6">
@@ -49,16 +52,17 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
 
         {/* Akışta başlık video genişliğinde (kısa pencerede dar) ve sekmelerin
             ortada kalması için yan sütunlar alanı eşit paylaşır. Sağ sütun bu
-            yüzden genişliğe göre küçülür: dar başlıkta "İlan Ver" yuvarlak "+"
-            ikonuna döner, çok darda (≈610px'ten kısa pencere) kalp, en darda
-            (≈520px) arama kısayolu da gizlenir.
-            Butonlar asla alt satıra kırılmaz. Mobilde üçü de alt gezinme çubuğunda. */}
+            yüzden genişliğe göre küçülür (eşikler logo + sekmeler + butonların
+            ölçülmüş genişliğine göre): dar başlıkta "İlan Ver" yuvarlak "+"
+            ikonuna döner; masaüstünde ≈700px'ten kısa pencerede kalp, ≈600px'ten
+            kısada arama kısayolu, ≈510px'ten kısada logonun yazısı gizlenir.
+            Butonlar asla alt satıra kırılmaz. Mobilde kalp ve "İlan Ver" alt gezinme çubuğunda. */}
         <div className="flex items-center justify-self-end gap-2">
           <Link
             href="/favorites"
             aria-label="Favorilerim"
             aria-current={activeTab === "favorites" ? "page" : undefined}
-            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[20rem]:flex ${
+            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[23rem]:flex ${
               overlay ? "bg-black/35" : "bg-white"
             } ${focusRing(overlay)}`}
           >
@@ -86,11 +90,12 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
 
           {activeTab === "feed" && (
             // Hızlı arama: arama sayfasını, arama kutusu odaklanmış hâlde açar.
-            // En dar başlıkta sığmayınca gizlenir; "Ara" sekmesi aynı sayfaya gider.
+            // Masaüstünde "+" ile birlikte sığmayınca gizlenir; "Ara" sekmesi aynı
+            // sayfaya gider. Mobilde sağda tek buton olduğu için hep görünür.
             <Link
               href={`/search?${FOCUS_PARAM}=1`}
               aria-label="Marka veya model ara"
-              className={`pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full @max-[16.75rem]:hidden ${
+              className={`pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full md:@max-[19.75rem]:hidden ${
                 overlay ? "bg-black/35" : "bg-white"
               } ${focusRing(overlay)}`}
             >

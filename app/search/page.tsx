@@ -15,7 +15,7 @@ import {
 import { bodyFont, displayFont } from "../fonts";
 
 export const metadata: Metadata = {
-  title: "İlan ara | Elan",
+  title: "İlan ara | gözüyle",
   description: "Marka, model, fiyat ve şehre göre videolu ve fotoğraflı araç ilanlarını ara.",
 };
 

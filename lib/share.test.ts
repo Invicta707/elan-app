@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { shareListing, shareMessage, vehiclePath, whatsappShareUrl, type ShareEnvironment } from "./share";
 
-const data = { url: "https://elan.test/vehicles/veh-1", title: "2021 Porsche 911", text: "Elan'da 2021 Porsche 911" };
+const data = { url: "https://gozuyle.test/vehicles/veh-1", title: "2021 Porsche 911", text: "gözüyle'de 2021 Porsche 911" };
 const WHATSAPP = whatsappShareUrl(data);
 
 function env(overrides: Partial<ShareEnvironment> & { nav?: ShareEnvironment["nav"] } = {}): ShareEnvironment {

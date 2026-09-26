@@ -32,7 +32,7 @@ export default function AccountView() {
         {deleted ? (
           <div role="status" className="mt-8 rounded-lg bg-white p-5 text-center">
             <p className="text-[16px] font-semibold">Hesabın ve tüm verilerin silindi.</p>
-            <p className="mt-1 text-[14px] text-[#5B616B]">Elan&apos;ı kullandığın için teşekkürler.</p>
+            <p className="mt-1 text-[14px] text-[#5B616B]">gözüyle&apos;yi kullandığın için teşekkürler.</p>
             <Link
               href="/"
               className="mt-4 inline-flex h-11 items-center rounded-md bg-[#003399] px-5 text-[15px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"

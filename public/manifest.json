@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Elan",
-  "short_name": "Elan",
+  "name": "gözüyle",
+  "short_name": "gözüyle",
   "description": "Araçları kısa videolarla keşfet, satıcıya tek dokunuşla WhatsApp'tan yaz.",
   "lang": "tr",
   "dir": "ltr",
@@ -9,8 +9,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
   "categories": ["shopping", "lifestyle"],
   "icons": [
     {

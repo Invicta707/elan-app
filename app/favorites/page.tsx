@@ -3,7 +3,7 @@ import FavoritesView from "../../components/FavoritesView";
 import { bodyFont, displayFont } from "../fonts";
 
 export const metadata: Metadata = {
-  title: "Favorilerim | Elan",
+  title: "Favorilerim | gözüyle",
   robots: { index: false },
 };
 
