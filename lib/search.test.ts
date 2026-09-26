@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./supabase", () => ({ supabase: { rpc: vi.fn() } }));
+vi.mock("./supabase", () => ({ supabase: { rpc: vi.fn(), from: vi.fn() } }));
 
 import {
   EMPTY_FILTERS,
+  compareCatalogNames,
   countActiveFilters,
+  fetchCatalog,
   filtersFromSearchParams,
   filtersToSearchParams,
   parseYear,
@@ -135,5 +137,80 @@ describe("searchVehicles", () => {
         p_sort: "newest",
       }),
     );
+  });
+});
+
+describe("compareCatalogNames", () => {
+  const sorted = (names: string[]) => [...names].sort(compareCatalogNames);
+
+  it("sayıları değerine göre sıralar: 208, 2008'den önce gelir", () => {
+    expect(compareCatalogNames("208", "2008")).toBeLessThan(0);
+    expect(sorted(["2008", "208", "3008", "308", "5008", "508"])).toEqual([
+      "208",
+      "308",
+      "508",
+      "2008",
+      "3008",
+      "5008",
+    ]);
+  });
+
+  it("3, 10'dan önce gelir; ad içindeki sayılar da değerine göre karşılaştırılır", () => {
+    expect(compareCatalogNames("3", "10")).toBeLessThan(0);
+    expect(sorted(["Seri 10", "Seri 3", "Seri 1"])).toEqual(["Seri 1", "Seri 3", "Seri 10"]);
+  });
+
+  it("Türkçe alfabe sırası: Ç C'den, Ş S'den sonra; büyük/küçük harf fark etmez", () => {
+    expect(sorted(["Şahin", "Doğan", "Çelik", "Sahara", "Clio"])).toEqual([
+      "Clio",
+      "Çelik",
+      "Doğan",
+      "Sahara",
+      "Şahin",
+    ]);
+    // "i"siz örnek: Türkçede I'nın küçüğü ı'dır, "clio"/"CLIO" bu yüzden eşit sayılmaz
+    expect(compareCatalogNames("polo", "POLO")).toBe(0);
+  });
+});
+
+describe("fetchCatalog", () => {
+  const from = vi.mocked(supabase.from);
+
+  // from(tablo).select().order("id").range(): ilk sayfada satırlar, sonra boş parça
+  function mockCatalogTables(rows: Record<string, unknown[]>) {
+    from.mockImplementation(((table: string) => ({
+      select: () => ({
+        order: () => ({
+          range: async (start: number) => ({ data: start === 0 ? rows[table] : [], error: null }),
+        }),
+      }),
+    })) as never);
+  }
+
+  it("markaları ve modelleri doğal sırayla döner (veritabanındaki id sırasından bağımsız)", async () => {
+    mockCatalogTables({
+      brands: [
+        { id: "b2", name: "Peugeot", slug: "peugeot" },
+        { id: "b1", name: "BMW", slug: "bmw" },
+      ],
+      models: [
+        { id: "m1", brand_id: "b2", name: "2008", slug: "2008" },
+        { id: "m2", brand_id: "b2", name: "208", slug: "208" },
+        { id: "m3", brand_id: "b1", name: "3 Serisi", slug: "3-serisi" },
+        { id: "m4", brand_id: "b1", name: "10 Serisi", slug: "10-serisi" },
+        { id: "m5", brand_id: "b2", name: "3008", slug: "3008" },
+        { id: "m6", brand_id: "b2", name: "308", slug: "308" },
+      ],
+    });
+
+    const result = await fetchCatalog();
+    expect(result.brands.map((b) => b.name)).toEqual(["BMW", "Peugeot"]);
+    expect(result.models.filter((m) => m.brandId === "b2").map((m) => m.name)).toEqual([
+      "208",
+      "308",
+      "2008",
+      "3008",
+    ]);
+    expect(result.models.filter((m) => m.brandId === "b1").map((m) => m.name)).toEqual(["3 Serisi", "10 Serisi"]);
   });
 });

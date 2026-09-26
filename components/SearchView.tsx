@@ -23,6 +23,7 @@ import {
   SORT_LABELS,
   TRANSMISSIONS,
   TURKISH_CITIES,
+  compareCatalogNames,
   countActiveFilters,
   filtersToSearchParams,
   formatAmount,
@@ -478,7 +479,7 @@ function findSuggestions(index: Suggestion[], query: string): Suggestion[] {
   }
 
   return ranked
-    .sort((a, b) => a.rank - b.rank || a.item.label.localeCompare(b.item.label, "tr"))
+    .sort((a, b) => a.rank - b.rank || compareCatalogNames(a.item.label, b.item.label))
     .slice(0, 8)
     .map((r) => r.item);
 }

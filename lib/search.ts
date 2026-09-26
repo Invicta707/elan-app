@@ -271,7 +271,13 @@ function toSearchResult(row: SearchVehiclesRow): VehicleSearchResult {
 // Supabase varsayılan olarak tek istekte en fazla 1000 satır döndürür;
 // model sayısı bunu aşabileceği için boş parça gelene kadar sayfalıyoruz.
 const CATALOG_CHUNK = 1000;
-const trCollator = new Intl.Collator("tr");
+
+/**
+ * Marka/model adlarını Türkçe alfabeye ve sayısal değere göre karşılaştırır:
+ * "208" < "2008", "3" < "10" (düz metin sıralamasında tersi olurdu).
+ * Büyük/küçük harf farkı sırayı etkilemez (Türkçe kuralıyla: I'nın küçüğü ı).
+ */
+export const compareCatalogNames = new Intl.Collator("tr", { numeric: true, sensitivity: "base" }).compare;
 
 async function fetchAllRows<T>(table: "brands" | "models", columns: string): Promise<T[]> {
   const rows: T[] = [];
@@ -299,10 +305,10 @@ export async function fetchCatalog(): Promise<Catalog> {
   ]);
 
   return {
-    brands: brandRows.sort((a, b) => trCollator.compare(a.name, b.name)),
+    brands: brandRows.sort((a, b) => compareCatalogNames(a.name, b.name)),
     models: modelRows
       .map((m) => ({ id: m.id, brandId: m.brand_id, name: m.name, slug: m.slug }))
-      .sort((a, b) => trCollator.compare(a.name, b.name)),
+      .sort((a, b) => compareCatalogNames(a.name, b.name)),
   };
 }
 

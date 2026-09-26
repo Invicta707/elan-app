@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { parseReportInput } from "../../../lib/reports";
+import { clientIp, createRateLimiter } from "../../../lib/rate-limit";
+import { REPORT_RATE_LIMIT, parseReportInput } from "../../../lib/reports";
 import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-server";
 
 // POST /api/reports
@@ -9,6 +10,7 @@ import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-
 //   body:    { vehicleId, reason, details? }
 //
 // Yanıt: 201 { ok: true } | 200 { ok: true, alreadyReported: true } | 4xx/5xx { error }
+//        429 { error } + Retry-After: aynı IP'den dakikada 5'ten fazla istek
 //
 // reports tablosuna tarayıcıdan erişim yok (RLS, politika yok); kayıt burada
 // servis anahtarıyla eklenir. Giriş yapmadan da bildirilebilir; oturum varsa
@@ -16,11 +18,25 @@ import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-
 
 const UNIQUE_VIOLATION = "23505";
 
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
+// Sunucu örneği başına sayılır (bkz. lib/rate-limit.ts)
+const checkReportRate = createRateLimiter(REPORT_RATE_LIMIT);
+
+function errorResponse(status: number, code: string, message: string, headers?: HeadersInit) {
+  return NextResponse.json({ error: { code, message } }, { status, headers });
 }
 
 export async function POST(request: Request) {
+  // Sınır her şeyden önce: geçersiz istekler de sayılır ve veritabanına gitmeden kesilir
+  const rate = checkReportRate(clientIp(request.headers));
+  if (!rate.ok) {
+    return errorResponse(
+      429,
+      "rate_limited",
+      "Bu bağlantıdan kısa sürede çok fazla bildirim gönderildi. Biraz bekleyip tekrar dene.",
+      { "Retry-After": String(rate.retryAfterSeconds) },
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

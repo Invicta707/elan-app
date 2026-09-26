@@ -17,6 +17,9 @@ export type ReportReason = keyof typeof REPORT_REASONS;
 
 export const MAX_REPORT_DETAILS = 500;
 
+/** /api/reports istek sınırı: aynı IP'den pencere başına en fazla `limit` istek */
+export const REPORT_RATE_LIMIT = { limit: 5, windowMs: 60_000 } as const;
+
 export type ReportInput = {
   vehicleId: string;
   reason: ReportReason;
