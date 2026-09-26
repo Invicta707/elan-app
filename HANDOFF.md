@@ -17,7 +17,7 @@ _Son güncelleme: 26 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 27 dosya, **400 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 28 dosya, **434 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -42,6 +42,7 @@ _Son güncelleme: 26 Eylül 2026_
 | Moderasyon | [app/admin/reports/page.tsx](app/admin/reports/page.tsx), [components/ModerationView.tsx](components/ModerationView.tsx), [app/api/admin/reports/route.ts](app/api/admin/reports/route.ts), [lib/moderation.ts](lib/moderation.ts), [lib/moderation-server.ts](lib/moderation-server.ts) (`authorizeAdmin`: `ADMIN_EMAILS`, onaylı e-posta) |
 | İlanlarım / durum | [components/MyListingsView.tsx](components/MyListingsView.tsx), [lib/my-listings.ts](lib/my-listings.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
 | Katalog / arama | [lib/search.ts](lib/search.ts) (`fetchCatalog`, `compareCatalogNames`), [components/SearchView.tsx](components/SearchView.tsx), [app/sell/page.tsx](app/sell/page.tsx) |
+| İlan verme (`/sell`) | [app/sell/page.tsx](app/sell/page.tsx): adım durumu, doğrulama, gönderim (`runSubmit`, `uploadPhotos`). [app/sell/layout.tsx](app/sell/layout.tsx): yazı tipleri ve başlık. [components/sell/FormControls.tsx](components/sell/FormControls.tsx): `Field`, `TextInput`, `GroupedNumberInput`, `SelectInput`, `ChoiceGroup`. [components/sell/MediaPickers.tsx](components/sell/MediaPickers.tsx): `VideoDropzone`, `PhotoDropzone`. [components/sell/SellChrome.tsx](components/sell/SellChrome.tsx): `SellStepper`, `FormCard`, `SubmitProgress`, `SellActionBar`, `SellSuccess`. [lib/listing.ts](lib/listing.ts): `LISTING_STEPS`, `listingFieldErrors`, `stepFieldErrors`, `groupThousands`, `caretAfterDigits`. [lib/sell-progress.ts](lib/sell-progress.ts): gönderim aşamaları ve yüzde |
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | PWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir) |
@@ -86,10 +87,19 @@ _Son güncelleme: 26 Eylül 2026_
   2. **Fotoğraf adresi:** adres denetimi olmayan `vehicle_images_insert_own` politikası, OR ile birleştiği için katı politikayı etkisiz bırakıyordu. Katı politikanın `%/vehicle-images/...` deseni de her sunucuyu kabul ediyordu ve kullanılmayan bucket'ı tarif ediyordu. UPDATE politikası aynı açığa sahipti. Artık yalnızca uygulamanın `getPublicUrl` ile ürettiği adres geçiyor. Migration, adres denetimi olmayan bir yazma politikası kalırsa ya da mevcut bir satır kurala uymazsa hiçbir şey uygulamadan duruyor.
   3. **Videosuz yayın:** videosu işlenmemiş ilan `pending_video → archived → active` yoluyla yalnızca fotoğrafla yayına alınabiliyordu. Artık yayın için işlenmiş video şart. "İlanlarım"da videosu hazır olmayan ilanın "Yayına al" butonu gizli ve nedeni yazıyor.
   - Kanıt: 84 yeni test (82'si [lib/listing-rls.test.ts](lib/listing-rls.test.ts)'te). Düzeltmeler olmadan çalıştırılan kontrolde ilk iki açık için 35, video kuralı için 9 test başarısız oldu. Uzak veritabanında tetikleyiciler, politikalar ve fonksiyon tanımları sorguyla doğrulandı.
+- **İlan verme (`/sell`) yeniden tasarlandı (`869865a`).** Veri doğrulama, RLS ve yükleme mantığı değişmedi.
+  - **Üç adım:** Araç Bilgileri (marka, model, yıl, km, kasa, yakıt, vites, hasar) → Medya & Video → Fiyat & Detaylar (fiyat, şehir, açıklama, WhatsApp, özet kartı).
+  - **Adım göstergesi:** tamamlanan adımlarda ✓ var ve bunlara dönülebiliyor. Alttaki sabit çubukta adım bilgisi, ilerleme çizgisi ve Geri / Devam et / İlanı oluştur düğmeleri var; mobilde alt menünün üstünde duruyor.
+  - **Doğrulama:** "Devam et" yalnızca o adımın alanlarını denetliyor ve ilk hatalı alana odaklanıyor; son adımda eksik kalırsa ilk eksik adıma dönülüyor. Hata metni alanın altında, ikonlu ve `aria-describedby` ile alana bağlı.
+  - **Medya:** video ve fotoğraf için sürükle-bırak. Kapak fotoğrafı ızgarada 2×2 kare ve rozetli; silme düğmeleri köşelerde. Sınırlar ikonlu mikro metinlerle gösteriliyor.
+  - **Gönderim:** aşama rozetleri ve video yüzde çubuğu var. Başarı ekranında Cloudflare işlemesi "İşleniyor" olarak görünüyor. Yükleme sürerken sayfadan çıkılırsa tarayıcı uyarıyor.
+  - **Girdiler:** fiyat ve km binlik ayraçlı (`₺`, `km` ekleri); imleç yerinde kalıyor, ayraca Backspace önündeki rakamı siliyor. Kasa, yakıt, vites ve hasar gerçek radyo grupları (ok tuşlarıyla gezilebiliyor).
+  - **Yapı:** `app/sell/page.tsx` durum ve gönderim mantığını tutuyor (`runSubmit`, `uploadPhotos`). Görsel parçalar `components/sell/` altında. Yazı tipleri ve sayfa başlığı `app/sell/layout.tsx`'ten geliyor.
+  - **Doğrulama (üretim derlemesi):** 320, 375 ve 1280 px'te taşma yok, konsol temiz. Adım doğrulaması, odak, binlik ayraç ve imleç, PNG kabul / GIF ret, tarayıcıda üretilen dikey video ve oturumsuz gönderimde giriş penceresi denendi.
 
 ## 4. Git ve dağıtım durumu
 
-- Son commit "feat: add persistent database rate limiting to reports api" (kalıcı istek sınırı; bu dosya da aynı commit'te güncellendi). Güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`869865a`** ("feat(sell): modernize listing creation flow with multi-step wizard, media grid, and formatted inputs"). Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
 - Veritabanı kodla uyumlu: 11 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
@@ -108,7 +118,12 @@ _Son güncelleme: 26 Eylül 2026_
 **Kullanıcı tarafında:**
 
 1. ✅ **Supabase → URL Configuration: tamamlandı (26 Eylül 2026).** Kullanıcı panelden kontrol etti: Site URL `https://gozuyle.com`, Redirect URLs `https://gozuyle.com/**` (`/auth/callback`'i kapsar).
-2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli, fotoğraflı ilan verme (JPEG/PNG/WebP yüklenmeli; GIF ya da 10 MB üstü dosyada Türkçe hata çıkmalı; iPhone'dan seçilen fotoğraf JPEG olarak gitmeli). Bir de "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
+2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli, fotoğraflı ve videolu gerçek bir ilan (yeni üç adımlı akış). Kontrol edilecekler:
+   - JPEG, PNG ve WebP yüklenmeli; GIF ya da 10 MB üstü dosyada Türkçe hata çıkmalı.
+   - iPhone'dan seçilen fotoğraf JPEG olarak gitmeli.
+   - Yayın durumu kartında video yüzde çubuğu ilerlemeli; başarı ekranında "İşleniyor" görünmeli.
+   - Gerçek sürükle-bırak ve iOS/Android cihazlar Claude tarafından denenmedi.
+   - "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
 3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
    - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
    - Dashboard'dan eklendi ve 308 ile `gozuyle.com`'a yönlendirildi.
