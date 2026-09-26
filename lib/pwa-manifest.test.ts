@@ -41,3 +41,25 @@ describe("PWA manifest", () => {
     }
   });
 });
+
+// public/.well-known/assetlinks.json: Android uygulaması (TWA) ile sitenin aynı
+// sahibe ait olduğunu kanıtlar; doğrulanırsa uygulamada adres çubuğu görünmez.
+// Parmak izi, APK/AAB'yi imzalayan sertifikanınkiyle birebir aynı olmalı.
+describe("Digital Asset Links (TWA)", () => {
+  const links = JSON.parse(readFileSync("public/.well-known/assetlinks.json", "utf8")) as {
+    relation: string[];
+    target: { namespace: string; package_name: string; sha256_cert_fingerprints: string[] };
+  }[];
+
+  it("Android paketi için bütün adresleri devreder", () => {
+    expect(links).toHaveLength(1);
+    expect(links[0].relation).toEqual(["delegate_permission/common.handle_all_urls"]);
+    expect(links[0].target).toMatchObject({ namespace: "android_app", package_name: "com.gozuyle.twa" });
+  });
+
+  it("parmak izleri SHA-256 biçiminde (32 bayt, büyük harf, iki nokta ile ayrılmış)", () => {
+    const fingerprints = links[0].target.sha256_cert_fingerprints;
+    expect(fingerprints.length).toBeGreaterThan(0);
+    for (const fingerprint of fingerprints) expect(fingerprint).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+  });
+});

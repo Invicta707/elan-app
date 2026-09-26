@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.gozuyle.twa",
+      "sha256_cert_fingerprints": [
+        "EB:1F:55:9A:B0:21:B2:F0:5A:7D:DE:A3:D0:95:90:15:6A:17:65:F2:0D:C9:29:4B:E3:42:48:B0:EB:01:95:2D"
+      ]
+    }
+  }
+]
