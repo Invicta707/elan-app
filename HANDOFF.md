@@ -112,13 +112,18 @@ _Son güncelleme: 26 Eylül 2026_
 5. **Vercel'deki fazla kayıt:** Preview'a ait eski `CLOUDFLARE_STREAM_WEBHOOK_SECRET` kaydı (id `TZ5cSerrSmMsQUac`) silinmeli. API ile silme izin denetimine takılmıştı.
 6. **Play Store (TWA):** `/.well-known/assetlinks.json` gerekiyor; bunun için imzalama sertifikasının SHA-256 parmak izi lazım.
 7. ✅ **Moderasyon paneline erişim: tamamlandı (26 Eylül 2026).** `ADMIN_EMAILS` Production ve Preview'a Secret olarak eklendi (15:13 UTC). Ondan sonra başlayan deploy (`elan-6ie9dxson`) `gozuyle.com`'a bağlı. Canlıda token olmadan API `401`, sayfa `200` + `noindex` dönüyor. Yönetici hesabıyla uçtan uca deneme 2. maddede.
-8. **Storage yükleme politikası: son adım panelde.**
-   - Sorun: `vehicle-photos` bucket'ının "Authenticated users can upload vehicle photos" INSERT politikası yalnızca `bucket_id`'ye bakıyor; giriş yapmış herkes her yola yükleyebiliyor.
-   - Yapıldı (migration `20260926180000_vehicle_photos_storage_limits.sql`):
+8. ✅ **Storage yükleme politikası: tamamlandı (26 Eylül 2026).**
+   - Sorun: `vehicle-photos` bucket'ının "Authenticated users can upload vehicle photos" INSERT politikası yalnızca `bucket_id`'ye bakıyordu; giriş yapmış herkes her yola, her tür ve boyutta dosya yükleyebiliyordu.
+   - Migration (`20260926180000_vehicle_photos_storage_limits.sql`, commit `7af67eb`):
      - Bucket'a 10 MB ve yalnızca `image/jpeg`, `image/png`, `image/webp` sınırı. Tür ve boyut artık her yüklemede sunucuda denetleniyor.
      - Yükleme kuralını tutan `public.fn_can_upload_vehicle_photo(name)` fonksiyonu. Şartlar: yükleyen ilanın satıcısı, ilan `draft` ya da `pending_video`, yol `<ilan>/<0-9>.<jpeg|png|webp>`.
      - İstemci aynı kuralları `photoRejection` ile seçim anında uyguluyor.
-   - **Kalan (yalnızca panelden):** Supabase → Storage → Policies → `vehicle-photos` → "Authenticated users can upload vehicle photos" politikasının ifadesi `bucket_id = 'vehicle-photos' and public.fn_can_upload_vehicle_photo(name)` olmalı. Migration'lar `storage.objects` politikalarını değiştiremiyor, çünkü `postgres` rolü `supabase_storage_admin`'in üyesi değil. Bu adım yapılana kadar giriş yapmış herkes geçerli türde ve boyuttaki dosyaları her yola yükleyebilir.
+   - Panel: INSERT politikası "Authenticated users can upload vehicle photos" Supabase panelinden `bucket_id = 'vehicle-photos' and public.fn_can_upload_vehicle_photo(name)` olarak güncellendi. Migration'lar `storage.objects` politikalarını değiştiremiyor, çünkü `postgres` rolü `supabase_storage_admin`'in üyesi değil.
+   - Uzak veritabanında doğrulandı (`pg_policies`):
+     - `storage.objects`'te RLS açık. Yalnızca iki yazma politikası var, ikisi de INSERT ve kendi bucket'ına ve sahiplik fonksiyonuna bağlı: `vehicle-photos` → `fn_can_upload_vehicle_photo`, `vehicle-images` → `fn_can_upload_vehicle_image`.
+     - UPDATE/ALL politikası yok; yüklenmiş bir dosyanın üzerine yazılamıyor.
+     - Fonksiyon `security definer`; anonim role kapalı, `authenticated`'a açık.
+   - Politika değişirse `lib/storage-rls.test.ts`'teki `DASHBOARD_POLICY` de güncellenmeli: test, panelde kurulu olan ifadeyi taklit ediyor.
    - İstenirse aynı ekranda DELETE politikası "Users can delete own vehicle photos" da düzeltilebilir: `foldername[1] = auth.uid()` şartı uygulamanın yoluyla (`<ilan>/…`) hiç eşleşmiyor. Güvenlik açığı değil; satıcı fotoğrafını istemciden silemiyor, hesap silme ise servis anahtarıyla çalışıyor.
 
 **Teknik ve ürün:**
