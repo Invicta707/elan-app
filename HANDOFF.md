@@ -17,11 +17,14 @@ _Son güncelleme: 26 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 30 dosya, **549 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 36 dosya, **628 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
-  - `reports` tablosu: RLS açık, **hiç politika yok**; yalnızca API yazabiliyor. Kapanan bildirimde `resolved_at` ve `resolved_by` dolar.
+  - `reports` tablosu: RLS açık, **hiç politika yok**; yalnızca API yazabiliyor. Kapanan bildirimde `resolved_at` ve `resolved_by` dolar. İlan şikayetleri (sohbet menüsünden gelenler dahil) buraya gidiyor.
+  - **`profiles`:** `whatsapp_number`, `display_name` (2–30 karakter, `<>` yok), `avatar_url`. Satırı **yalnızca sahibi okuyor.** Başkalarının adı ve avatarı mesajlaşma RPC'lerinden geliyor; numara yalnızca `get_seller_whatsapp` ile. `avatar_url`'ı yalnızca sunucu yazabiliyor (sütun yetkisi).
+  - **Mesajlaşma:** `conversations` (ilan + alıcı tekil), `messages`, `user_blocks`, `user_reports`. RLS: yalnızca iki taraf okuyor/yazıyor, engel varsa gönderilemiyor. `is_read` ve `created_at` istemciden yazılamıyor. Gönderen başına dakikada 30 mesaj. `messages` Realtime yayınında.
+  - **Storage `avatars`:** herkese açık okunuyor, 1 MB, webp/jpeg. Yazma yalnızca sunucudan (`/api/profile/avatar`, servis anahtarı).
   - **İlan durumu:** `draft`, `pending_video`, `active`, `sold`, `archived`, `rejected` (moderasyon). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor.
   - **Yayın şartı:** ilan yalnızca işlenmiş bir videosu varsa (`videos.status = 'ready'` ve `hls_url` dolu) `active` olabilir. Kural isteği kim yaparsa yapsın geçerli; fotoğraf tek başına yetmez.
   - **Fotoğraf adresi:** `vehicle_images.image_url` yalnızca `https://<proje>.supabase.co/storage/v1/object/public/vehicle-photos/<ilan>/<sıra>.<uzantı>` olabilir (`fn_is_vehicle_photo_url`). Proje adresi migration'a sabit yazıldı.
@@ -44,13 +47,16 @@ _Son güncelleme: 26 Eylül 2026_
 | Hesap / silme | [components/AccountView.tsx](components/AccountView.tsx), [app/api/user/delete/route.ts](app/api/user/delete/route.ts), [lib/account-deletion.ts](lib/account-deletion.ts) |
 | Bildirim | [components/ReportButton.tsx](components/ReportButton.tsx), [app/api/reports/route.ts](app/api/reports/route.ts), [lib/reports.ts](lib/reports.ts) (`REPORT_RATE_RULES`, `REPORT_BURST_LIMIT`), [lib/rate-limit.ts](lib/rate-limit.ts) (bellek içi, `rateLimitSubject`), [lib/rate-limit-server.ts](lib/rate-limit-server.ts) (kalıcı sayaç, HMAC anahtarı), [lib/rate-limit-db.test.ts](lib/rate-limit-db.test.ts) (PGlite) |
 | Moderasyon | [app/admin/reports/page.tsx](app/admin/reports/page.tsx), [components/ModerationView.tsx](components/ModerationView.tsx), [app/api/admin/reports/route.ts](app/api/admin/reports/route.ts), [lib/moderation.ts](lib/moderation.ts), [lib/moderation-server.ts](lib/moderation-server.ts) (`authorizeAdmin`: `ADMIN_EMAILS`, onaylı e-posta) |
-| İlanlarım / durum | [components/MyListingsView.tsx](components/MyListingsView.tsx), [lib/my-listings.ts](lib/my-listings.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
+| Vitrinim / durum | [components/showcase/ShowcaseView.tsx](components/showcase/ShowcaseView.tsx) (profil başlığı + 3 sütunlu dikey ızgara), [components/showcase/ShowcaseTile.tsx](components/showcase/ShowcaseTile.tsx), [components/showcase/ListingManageSheet.tsx](components/showcase/ListingManageSheet.tsx) (durum değiştirme), [lib/my-listings.ts](lib/my-listings.ts), [lib/showcase.ts](lib/showcase.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
+| Profil | [components/profile/AvatarPicker.tsx](components/profile/AvatarPicker.tsx), [components/profile/EditNameSheet.tsx](components/profile/EditNameSheet.tsx), [lib/profile.ts](lib/profile.ts), [lib/use-my-profile.ts](lib/use-my-profile.ts) (paylaşılan profil deposu), [lib/avatar.ts](lib/avatar.ts), [lib/avatar-image.ts](lib/avatar-image.ts) (tarayıcıda kare kırpma ve WebP), [lib/avatar-server.ts](lib/avatar-server.ts), [app/api/profile/avatar/route.ts](app/api/profile/avatar/route.ts) |
+| Mesajlaşma | [app/messages/page.tsx](app/messages/page.tsx), [app/messages/[id]/page.tsx](app/messages/[id]/page.tsx), [components/messages/InboxView.tsx](components/messages/InboxView.tsx), [components/messages/ChatView.tsx](components/messages/ChatView.tsx) (Realtime, klavye), [components/messages/ChatParts.tsx](components/messages/ChatParts.tsx), [components/messages/ReportUserSheet.tsx](components/messages/ReportUserSheet.tsx), [components/vehicle/MessageSellerButton.tsx](components/vehicle/MessageSellerButton.tsx), [lib/messages.ts](lib/messages.ts), [lib/use-unread-count.ts](lib/use-unread-count.ts), [lib/messaging-rls.test.ts](lib/messaging-rls.test.ts) (PGlite) |
+| Ortak arayüz | [components/ui/BottomSheet.tsx](components/ui/BottomSheet.tsx), [components/ui/Avatar.tsx](components/ui/Avatar.tsx), [components/ui/UnreadBadge.tsx](components/ui/UnreadBadge.tsx); animasyonlar `app/globals.css`'te (`sheet-up`, `badge-pop`, `bubble-in`, `fade-in`) |
 | Katalog / arama | [lib/search.ts](lib/search.ts) (`fetchCatalog`, `compareCatalogNames`), [components/SearchView.tsx](components/SearchView.tsx), [app/sell/page.tsx](app/sell/page.tsx) |
 | İlan verme (`/sell`) | [app/sell/page.tsx](app/sell/page.tsx): adım durumu, doğrulama, gönderim (`runSubmit`, `uploadPhotos`). [app/sell/layout.tsx](app/sell/layout.tsx): yazı tipleri ve başlık. [components/sell/FormControls.tsx](components/sell/FormControls.tsx): `Field`, `TextInput`, `GroupedNumberInput`, `SelectInput`, `ChoiceGroup`. [components/sell/CatalogCombobox.tsx](components/sell/CatalogCombobox.tsx): marka/model seçim kutusu. [components/sell/MediaPickers.tsx](components/sell/MediaPickers.tsx): `VideoDropzone`, `PhotoDropzone`. [components/sell/SellChrome.tsx](components/sell/SellChrome.tsx): `SellStepper`, `FormCard`, `SubmitProgress`, `SellActionBar`, `SellSuccess`. [lib/listing.ts](lib/listing.ts): `LISTING_STEPS`, `listingFieldErrors`, `stepFieldErrors`, `groupThousands`, `caretAfterDigits`. [lib/sell-progress.ts](lib/sell-progress.ts): gönderim aşamaları ve yüzde |
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | PWA / TWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir), [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json) (Android paketi `com.gozuyle.twa`) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 12 migration, sonuncusu `20260926200000_user_catalog_entries.sql`; hepsi uzak veritabanında uygulanmış (son altısı 26 Eylül 2026'da `db push --linked` ile) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 13 migration, sonuncusu `20260926210000_profiles_and_messaging.sql`; hepsi uzak veritabanında uygulanmış (son yedisi 26 Eylül 2026'da `db push --linked` ile) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
@@ -108,11 +114,41 @@ _Son güncelleme: 26 Eylül 2026_
   - **Testler:** `lib/catalog-search.test.ts` (sıralama, yazım hatası, ad kuralları) ve `lib/catalog-rls.test.ts` (PGlite: RPC, tekilleştirme, günlük sınır, yetkiler, TS ve SQL kurallarının birebir aynılığı).
   - **Canlıda doğrulandı:** `/sell`'de 36 marka listeleniyor; "mercedes benz" → Mercedes-Benz, "c200" → C Serisi. `/search` filtreleri 36 markayla yükleniyor, konsol temiz.
 
+- **Vitrinim, profil ve ilan üzerinden mesajlaşma (`15c9455`, migration `20260926210000_profiles_and_messaging.sql`):**
+  - **Ad değişikliği:** "İlanlarım" her yerde "Vitrinim" oldu. `/my-listings` bir profil sayfası: avatar, görünen ad, sayılar (ilan, yayında, izlenme), Mesajlar ve Hesap butonları.
+  - **Izgara:** Reels/TikTok profili gibi 3 sütunlu 9:16 kareler; kapak önce video kapağından geliyor.
+    - Fiyat sol altta cam efektli hapta (1 milyonun üstü "₺1,25 Mn"). Görüntülenme sayısı sağ altta; dar karede fiyatın üstüne çıkıyor (kare bir @container), böylece fiyat hiç kesilmiyor.
+    - Pasif ilan kararıyor ve ortada "Yayında Değil" etiketi çıkıyor. Dokununca `active:scale-95`.
+    - Yayındaki kare ilan sayfasına gidiyor. Pasif karenin herkese açık sayfası olmadığı için dokununca yönetim menüsü açılıyor; köşedeki "⋯" her durumda bu menüyü açıyor (durum değiştirme, satıldı onayı, video bekleme notu, akışta gör).
+  - **Avatar:** tarayıcıda ortadan kare kırpılıyor, 512 px WebP'ye (desteklenmiyorsa JPEG) sıkıştırılıyor, yuvarlak önizlemeyle onaylanıyor.
+    - `/api/profile/avatar` (POST/DELETE) dosyanın gerçek türünü ilk baytlarından denetliyor, en fazla 1 MB kabul ediyor ve kullanıcı başına saatte 20 istek sınırı var. Eski dosyalar siliniyor.
+    - Hesap silinince avatar da siliniyor.
+  - **Mesajlaşma:** ilan sayfasında ve akıştaki detay çekmecesinde "gözüyle'den Mesaj Gönder" var; WhatsApp'la eşit genişlikte, paylaş yalnızca simge.
+    - Etiketler satır genişliğine göre değişiyor: 320–414 px'te "Mesaj" / "WhatsApp", geniş ekranda tam ad (ölçüldü: 320, 375, 414, 768, 1280 px, kesilme yok).
+    - Buton kendi ilanında gizli; misafirde önce giriş penceresi açılıyor.
+    - `start_conversation` yalnızca yayındaki ilan için konuşma açıyor (kendi ilanına açılamıyor, engel varsa açılamıyor); mevcut konuşma varsa onu dönüyor.
+  - **Gelen kutusu (`/messages`):** avatar ve üstünde küçük ilan kapağı, son mesaj ("Sen: …"), zaman, okunmamış sayısı. Realtime ile yenileniyor.
+  - **Sohbet (`/messages/[id]`):** tam ekran; alt menü gizli.
+    - **Başlık:** avatar, ad, rol ve ilan özet kartı (yayındaysa ilana bağlantı).
+    - **Balonlar:** benimkiler sağda koyu mavi, onunkiler solda gri. Aynı kişinin 5 dakika içindeki mesajları gruplanıyor; gün ayraçları, saat damgası, tek tik (gönderildi) / mavi çift tik (okundu) / saat (gönderiliyor) var. Gönderilemeyen mesaj tekrar denenebiliyor.
+    - **Yazma:** iyimser gönderim, otomatik büyüyen yazma alanı (masaüstünde Enter gönderir, dokunmatikte yeni satır).
+    - **Mobil klavye:** kutu `visualViewport`'a oturuyor, klavye açılınca yazma alanı üstte kalıyor, yeni mesajda otomatik alta kayıyor.
+    - **Menü (⋯):** ilanı şikayet et (mevcut `reports` akışı), kullanıcıyı şikayet et (`user_reports`), engelle / engeli kaldır.
+  - **Rozet:** okunmamış sayısı alt menüdeki "Vitrinim"de ve üst çubuktaki profil fotoğrafında; 99'dan sonra "99+". Tek bir Realtime kanalıyla güncelleniyor (`lib/use-unread-count.ts`). Üst çubuktaki profil butonu artık Vitrinim'e gidiyor ve avatarı gösteriyor.
+  - **Güvenlik düzeltmesi:** "Public profiles are viewable by everyone" politikası yüzünden bütün satıcıların WhatsApp numaraları API'den herkese açıktı. Politika kaldırıldı.
+    - Sütun düzeyinde kısıtlama denenmedi, çünkü PostgREST upsert'ü (`ON CONFLICT … excluded.whatsapp_number`) canlıdaki ilan vermeyi bozardı; bunu testler yakaladı.
+    - Uzak veritabanında `profiles`'ı okuyan başka (invoker) fonksiyon olmadığı sorguyla doğrulandı.
+  - **Testler:** `lib/messaging-rls.test.ts` (25, PGlite: profil yetkileri ve canlı upsert, konuşma açma, iki taraf kuralı, sahtecilik, engel, hız sınırı, okundu, gelen kutusu, şikayet, Realtime yayını).
+    - Ayrıca `lib/messages.test.ts`, `lib/showcase.test.ts`, `lib/avatar.test.ts`, `lib/avatar-server.test.ts` ve bileşen testleri (`lib/ui-components.test.tsx`: kare, balon, yazma alanı, rozet).
+    - Testlerin yakaladığı iki gerçek hata: profil upsert'ü ve karışık zaman damgası biçimlerinde yanlış mesaj sırası.
+  - **Canlıda doğrulandı:** sayfalar `200`; avatar API'si oturumsuz `401`, 1,1 MB gövdede `413`; yeni kod pakette; uzak veritabanında RLS, yetkiler, bucket ve Realtime sorguyla kontrol edildi.
+  - **Görsel doğrulama:** giriş gerektiren ekranlar (ızgara, sohbet) geçici bir önizleme sayfasında sahte veriyle çizilip kontrol edildi (commit'lenmedi).
+
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`82b4fc7`** ("feat(sell): implement creatable combobox with fuzzy search for brand and model"). Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`15c9455`** ("feat(profile-chat): add showcase grid, avatar upload, and realtime listing dm"); production deploy'u `elan-5apv17wj4`. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: 12 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
+- Veritabanı kodla uyumlu: 13 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
 - **DNS** kayıt firmasında (`knuth` / `dijkstra.ihsdns.com`), Vercel nameserver'ları kullanılmıyor: kök alan A `216.198.79.1`, `www` CNAME `cname.vercel-dns.com`. Vercel'deki "Intended Nameservers ☓" uyarısı bu yüzden çıkıyor ve sorun değil.
 - **Yerel `nslookup`:** bu makinenin varsayılan DNS sunucusu yanıt vermiyor; sorgu `nslookup <ad> 1.1.1.1` ile yapılmalı.
@@ -134,7 +170,10 @@ _Son güncelleme: 26 Eylül 2026_
    - iPhone'dan seçilen fotoğraf JPEG olarak gitmeli.
    - Yayın durumu kartında video yüzde çubuğu ilerlemeli; başarı ekranında "İşleniyor" görünmeli.
    - Gerçek sürükle-bırak ve iOS/Android cihazlar Claude tarafından denenmedi.
-   - "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
+   - "Vitrinim"de videosu hazır olmayan arşivlenmiş ilan: yönetim menüsünde "Yayına al" gizli olmalı ve açıklama görünmeli.
+   - **Mesajlaşma (iki hesapla):** ilandan "Mesaj gönder" → sohbet açılmalı; karşı tarafta mesaj sayfa yenilenmeden gelmeli (Realtime), rozet artmalı, sohbet açılınca okundu (mavi çift tik) görünmeli. Engelleme ve şikayetler denenmeli. Canlıda şu an yayında ilan yok (biri satılmış, biri arşivde); deneme için bir ilan yayında olmalı.
+   - **Avatar:** telefondan fotoğraf seç → önizleme → kaydet; üst çubukta ve Vitrinim'de görünmeli. Görünen ad düzenlenebilmeli.
+   - **Mobil klavye:** iPhone Safari ve Android Chrome'da sohbette klavye açılınca yazma alanı klavyenin hemen üstünde kalmalı.
    - Listede olmayan marka/model ile ilan (ör. katalogdaki bir markaya yeni model). İlan açılmalı ve ilanda adıyla görünmeli. Bu, `resolve_listing_catalog`'un canlıdaki ilk gerçek çağrısı olacak; Claude giriş yapamadığı için yalnızca PGlite'ta denendi.
 3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
    - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
@@ -168,6 +207,9 @@ _Son güncelleme: 26 Eylül 2026_
   - Kalan küçük not: anonim istekler hâlâ IP'ye göre sayılıyor. CGNAT arkasındaki çok sayıda anonim bildiren aynı IP'nin dakikada 5 hakkını paylaşır. Trafik artarsa anonim sınır gözden geçirilmeli.
   - Gizlilik politikasına "kötüye kullanımı önlemek için IP adresinin anahtarlı özeti en fazla 24 saat saklanır" benzeri bir cümle eklenmesi düşünülebilir (hukuki inceleme maddesiyle birlikte).
 - Kullanıcıların eklediği marka/modeller için bir yönetim ekranı yok. Yalnızca veritabanında görülebiliyor (`is_user_created = true`). İleride moderasyon paneline "onayla / katalogdaki kayıtla birleştir" eklenebilir.
+- **Kullanıcı şikayetleri** (`user_reports`) moderasyon panelinde görünmüyor; şimdilik yalnızca veritabanında. Panel ilan şikayetlerini (`reports`) gösteriyor; kullanıcı şikayetleri için ayrı bir sekme eklenmeli (Google Play incelemesi için önemli).
+- **Mesaj bildirimleri:** uygulama kapalıyken bildirim yok (web push ya da e-posta). Rozet yalnızca site açıkken güncelleniyor.
+- **Vitrinim'de pasif ilanın önizlemesi:** yayında olmayan ilanın herkese açık sayfası yok (sunucu anonim okuyor). Satıcı ilanını önizleyemiyor; yalnızca yönetim menüsü açılıyor.
 - Yasal metinler şablon; hukuki inceleme gerekiyor.
 - Google onay ekranında `supabase.co` alan adı görünebilir; istenirse Supabase'e özel alan adı bağlanabilir. Bağlanırsa `fn_is_vehicle_photo_url`'deki sabit proje adresi de yeni bir migration'la güncellenmeli; güncellenmezse yeni fotoğraf eklemeleri reddedilir.
 
@@ -179,6 +221,7 @@ _Son güncelleme: 26 Eylül 2026_
 - **Gizli değerler** asla sohbete yazdırılmaz; yalnızca stdin ile aktarılır, adları ya da maskeli başları gösterilir.
 - **Tarayıcı paneli** ekranda çizilmediğinde ekran görüntüsü ve koordinatlı tıklama hatalı oluyor; ölçüm ve tıklama JavaScript ile yapılmalı.
 - **Kontrol komutları:** `npx vitest run`, `npx tsc --noEmit -p .`, `npx eslint`, `npm run build`.
+- **Giriş gerektiren ekranların görsel kontrolü:** Claude giriş yapamadığı için `app/dev-preview/page.tsx` gibi geçici bir sayfada bileşenler sahte veriyle çizilir, derlenip bakılır, **commit'ten önce silinir**. Silindikten sonra ilk `tsc`, bayat `.next/types/validator.ts` yüzünden hata verebilir; `npm run build` dosyayı yeniden üretir.
 - **Claude worktree'leri** repo içinde, `.claude/worktrees/` altında durur.
   - Biri varken ana dizinde çalışan `vitest` ve `eslint` onun dosyalarını da tarar: test sayısı iki katına çıkar, worktree'deki `.next` yüzünden eslint hata verir. Kontroller worktree kaldırıldıktan sonra ya da worktree'nin içinde çalıştırılmalı.
   - Worktree'de `node_modules` ve Supabase bağlantısı olmaz: `npm install` gerekir, `supabase/.temp/` ana dizinden kopyalanabilir (gitignore'da). `tsc`'den önce `npx next typegen` çalıştırılmalı.
