@@ -66,16 +66,17 @@ export function toMyListing(row: MyListingRow): MyListing {
   };
 }
 
-export async function fetchMyListings(sellerId: string): Promise<MyListing[]> {
-  const { data, error } = await supabase
-    .from("vehicles")
-    .select(
-      `id, status, year, price, currency, mileage_km, city, created_at, views_count,
+/** Vitrin ızgarasının sorgusu (Vitrinim ve herkese açık profil aynı kareyi çizer) */
+export const LISTING_SELECT = `id, status, year, price, currency, mileage_km, city, created_at, views_count,
        brand:brands(name),
        model:models(name),
        images:vehicle_images(image_url, is_primary, display_order),
-       videos(status, hls_url, thumbnail_url)`,
-    )
+       videos(status, hls_url, thumbnail_url)`;
+
+export async function fetchMyListings(sellerId: string): Promise<MyListing[]> {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select(LISTING_SELECT)
     .eq("seller_id", sellerId)
     .order("created_at", { ascending: false });
 

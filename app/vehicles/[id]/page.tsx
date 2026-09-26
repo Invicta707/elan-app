@@ -5,9 +5,11 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import FavoriteButton from "../../../components/FavoriteButton";
 import ReportButton from "../../../components/ReportButton";
+import SellerCard from "../../../components/social/SellerCard";
 import BackButton from "../../../components/vehicle/BackButton";
 import SpecsTable, { formatVehiclePrice } from "../../../components/vehicle/SpecsTable";
 import { VehiclePageActions, VehiclePageGallery } from "../../../components/vehicle/VehiclePageClient";
+import { fetchSellerProfiles } from "../../../lib/follows";
 import { vehiclePath } from "../../../lib/share";
 import {
   buildVehicleDescription,
@@ -66,6 +68,10 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
   if (!vehicle) notFound();
 
   const title = `${vehicle.brandName} ${vehicle.modelName}`;
+  // Satıcı kartı: okunamazsa sayfa kartsız çizilir
+  const seller = vehicle.sellerId
+    ? ((await fetchSellerProfiles([vehicle.sellerId]).catch(() => []))[0] ?? null)
+    : null;
 
   return (
     <main
@@ -110,6 +116,8 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
             Videoyu akışta izle
           </Link>
         )}
+
+        {seller && <SellerCard seller={seller} />}
 
         <div className="mt-6">
           <SpecsTable specs={vehicle} headingId="vehicle-specs" />

@@ -22,12 +22,18 @@ function browserShareEnvironment(): ShareEnvironment {
 
 export default function ShareButton({
   vehicleId,
+  path,
+  label = "İlanı paylaş",
   title,
   text,
   variant = "pill",
   className = "",
 }: {
-  vehicleId: string;
+  vehicleId?: string;
+  /** İlan dışında bir sayfa paylaşılıyorsa (ör. profil: /@kullanici_adi) */
+  path?: string;
+  /** Düğmenin erişilebilir adı */
+  label?: string;
   title: string;
   text: string;
   /**
@@ -49,7 +55,7 @@ export default function ShareButton({
   }, [message]);
 
   async function handleShare() {
-    const url = new URL(vehiclePath(vehicleId), window.location.origin).toString();
+    const url = new URL(path ?? (vehicleId ? vehiclePath(vehicleId) : "/"), window.location.origin).toString();
     const outcome = await shareListing({ url, title, text }, browserShareEnvironment());
     const shown = shareMessage(outcome);
     setMessage(
@@ -65,7 +71,7 @@ export default function ShareButton({
         <button
           type="button"
           onClick={handleShare}
-          aria-label="İlanı paylaş"
+          aria-label={label}
           className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
@@ -79,7 +85,7 @@ export default function ShareButton({
         <button
           type="button"
           onClick={handleShare}
-          aria-label="İlanı paylaş"
+          aria-label={label}
           className="flex h-12 w-12 items-center justify-center rounded-full border border-[#C9CED6] bg-white text-[#15181C] transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
         >
           <ShareIcon className="h-5 w-5" />

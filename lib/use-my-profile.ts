@@ -2,14 +2,15 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useSupabaseSession } from "./auth";
-import { fetchMyProfile, type MyProfile } from "./profile";
+import { EMPTY_PROFILE, fetchMyProfile, type MyProfile } from "./profile";
 
-// Oturumdaki kullanıcının profili (görünen ad, avatar): üst çubuk ve Vitrinim
-// aynı veriyi paylaşır; avatar değişince her yer anında güncellenir.
+// Oturumdaki kullanıcının profili (görünen ad, avatar, kullanıcı adı, takip
+// sayıları): üst çubuk, Vitrinim ve kullanıcı adı penceresi aynı veriyi
+// paylaşır; bir değişiklik her yerde anında görünür.
 
-type State = { userId: string | null; profile: MyProfile | null; loading: boolean };
+type State = { userId: string | null; profile: MyProfile | null; loading: boolean; failed: boolean };
 
-let state: State = { userId: null, profile: null, loading: false };
+let state: State = { userId: null, profile: null, loading: false, failed: false };
 const listeners = new Set<() => void>();
 
 function set(next: Partial<State>) {
@@ -18,19 +19,26 @@ function set(next: Partial<State>) {
 }
 
 async function load(userId: string) {
-  set({ userId, loading: true, profile: state.userId === userId ? state.profile : null });
+  set({ userId, loading: true, failed: false, profile: state.userId === userId ? state.profile : null });
   try {
     const profile = await fetchMyProfile(userId);
     if (state.userId === userId) set({ profile, loading: false });
   } catch (error) {
     console.error("Profil yüklenemedi:", error);
-    if (state.userId === userId) set({ profile: { displayName: null, avatarUrl: null }, loading: false });
+    // Profil okunamadıysa boş profil gösterilir ama "kullanıcı adı yok" sayılmaz (failed)
+    if (state.userId === userId) set({ profile: { ...EMPTY_PROFILE }, loading: false, failed: true });
   }
 }
 
-/** Kaydedilen değişikliği (ad ya da avatar) her yere yayar */
+/** Kaydedilen değişikliği (ad, avatar, kullanıcı adı) her yere yayar */
 export function updateMyProfile(change: Partial<MyProfile>) {
-  set({ profile: { displayName: null, avatarUrl: null, ...state.profile, ...change } });
+  set({ profile: { ...EMPTY_PROFILE, ...state.profile, ...change } });
+}
+
+/** Takip et / bırak sonrası "Takip" sayısı (iyimser) */
+export function adjustMyFollowingCount(delta: number) {
+  if (!state.profile) return;
+  updateMyProfile({ followingCount: Math.max(0, state.profile.followingCount + delta) });
 }
 
 function subscribe(listener: () => void) {
@@ -38,17 +46,19 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-const EMPTY: State = { userId: null, profile: null, loading: false };
+const EMPTY: State = { userId: null, profile: null, loading: false, failed: false };
 
-export function useMyProfile(): { profile: MyProfile | null; loading: boolean } {
+export function useMyProfile(): { profile: MyProfile | null; loading: boolean; failed: boolean } {
   const { session } = useSupabaseSession();
   const userId = session?.user.id ?? null;
 
   useEffect(() => {
     if (userId && state.userId !== userId) void load(userId);
-    if (!userId && state.userId) set({ userId: null, profile: null, loading: false });
+    if (!userId && state.userId) set({ userId: null, profile: null, loading: false, failed: false });
   }, [userId]);
 
   const snapshot = useSyncExternalStore(subscribe, () => state, () => EMPTY);
-  return snapshot.userId === userId ? { profile: snapshot.profile, loading: snapshot.loading } : { profile: null, loading: Boolean(userId) };
+  return snapshot.userId === userId
+    ? { profile: snapshot.profile, loading: snapshot.loading, failed: snapshot.failed }
+    : { profile: null, loading: Boolean(userId), failed: false };
 }

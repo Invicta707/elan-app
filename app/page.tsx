@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import FeedHeader from "../components/FeedHeader";
-import VideoFeed from "../components/VideoFeed";
+import HomeFeed from "../components/HomeFeed";
 import { isUuid } from "../lib/feed";
 import { bodyFont, displayFont } from "./fonts";
 
@@ -23,9 +22,11 @@ type HomePageProps = {
 };
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  // "Videoyu akışta izle" bağlantısından gelindiyse (/?v=<ilan-id>) akış o ilanla başlar
-  const { v } = await searchParams;
+  // "Videoyu akışta izle" bağlantısından gelindiyse (/?v=<ilan-id>) akış o ilanla başlar.
+  // /?feed=following "Takip Edilenler" sekmesiyle açılır (ör. girişten dönüşte).
+  const { v, feed } = await searchParams;
   const initialVehicleId = isUuid(v) ? v : null;
+  const initialTab = feed === "following" && !initialVehicleId ? "following" : "explore";
 
   return (
     <main
@@ -34,8 +35,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       className={`${displayFont.variable} ${bodyFont.variable} relative h-[calc(100dvh-var(--bottom-nav-height))] w-full overflow-hidden bg-black text-white [font-family:var(--font-body)]`}
     >
       {/* key: başka bir ilanla gelindiğinde akış sıfırdan kurulur */}
-      <VideoFeed key={initialVehicleId ?? "feed"} initialVehicleId={initialVehicleId} />
-      <FeedHeader />
+      <HomeFeed key={initialVehicleId ?? "feed"} initialVehicleId={initialVehicleId} initialTab={initialTab} />
     </main>
   );
 }

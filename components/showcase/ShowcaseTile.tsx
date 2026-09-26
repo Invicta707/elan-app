@@ -16,7 +16,8 @@ export default function ShowcaseTile({
   priority = false,
 }: {
   listing: MyListing;
-  onManage: (listing: MyListing) => void;
+  /** Yönetim menüsü (Vitrinim). Verilmezse (herkese açık profil) köşe menüsü çizilmez. */
+  onManage?: (listing: MyListing) => void;
   priority?: boolean;
 }) {
   const live = isLive(listing.status);
@@ -71,7 +72,7 @@ export default function ShowcaseTile({
 
   return (
     <div className="relative">
-      {live ? (
+      {live || !onManage ? (
         <Link href={`/vehicles/${listing.id}`} aria-label={label} className={surface}>
           {body}
         </Link>
@@ -80,14 +81,16 @@ export default function ShowcaseTile({
           {body}
         </button>
       )}
-      <button
-        type="button"
-        onClick={() => onManage(listing)}
-        aria-label={`${listing.title} ilanını yönet`}
-        className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-md transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-      >
-        <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
-      </button>
+      {onManage && (
+        <button
+          type="button"
+          onClick={() => onManage(listing)}
+          aria-label={`${listing.title} ilanını yönet`}
+          className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-md transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

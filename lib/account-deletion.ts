@@ -6,7 +6,7 @@ import { PHOTO_BUCKET } from "./listing";
 //
 // Veritabanında her şey auth kaydına bağlı ve CASCADE ile silinir:
 //   auth.users → public.users → vehicles → videos, vehicle_images, interactions, reports
-//   auth.users → profiles;  public.users → interactions (favoriler dahil)
+//   auth.users → profiles → follows (iki yönde; sayaçlar tetikleyiciyle düşer);  public.users → interactions (favoriler dahil)
 //   auth.users → conversations → messages; user_blocks; user_reports (bildirilen olarak)
 //   Kullanıcının başkalarının ilanları için yaptığı bildirimler kalır, kimliği silinir (SET NULL).
 // Veritabanı dışındaki dosyalar (Storage'daki ilan fotoğrafları ve profil

@@ -21,11 +21,14 @@ export default function BottomSheet({
   onClose,
   actions,
   children,
+  closeLabel = "Vazgeç",
 }: {
   title: string;
   onClose: () => void;
   actions?: SheetAction[];
   children?: ReactNode;
+  /** Alttaki kapatma düğmesinin metni (ör. "Daha sonra") */
+  closeLabel?: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -85,7 +88,7 @@ export default function BottomSheet({
             onClick={onClose}
             className="h-12 w-full rounded-2xl bg-[#F2F3F5] text-[16px] font-semibold text-[#15181C] transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
           >
-            Vazgeç
+            {closeLabel}
           </button>
         </div>
       </div>

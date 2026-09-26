@@ -6,6 +6,7 @@ import FavoriteButton from "./FavoriteButton";
 import ReportButton from "./ReportButton";
 import ShareButton from "./vehicle/ShareButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
+import SellerRow from "./social/SellerRow";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
 import { buildVehicleShareText } from "../lib/vehicle-page";
@@ -287,6 +288,8 @@ export default function VideoCard({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.5)_55%,rgba(0,0,0,0)_100%)] px-4 pt-28 pb-5 md:pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="flex items-end gap-3">
           <div className="min-w-0 flex-1">
+            <SellerRow sellerId={vehicle.sellerId} />
+
             <PricePlate
               price={vehicle.price}
               symbol={currency.symbol}

@@ -1,12 +1,28 @@
 import { supabase } from "./supabase";
+import { localUsernameStatus, normalizeUsername, type UsernameStatus } from "./username";
 
-// Profil: görünen ad ve avatar. UI'dan bağımsız.
+// Profil: görünen ad, avatar, kullanıcı adı ve takip sayıları. UI'dan bağımsız.
 //
 // profiles satırını yalnızca sahibi okur/yazar (RLS). avatar_url'i yalnızca
-// sunucu yazar (app/api/profile/avatar). Başkalarının adı ve avatarı mesajlaşma
-// RPC'leriyle gelir (bkz. *_profiles_and_messaging.sql).
+// sunucu yazar (app/api/profile/avatar); kullanıcı adını yalnızca set_username,
+// sayaçları yalnızca follows tetikleyicisi yazar. Başkalarının profili
+// get_public_profile / get_public_profiles ve mesajlaşma RPC'leriyle gelir.
 
-export type MyProfile = { displayName: string | null; avatarUrl: string | null };
+export type MyProfile = {
+  displayName: string | null;
+  avatarUrl: string | null;
+  username: string | null;
+  followersCount: number;
+  followingCount: number;
+};
+
+export const EMPTY_PROFILE: MyProfile = {
+  displayName: null,
+  avatarUrl: null,
+  username: null,
+  followersCount: 0,
+  followingCount: 0,
+};
 
 export const DISPLAY_NAME_MIN = 2;
 export const DISPLAY_NAME_MAX = 30;
@@ -40,11 +56,40 @@ export function initialOf(name: string | null | undefined, fallback = "?"): stri
 export async function fetchMyProfile(userId: string): Promise<MyProfile> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("display_name, avatar_url")
+    .select("display_name, avatar_url, username, followers_count, following_count")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
-  return { displayName: data?.display_name ?? null, avatarUrl: data?.avatar_url ?? null };
+  return {
+    displayName: data?.display_name ?? null,
+    avatarUrl: data?.avatar_url ?? null,
+    username: data?.username ?? null,
+    followersCount: Number(data?.followers_count ?? 0),
+    followingCount: Number(data?.following_count ?? 0),
+  };
+}
+
+const USERNAME_STATUSES: readonly UsernameStatus[] = ["invalid", "reserved", "taken", "available", "current"];
+
+/** Kullanıcı adı müsait mi: biçim ve rezerve yerelde, alınmış olup olmadığı sunucuda */
+export async function checkUsernameAvailability(name: string): Promise<UsernameStatus> {
+  const clean = normalizeUsername(name);
+  const local = localUsernameStatus(clean);
+  if (local) return local;
+  const { data, error } = await supabase.rpc("check_username", { p_username: clean });
+  if (error) throw error;
+  return USERNAME_STATUSES.includes(data as UsernameStatus) ? (data as UsernameStatus) : "invalid";
+}
+
+/** Kullanıcı adını kaydeder; kural ihlalinde veritabanının Türkçe mesajıyla hata fırlatır */
+export async function saveUsername(name: string): Promise<string> {
+  const { data, error } = await supabase.rpc("set_username", { p_username: normalizeUsername(name) });
+  if (error) {
+    // 23514 (biçim, rezerve, 7 gün) ve 23505 (alınmış): mesaj veritabanından
+    if (error.code === "23514" || error.code === "23505") throw new Error(error.message);
+    throw new Error("Kullanıcı adı kaydedilemedi. Biraz sonra tekrar dene.");
+  }
+  return String(data);
 }
 
 export async function saveDisplayName(userId: string, name: string): Promise<string> {

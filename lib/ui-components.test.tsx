@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 //
-// Bileşen testleri: Vitrinim karesi, mesaj balonu, yazma alanı ve rozet.
+// Bileşen testleri: Vitrinim karesi, mesaj balonu, yazma alanı, rozet, akış
+// sekmeleri, takip düğmesi, kullanıcı adı alanı ve profil sayıları.
 // next/image ve next/link sade HTML öğeleriyle taklit edilir (uzak görsel
 // ayarı ve yönlendirici gerekmesin).
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ImgHTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,12 +27,21 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("./supabase", () => ({ supabase: {} }));
+// next/font yalnızca Next derlemesinde çalışır (pencere ve düğmeler app/fonts'u içe aktarır)
+vi.mock("../app/fonts", () => ({ displayFont: { variable: "" }, bodyFont: { variable: "" } }));
 
 import { Composer, MessageBubble } from "../components/messages/ChatParts";
+import UsernameField, { describeUsernameCheck } from "../components/profile/UsernameField";
+import { canPromptOn } from "../components/profile/UsernameOnboarding";
+import FeedTabs from "../components/social/FeedTabs";
+import { FollowButtonView } from "../components/social/FollowButton";
+import FollowingEmpty from "../components/social/FollowingEmpty";
+import { ProfileStats } from "../components/social/ProfileHeader";
 import ShowcaseTile from "../components/showcase/ShowcaseTile";
 import UnreadBadge from "../components/ui/UnreadBadge";
 import type { MyListing } from "./my-listings";
 import type { ChatMessage } from "./messages";
+import { USERNAME_CHECK_DELAY_MS, useUsernameCheck } from "./use-username-check";
 
 afterEach(cleanup);
 
@@ -158,5 +168,184 @@ describe("UnreadBadge", () => {
     expect(container.textContent).toContain("3 okunmamış mesaj");
     rerender(<UnreadBadge count={250} />);
     expect(container.textContent).toContain("99+");
+  });
+});
+
+describe("ShowcaseTile (herkese açık profil)", () => {
+  it("yönetim menüsü verilmezse köşe menüsü yok, kare ilana gider", () => {
+    render(<ShowcaseTile listing={listing} />);
+    expect(screen.getByRole("link", { name: /BMW 3 Serisi 2020/ }).getAttribute("href")).toBe("/vehicles/veh-1");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+const PANELS = { following: "p-following", explore: "p-explore" };
+
+describe("FeedTabs", () => {
+  it("iki sekme: seçili olan aria-selected, paneline bağlı; tıklayınca değişir", () => {
+    const onChange = vi.fn();
+    render(<FeedTabs active="explore" onChange={onChange} panelIds={PANELS} />);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Takip Edilenler", "Keşfet"]);
+    const explore = screen.getByRole("tab", { name: "Keşfet" });
+    expect(explore.getAttribute("aria-selected")).toBe("true");
+    expect(explore.getAttribute("aria-controls")).toBe("p-explore");
+    expect(explore.tabIndex).toBe(0);
+    expect(screen.getByRole("tab", { name: "Takip Edilenler" }).tabIndex).toBe(-1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Takip Edilenler" }));
+    expect(onChange).toHaveBeenCalledWith("following");
+  });
+
+  it("ok tuşlarıyla gezilir", () => {
+    const onChange = vi.fn();
+    render(<FeedTabs active="explore" onChange={onChange} panelIds={PANELS} />);
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
+    expect(onChange).toHaveBeenLastCalledWith("following");
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "Home" });
+    expect(onChange).toHaveBeenLastCalledWith("following");
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "End" });
+    expect(onChange).toHaveBeenLastCalledWith("explore");
+  });
+});
+
+describe("FollowingEmpty", () => {
+  it("kimseyi takip etmiyorsa istenen metin ve Keşfet'e dönüş", () => {
+    const onExplore = vi.fn();
+    render(<FollowingEmpty kind="none" onExplore={onExplore} />);
+    expect(screen.getByText("Henüz kimseyi takip etmiyorsun.")).toBeTruthy();
+    expect(screen.getByText("İlgini çeken satıcıları vitrinlerinden takip et!")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Giriş yap" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Keşfet'e dön/ }));
+    expect(onExplore).toHaveBeenCalledTimes(1);
+  });
+
+  it("misafirde giriş düğmesi", () => {
+    const onSignIn = vi.fn();
+    render(<FollowingEmpty kind="guest" onExplore={vi.fn()} onSignIn={onSignIn} />);
+    fireEvent.click(screen.getByRole("button", { name: "Giriş yap" }));
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("takip ettiklerinin videosu yoksa ayrı metin", () => {
+    render(<FollowingEmpty kind="quiet" onExplore={vi.fn()} />);
+    expect(screen.getByText(/yayında videolu ilanı yok/)).toBeTruthy();
+  });
+});
+
+describe("FollowButtonView", () => {
+  it("profilde Takip Et / Takibi Bırak; durum aria-pressed ile", () => {
+    const onClick = vi.fn();
+    const { rerender } = render(<FollowButtonView variant="profile" following={false} name="Kamil" onClick={onClick} />);
+    const button = screen.getByRole("button", { name: "Kamil adlı kullanıcıyı takip et" });
+    expect(button.textContent).toBe("Takip Et");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    rerender(<FollowButtonView variant="profile" following name="Kamil" onClick={onClick} />);
+    const following = screen.getByRole("button", { name: "Kamil adlı kullanıcıyı takibi bırak" });
+    expect(following.textContent).toBe("Takibi Bırak");
+    expect(following.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("akışta takip edilen kişide düğme yok, yalnızca işaret (yanlışlıkla bırakılmaz)", () => {
+    const { rerender } = render(<FollowButtonView variant="overlay" following={false} onClick={vi.fn()} />);
+    expect(screen.getByRole("button").textContent).toContain("Takip et");
+    rerender(<FollowButtonView variant="overlay" following onClick={vi.fn()} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Takiptesin")).toBeTruthy();
+  });
+});
+
+describe("UsernameField", () => {
+  it("yazılanı kurala göre süzer (Türkçe harf, boşluk, büyük harf)", () => {
+    const onChange = vi.fn();
+    render(<UsernameField id="u" value="" onChange={onChange} check="idle" />);
+    fireEvent.change(screen.getByLabelText("Kullanıcı adı"), { target: { value: "@Şahin Bey" } });
+    expect(onChange).toHaveBeenCalledWith("sahin_bey");
+  });
+
+  it("müsait: yeşil tik; alınmış: kırmızı çarpı ve aria-invalid", () => {
+    const { rerender, container } = render(<UsernameField id="u" value="kamil" onChange={vi.fn()} check="available" />);
+    expect(screen.getByText("@kamil müsait.")).toBeTruthy();
+    expect(container.querySelector(".lucide-circle-check")).toBeTruthy();
+    expect(screen.getByLabelText("Kullanıcı adı").getAttribute("aria-invalid")).toBeNull();
+
+    rerender(<UsernameField id="u" value="kamil" onChange={vi.fn()} check="taken" />);
+    expect(screen.getByText("Bu kullanıcı adı alınmış.")).toBeTruthy();
+    expect(container.querySelector(".lucide-circle-x")).toBeTruthy();
+    expect(screen.getByLabelText("Kullanıcı adı").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("kaydetme hatası durum metninin yerine geçer", () => {
+    render(
+      <UsernameField
+        id="u"
+        value="kamil"
+        onChange={vi.fn()}
+        check="available"
+        error="Kullanıcı adını 7 günde bir değiştirebilirsin."
+      />,
+    );
+    expect(screen.getByText("Kullanıcı adını 7 günde bir değiştirebilirsin.")).toBeTruthy();
+  });
+
+  it("durum metinleri", () => {
+    expect(describeUsernameCheck("ka", "invalid")).toEqual({ tone: "neutral", text: "En az 3 karakter yaz." });
+    expect(describeUsernameCheck("sell", "reserved").tone).toBe("bad");
+    expect(describeUsernameCheck("kamil", "current").tone).toBe("ok");
+    expect(describeUsernameCheck("kamil", "checking").text).toBe("Kontrol ediliyor…");
+  });
+});
+
+describe("useUsernameCheck", () => {
+  it("biçim ve rezerve anında; alınmışlık yazma durunca sunucudan; eski sonuç yenisini ezmez", async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn(async (name: string) => (name === "kamil" ? ("taken" as const) : ("available" as const)));
+      const { result, rerender } = renderHook(({ name }) => useUsernameCheck(name, check), { initialProps: { name: "" } });
+      expect(result.current).toBe("idle");
+
+      rerender({ name: "ka" });
+      expect(result.current).toBe("invalid");
+      rerender({ name: "sell" });
+      expect(result.current).toBe("reserved");
+      expect(check).not.toHaveBeenCalled();
+
+      rerender({ name: "kamil" });
+      expect(result.current).toBe("checking");
+      rerender({ name: "kamil_c" });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(USERNAME_CHECK_DELAY_MS);
+      });
+      // Yalnızca son yazılan soruldu
+      expect(check.mock.calls).toEqual([["kamil_c"]]);
+      expect(result.current).toBe("available");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ProfileStats", () => {
+  it("İlan | Takipçi | Takip Edilen, kısa sayı biçimiyle", () => {
+    const { container } = render(<ProfileStats listings={3} followers={1250} following={0} />);
+    const labels = [...container.querySelectorAll("dt")].map((dt) => dt.textContent);
+    expect(labels).toEqual(["İlan", "Takipçi", "Takip Edilen"]);
+    // Intl kısa biçimi bölünmez boşluk kullanır
+    const values = [...container.querySelectorAll("dd")].map((dd) => dd.textContent?.replace(/\s/g, " "));
+    expect(values).toEqual(["3", "1,3 B", "0"]);
+  });
+});
+
+describe("canPromptOn (kullanıcı adı penceresi)", () => {
+  it("ilan verme, sohbet, giriş dönüşü ve yönetim sayfalarında açılmaz", () => {
+    for (const path of ["/", "/search", "/my-listings", "/messages", "/@kamil", "/vehicles/abc"]) {
+      expect(canPromptOn(path)).toBe(true);
+    }
+    for (const path of ["/sell", "/auth/callback", "/messages/123", "/admin/reports", "/privacy", "/terms", null]) {
+      expect(canPromptOn(path)).toBe(false);
+    }
   });
 });

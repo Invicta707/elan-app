@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BottomNav from "../components/BottomNav";
+import UsernameOnboarding from "../components/profile/UsernameOnboarding";
 import { resolveSiteUrl } from "../lib/site-url";
 
 const geistSans = Geist({
@@ -48,6 +49,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {children}
         <BottomNav />
+        {/* Giriş yapmış, kullanıcı adı olmayan kullanıcıya bir kez sorulur */}
+        <UsernameOnboarding />
       </body>
     </html>
   );

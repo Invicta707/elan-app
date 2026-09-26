@@ -5,19 +5,21 @@ import HeaderProfileButton from "./HeaderProfileButton";
 import Logo from "./Logo";
 
 type FeedHeaderProps = {
-  /** Hangi sekmenin etkin olduğu; "sell", "favorites" ve "my-listings" hiçbir metin sekmesini etkin göstermez */
-  activeTab?: "feed" | "search" | "sell" | "favorites" | "my-listings";
+  /** Hangi sekmenin etkin olduğu; "sell", "favorites", "my-listings" ve "profile" hiçbir metin sekmesini etkin göstermez */
+  activeTab?: "feed" | "search" | "sell" | "favorites" | "my-listings" | "profile";
   /**
    * overlay: dikey videonun üstünde, yarı saydam (ana sayfa)
    * solid: açık zeminli sayfalarda normal akışta (arama sayfası)
    */
   tone?: "overlay" | "solid";
+  /** Başlığın altında ikinci satır (ana sayfada "Takip Edilenler / Keşfet" sekmeleri) */
+  children?: ReactNode;
 };
 
 // Kancasız (hook'suz) bir bileşen: hem sunucu hem istemci bileşenlerinin içinde
 // kullanılabilir. Oturuma bakan parçalar (profil, "+ İlan Ver") kendi istemci
 // bileşenlerindedir.
-export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: FeedHeaderProps) {
+export default function FeedHeader({ activeTab = "feed", tone = "overlay", children }: FeedHeaderProps) {
   const overlay = tone === "overlay";
 
   return (
@@ -94,6 +96,12 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
           <HeaderProfileButton overlay={overlay} />
         </div>
       </div>
+
+      {children && (
+        <div className={`mx-auto flex justify-center px-3 ${overlay ? "max-w-[calc(100dvh*9/16)]" : "max-w-5xl"}`}>
+          {children}
+        </div>
+      )}
     </header>
   );
 }

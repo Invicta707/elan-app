@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard, MessageCircle, Pencil, Settings } from "lucide-react";
+import { ArrowUpRight, AtSign, Clapperboard, MessageCircle, Pencil, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AuthModal from "../AuthModal";
@@ -12,8 +12,10 @@ import { suggestedDisplayName } from "../../lib/profile";
 import { formatCount, showcaseStats } from "../../lib/showcase";
 import { useMyProfile } from "../../lib/use-my-profile";
 import { useUnreadCount } from "../../lib/use-unread-count";
+import { profilePath, suggestUsername } from "../../lib/username";
 import AvatarPicker from "../profile/AvatarPicker";
 import EditNameSheet from "../profile/EditNameSheet";
+import UsernameSheet from "../profile/UsernameSheet";
 import UnreadBadge from "../ui/UnreadBadge";
 import ListingManageSheet from "./ListingManageSheet";
 import ShowcaseTile from "./ShowcaseTile";
@@ -31,7 +33,12 @@ export default function ShowcaseView() {
         {isLoading ? (
           <ProfileSkeleton />
         ) : session ? (
-          <Showcase key={session.user.id} userId={session.user.id} metadata={session.user.user_metadata} />
+          <Showcase
+            key={session.user.id}
+            userId={session.user.id}
+            email={session.user.email ?? null}
+            metadata={session.user.user_metadata}
+          />
         ) : (
           <div className="mt-16 flex flex-col items-center gap-4 text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAEFF7] text-[#003399]">
@@ -59,13 +66,22 @@ export default function ShowcaseView() {
 
 type LoadState = { status: "loading" } | { status: "error" } | { status: "ready"; listings: MyListing[] };
 
-function Showcase({ userId, metadata }: { userId: string; metadata: Record<string, unknown> | undefined }) {
+function Showcase({
+  userId,
+  email,
+  metadata,
+}: {
+  userId: string;
+  email: string | null;
+  metadata: Record<string, unknown> | undefined;
+}) {
   const { profile } = useMyProfile();
   const unread = useUnreadCount();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
   const [managing, setManaging] = useState<MyListing | null>(null);
   const [editingName, setEditingName] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -89,6 +105,7 @@ function Showcase({ userId, metadata }: { userId: string; metadata: Record<strin
   }
 
   const name = profile?.displayName ?? null;
+  const username = profile?.username ?? null;
   const listings = load.status === "ready" ? load.listings : [];
   const stats = showcaseStats(listings);
 
@@ -117,7 +134,7 @@ function Showcase({ userId, metadata }: { userId: string; metadata: Record<strin
 
       <section aria-label="Profil" className="mt-3 flex items-center gap-5 px-1">
         <AvatarPicker avatarUrl={profile?.avatarUrl ?? null} name={name} />
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col items-start">
           <button
             type="button"
             onClick={() => setEditingName(true)}
@@ -129,20 +146,54 @@ function Showcase({ userId, metadata }: { userId: string; metadata: Record<strin
             <Pencil aria-hidden="true" className="h-4 w-4 shrink-0 text-[#8A9099] group-hover:text-[#15181C]" />
             <span className="sr-only">Görünen adı düzenle</span>
           </button>
-          <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-            {[
-              ["İlan", stats.total],
-              ["Yayında", stats.live],
-              ["İzlenme", stats.views],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl bg-white px-1 py-2 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
-                <dd className="text-[17px] font-bold tabular-nums leading-none">{formatCount(Number(value))}</dd>
-                <dt className="mt-1 text-[12px] font-medium text-[#5B616B]">{label}</dt>
-              </div>
-            ))}
-          </dl>
+
+          {username ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditingUsername(true)}
+                className="group mt-0.5 flex max-w-full items-center gap-1 rounded-lg text-left text-[15px] font-medium text-[#5B616B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+              >
+                <span className="truncate">@{username}</span>
+                <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[#8A9099] group-hover:text-[#15181C]" />
+                <span className="sr-only">Kullanıcı adını değiştir</span>
+              </button>
+              <Link
+                href={profilePath(username)}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-[#003399] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+              >
+                Herkese açık vitrinim
+                <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+            </>
+          ) : (
+            profile && (
+              <button
+                type="button"
+                onClick={() => setEditingUsername(true)}
+                className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#EAEFF7] px-3.5 text-[13.5px] font-semibold text-[#003399] transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+              >
+                <AtSign aria-hidden="true" className="h-4 w-4" />
+                Kullanıcı adı belirle
+              </button>
+            )
+          )}
         </div>
       </section>
+
+      <dl className="mt-4 grid grid-cols-4 gap-1.5 px-1 text-center sm:gap-2">
+        {[
+          ["İlan", stats.total],
+          ["Takipçi", profile?.followersCount ?? 0],
+          ["Takip", profile?.followingCount ?? 0],
+          ["İzlenme", stats.views],
+        ].map(([label, value]) => (
+          <div key={label} className="flex flex-col-reverse rounded-2xl bg-white px-1 py-2 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
+            <dt className="mt-1 text-[12px] font-medium text-[#5B616B]">{label}</dt>
+            <dd className="text-[17px] font-bold tabular-nums leading-none">{formatCount(Number(value))}</dd>
+          </div>
+        ))}
+      </dl>
 
       <div className="mt-4 grid grid-cols-2 gap-2 px-1">
         <Link
@@ -163,6 +214,7 @@ function Showcase({ userId, metadata }: { userId: string; metadata: Record<strin
       <h2 className="mt-6 mb-2 flex items-center gap-2 px-1 text-[14px] font-semibold text-[#5B616B]">
         <Clapperboard aria-hidden="true" className="h-4 w-4" />
         İlanlar
+        {stats.total > 0 && <span className="font-medium text-[#8A9099]">· {stats.live} yayında</span>}
       </h2>
 
       {load.status === "loading" ? (
@@ -202,6 +254,13 @@ function Showcase({ userId, metadata }: { userId: string; metadata: Record<strin
           listing={managing}
           onClose={() => setManaging(null)}
           onStatusChanged={(status) => updateStatus(managing.id, status)}
+        />
+      )}
+      {editingUsername && (
+        <UsernameSheet
+          mode={username ? "edit" : "onboarding"}
+          initialValue={username ?? suggestUsername(name ?? suggestedDisplayName(metadata), email)}
+          onClose={() => setEditingUsername(false)}
         />
       )}
       {editingName && (

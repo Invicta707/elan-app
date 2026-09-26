@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      // Herkese açık profil: /@kullanici_adi → app/u/[username]. app/ altında "@"
+      // ile başlayan klasör paralel rota yuvası sayıldığı için rewrite gerekiyor.
+      { source: "/@:username", destination: "/u/:username" },
+    ];
+  },
 };
 
 export default nextConfig;

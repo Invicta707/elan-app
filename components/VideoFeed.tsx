@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import VideoCard from "./VideoCard";
-import { fetchFeedPage, fetchFeedVehicle, type FeedCursor, type FeedVehicle } from "../lib/feed";
+import { useSupabaseSession } from "../lib/auth";
+import { fetchFeedPage, fetchFeedVehicle, type FeedCursor, type FeedSource, type FeedVehicle } from "../lib/feed";
+import { primeSellerProfiles } from "../lib/use-follow";
 
 const PAGE_SIZE = 8;
 // Sona bu kadar kart kala sıradaki sayfa istenir
@@ -17,9 +19,9 @@ const PINNED_MISSING_NOTICE =
 
 // Akış sayfası ve (varsa) arama sayfasından seçilen ilan paralel istenir.
 // Seçilen ilan bulunamazsa akış normal şekilde devam eder.
-async function fetchFeedBatch(cursor: FeedCursor | null, pinnedId: string | null) {
+async function fetchFeedBatch(cursor: FeedCursor | null, pinnedId: string | null, source: FeedSource) {
   const [page, pinned] = await Promise.all([
-    fetchFeedPage(cursor, PAGE_SIZE),
+    fetchFeedPage(cursor, PAGE_SIZE, source),
     pinnedId ? fetchFeedVehicle(pinnedId).catch(() => null) : Promise.resolve(null),
   ]);
   return { page, pinned };
@@ -28,9 +30,28 @@ async function fetchFeedBatch(cursor: FeedCursor | null, pinnedId: string | null
 type VideoFeedProps = {
   /** "Videoyu akışta izle" bağlantısından gelindiyse (/?v=<id>) akışın ilk sırada göstereceği ilan */
   initialVehicleId?: string | null;
+  /** "explore": bütün yayındaki ilanlar; "following": takip edilen satıcılarınki */
+  source?: FeedSource;
+  /**
+   * Akış ekranda mı: sekme değişince gizlenen akış silinmez (yeri korunur) ama
+   * hiçbir videosu oynamaz ve yalnızca aktif kartın videosu bağlı kalır
+   */
+  visible?: boolean;
+  /** Ses durumu iki akışta ortak, ana sayfada tutulur */
+  muted: boolean;
+  onMutedChange: (muted: boolean) => void;
+  /** Hiç ilan yoksa gösterilecek içerik (varsayılan: "Yayında ilan yok.") */
+  emptyState?: ReactNode;
 };
 
-export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
+export default function VideoFeed({
+  initialVehicleId = null,
+  source = "explore",
+  visible = true,
+  muted,
+  onMutedChange,
+  emptyState,
+}: VideoFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cursorRef = useRef<FeedCursor | null>(null);
@@ -43,8 +64,9 @@ export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
   const [hasMore, setHasMore] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [pagesLoaded, setPagesLoaded] = useState(0);
-  const [muted, setMuted] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const { session } = useSupabaseSession();
+  const viewerId = session?.user.id ?? null;
 
   const loadNextPage = useCallback(async () => {
     if (isFetchingRef.current) return;
@@ -52,7 +74,7 @@ export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
 
     try {
       const pinnedId = pinnedIdRef.current;
-      const { page, pinned } = await fetchFeedBatch(cursorRef.current, pinnedId);
+      const { page, pinned } = await fetchFeedBatch(cursorRef.current, pinnedId, source);
 
       // Aranan ilan artık yayında değilse kısa bir bilgi göster. (if bloğuna alınmadı:
       // react-hooks lint kuralı iç bloktaki setState'i senkron sayıp hata veriyor.)
@@ -80,7 +102,13 @@ export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
     } finally {
       isFetchingRef.current = false;
     }
-  }, []);
+  }, [source]);
+
+  // Kartlardaki satıcı satırı (ad, avatar, takip): yeni gelen satıcılar tek
+  // istekte istenir; oturum değişince (giriş/çıkış) takip durumu yeniden okunur
+  useEffect(() => {
+    void primeSellerProfiles(vehicles.map((v) => v.sellerId));
+  }, [vehicles, viewerId]);
 
   // Aktif kartı tek bir IntersectionObserver belirler: aynı anda yalnızca bir video oynar
   useEffect(() => {
@@ -164,10 +192,10 @@ export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
               {distance <= RENDER_WINDOW && (
                 <VideoCard
                   vehicle={vehicle}
-                  isActive={index === activeIndex}
-                  shouldLoad={distance <= 1}
+                  isActive={visible && index === activeIndex}
+                  shouldLoad={visible ? distance <= 1 : distance === 0}
                   muted={muted}
-                  onMutedChange={setMuted}
+                  onMutedChange={onMutedChange}
                 />
               )}
             </div>
@@ -178,14 +206,20 @@ export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
         <div
           data-index={tailIsStop ? vehicles.length : undefined}
           aria-live="polite"
-          className={`flex w-full flex-col items-center justify-center gap-5 px-10 text-center ${
+          // Özel boş durum (kart) üstteki başlık ve sekmelerin altından başlar
+          className={`flex w-full flex-col items-center justify-center gap-5 text-center ${
             tailIsFullScreen ? "h-full" : "h-28"
-          } ${tailIsStop ? "snap-start snap-always" : ""}`}
+          } ${tailIsStop ? "snap-start snap-always" : ""} ${
+            emptyState && vehicles.length === 0 && tailIsStop
+              ? "px-5 pt-[calc(env(safe-area-inset-top)+6.5rem)] pb-5"
+              : "px-10"
+          }`}
         >
           <FeedTail
             loadFailed={loadFailed}
             hasMore={hasMore}
             isEmpty={vehicles.length === 0}
+            emptyState={emptyState}
             onRetry={handleRetry}
             onBackToTop={handleBackToTop}
           />
@@ -196,7 +230,7 @@ export default function VideoFeed({ initialVehicleId = null }: VideoFeedProps) {
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 flex justify-center"
+        className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+7rem)] z-40 flex justify-center"
       >
         {notice && (
           <p className="max-w-sm rounded-md bg-black/80 px-4 py-3 text-center text-[14px] leading-snug text-white">
@@ -215,12 +249,14 @@ function FeedTail({
   loadFailed,
   hasMore,
   isEmpty,
+  emptyState,
   onRetry,
   onBackToTop,
 }: {
   loadFailed: boolean;
   hasMore: boolean;
   isEmpty: boolean;
+  emptyState?: ReactNode;
   onRetry: () => void;
   onBackToTop: () => void;
 }) {
@@ -251,6 +287,8 @@ function FeedTail({
       </>
     );
   }
+
+  if (isEmpty && emptyState) return emptyState;
 
   if (isEmpty) {
     return (

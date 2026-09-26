@@ -10,6 +10,8 @@ export type TransmissionType = "manuel" | "otomatik";
 
 export type FeedVehicle = {
   id: string;
+  /** Satıcının kullanıcı kimliği: kısa profili (ad, avatar, takip) ayrıca istenir */
+  sellerId: string | null;
   brandName: string;
   modelName: string;
   year: number;
@@ -38,6 +40,7 @@ export type FeedPage = {
 // PostgREST'in döndürdüğü ham satır (snake_case)
 type FeedRow = {
   id: string;
+  seller_id?: string | null;
   created_at: string;
   year: number;
   price: number | string;
@@ -59,20 +62,29 @@ type FeedRow = {
 // Satıcı, RLS izin verdiği için status'ü elle 'active' yapsa bile
 // videosuz bir ilan feed'e sızmaz.
 const FEED_COLUMNS = `
-  id, created_at, year, price, currency, mileage_km, fuel_type, transmission, city,
+  id, seller_id, created_at, year, price, currency, mileage_km, fuel_type, transmission, city,
   tramer_amount, has_heavy_damage, painted_parts_count, changed_parts_count,
   brand:brands(name),
   model:models(name),
   videos!inner(hls_url, thumbnail_url, order_index)
 `;
 
-export async function fetchFeedPage(cursor: FeedCursor | null, pageSize = 8): Promise<FeedPage> {
-  let query = supabase
-    .from("vehicles")
-    .select(FEED_COLUMNS)
-    .eq("status", "active")
-    .eq("videos.status", "ready")
-    .not("videos.hls_url", "is", null);
+export type FeedSource = "explore" | "following";
+
+export async function fetchFeedPage(
+  cursor: FeedCursor | null,
+  pageSize = 8,
+  source: FeedSource = "explore",
+): Promise<FeedPage> {
+  // "Takip Edilenler": following_feed() RPC'si takip edilen satıcıların
+  // vehicles satırlarını döner; PostgREST üstüne aynı süzgeç, sıralama ve
+  // videos birleştirmesini uygular (bkz. *_usernames_and_follows.sql).
+  const base = source === "following" ? supabase.rpc("following_feed") : supabase.from("vehicles");
+  let query = base.select(FEED_COLUMNS).eq("status", "active").eq("videos.status", "ready");
+  // PostgREST, RPC sonucundaki gömülü kaynağa "is" süzgecini uygulayamıyor
+  // ("column pgrst_call.hls_url does not exist", canlıda denendi). Takip akışında
+  // hls_url'si boş video toFeedVehicle'da elenir.
+  if (source === "explore") query = query.not("videos.hls_url", "is", null);
 
   if (cursor) {
     // Keyset (cursor) sayfalama, OFFSET yerine:
@@ -141,6 +153,7 @@ function toFeedVehicle(row: FeedRow): FeedVehicle | null {
 
   return {
     id: row.id,
+    sellerId: row.seller_id ?? null,
     brandName: row.brand?.name ?? "",
     modelName: row.model?.name ?? "",
     year: row.year,
