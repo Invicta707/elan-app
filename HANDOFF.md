@@ -1,8 +1,8 @@
 # gözüyle (eski adı Elan): Handoff ve Bağlam Aktarımı
 
-_Son güncelleme: 26 Eylül 2026_
+_Son güncelleme: 27 Eylül 2026_
 
-**Proje:** Türkiye pazarı için kısa videolu araç ilanı platformu (dikey video akışı, arama, ilan verme, favoriler, WhatsApp ile iletişim).
+**Proje:** Türkiye pazarı için kısa videolu araç ilanı platformu (dikey video akışı, arama, ilan verme, favoriler, WhatsApp ve ilan üzerinden mesajlaşma, kullanıcı adı ve takip sistemi, "Takip Edilenler" akışı).
 **Konum:** `C:\Users\Kamil\elan-app` (Windows; Git Bash + PowerShell).
 **Canlı adres:** https://gozuyle.com
 
@@ -17,12 +17,14 @@ _Son güncelleme: 26 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 36 dosya, **628 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 40 dosya, **761 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
   - `reports` tablosu: RLS açık, **hiç politika yok**; yalnızca API yazabiliyor. Kapanan bildirimde `resolved_at` ve `resolved_by` dolar. İlan şikayetleri (sohbet menüsünden gelenler dahil) buraya gidiyor.
-  - **`profiles`:** `whatsapp_number`, `display_name` (2–30 karakter, `<>` yok), `avatar_url`. Satırı **yalnızca sahibi okuyor.** Başkalarının adı ve avatarı mesajlaşma RPC'lerinden geliyor; numara yalnızca `get_seller_whatsapp` ile. `avatar_url`'ı yalnızca sunucu yazabiliyor (sütun yetkisi).
+  - **`profiles`:** `whatsapp_number`, `display_name` (2–30 karakter, `<>` yok), `avatar_url`, `username`, `username_changed_at`, `followers_count`, `following_count`. Satırı **yalnızca sahibi okuyor.** Başkalarının profili `get_public_profile` / `get_public_profiles` ve mesajlaşma RPC'lerinden geliyor; numara yalnızca `get_seller_whatsapp` ile. `avatar_url`'ı yalnızca sunucu, `username`'i yalnızca `set_username`, sayaçları yalnızca `follows` tetikleyicisi yazabiliyor (sütun yetkileri: istemci yalnızca `id, whatsapp_number, display_name, updated_at` yazar).
+  - **Kullanıcı adı:** benzersiz, küçük harf, `^[a-z0-9_]{3,20}$`. Rezerve: sistem sayfaları ve uygulama sözcükleri (`fn_reserved_usernames`, 99 sözcük), `gozuyle` içeren adlar, `admin`/`moderator`/`destek`/`support` ile başlayanlar. Kural `profiles_username_valid` CHECK kısıtında (`fn_is_valid_username`): servis anahtarı dahil her yazımda geçerli. TS aynası [lib/username.ts](lib/username.ts); eşitliği testler denetliyor.
+  - **`follows`:** `id`, `follower_id`, `following_id` (ikisi de `profiles.id`'ye, CASCADE), `created_at`. `(follower_id, following_id)` benzersiz, kendini takip CHECK ile yasak. Herkes okur; yalnızca kendi adına ekler/siler, güncelleme yok; aralarında engel varsa takip edilemez, engellenince iki yöndeki takip silinir. Takip edenin saatte 100, toplamda 5000 sınırı var. Profil satırı olmayan kullanıcı takip ederse satır tetikleyiciyle açılır.
   - **Mesajlaşma:** `conversations` (ilan + alıcı tekil), `messages`, `user_blocks`, `user_reports`. RLS: yalnızca iki taraf okuyor/yazıyor, engel varsa gönderilemiyor. `is_read` ve `created_at` istemciden yazılamıyor. Gönderen başına dakikada 30 mesaj. `messages` Realtime yayınında.
   - **Storage `avatars`:** herkese açık okunuyor, 1 MB, webp/jpeg. Yazma yalnızca sunucudan (`/api/profile/avatar`, servis anahtarı).
   - **İlan durumu:** `draft`, `pending_video`, `active`, `sold`, `archived`, `rejected` (moderasyon). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor.
@@ -50,17 +52,20 @@ _Son güncelleme: 26 Eylül 2026_
 | Vitrinim / durum | [components/showcase/ShowcaseView.tsx](components/showcase/ShowcaseView.tsx) (profil başlığı + 3 sütunlu dikey ızgara), [components/showcase/ShowcaseTile.tsx](components/showcase/ShowcaseTile.tsx), [components/showcase/ListingManageSheet.tsx](components/showcase/ListingManageSheet.tsx) (durum değiştirme), [lib/my-listings.ts](lib/my-listings.ts), [lib/showcase.ts](lib/showcase.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
 | Profil | [components/profile/AvatarPicker.tsx](components/profile/AvatarPicker.tsx), [components/profile/EditNameSheet.tsx](components/profile/EditNameSheet.tsx), [lib/profile.ts](lib/profile.ts), [lib/use-my-profile.ts](lib/use-my-profile.ts) (paylaşılan profil deposu), [lib/avatar.ts](lib/avatar.ts), [lib/avatar-image.ts](lib/avatar-image.ts) (tarayıcıda kare kırpma ve WebP), [lib/avatar-server.ts](lib/avatar-server.ts), [app/api/profile/avatar/route.ts](app/api/profile/avatar/route.ts) |
 | Mesajlaşma | [app/messages/page.tsx](app/messages/page.tsx), [app/messages/[id]/page.tsx](app/messages/[id]/page.tsx), [components/messages/InboxView.tsx](components/messages/InboxView.tsx), [components/messages/ChatView.tsx](components/messages/ChatView.tsx) (Realtime, klavye), [components/messages/ChatParts.tsx](components/messages/ChatParts.tsx), [components/messages/ReportUserSheet.tsx](components/messages/ReportUserSheet.tsx), [components/vehicle/MessageSellerButton.tsx](components/vehicle/MessageSellerButton.tsx), [lib/messages.ts](lib/messages.ts), [lib/use-unread-count.ts](lib/use-unread-count.ts), [lib/messaging-rls.test.ts](lib/messaging-rls.test.ts) (PGlite) |
+| Kullanıcı adı | [lib/username.ts](lib/username.ts) (kural, rezerve liste, Türkçe harf süzme, öneri), [lib/use-username-check.ts](lib/use-username-check.ts) (400 ms bekleyen canlı kontrol), [components/profile/UsernameField.tsx](components/profile/UsernameField.tsx), [components/profile/UsernameSheet.tsx](components/profile/UsernameSheet.tsx), [components/profile/UsernameOnboarding.tsx](components/profile/UsernameOnboarding.tsx) (layout'ta), `checkUsernameAvailability` / `saveUsername` [lib/profile.ts](lib/profile.ts)'te |
+| Takip / profil sayfası | [app/u/[username]/page.tsx](app/u/[username]/page.tsx) (`/@ad` → rewrite, [next.config.ts](next.config.ts)), [components/social/ProfileHeader.tsx](components/social/ProfileHeader.tsx), [components/social/FollowButton.tsx](components/social/FollowButton.tsx), [components/social/SellerRow.tsx](components/social/SellerRow.tsx) (akış kartı), [components/social/SellerCard.tsx](components/social/SellerCard.tsx) (ilan sayfası), [lib/follows.ts](lib/follows.ts) (RPC'ler, dönüşümler), [lib/use-follow.ts](lib/use-follow.ts) (takip durumu ve satıcı profilleri deposu), [lib/social-rls.test.ts](lib/social-rls.test.ts) (PGlite) |
+| Ana sayfa akışı | [components/HomeFeed.tsx](components/HomeFeed.tsx) (Keşfet / Takip Edilenler), [components/social/FeedTabs.tsx](components/social/FeedTabs.tsx), [components/social/FollowingEmpty.tsx](components/social/FollowingEmpty.tsx), [components/VideoFeed.tsx](components/VideoFeed.tsx) (`source`, `visible`, `emptyState`), [lib/feed.ts](lib/feed.ts) (`fetchFeedPage(cursor, size, source)`) |
 | Ortak arayüz | [components/ui/BottomSheet.tsx](components/ui/BottomSheet.tsx), [components/ui/Avatar.tsx](components/ui/Avatar.tsx), [components/ui/UnreadBadge.tsx](components/ui/UnreadBadge.tsx); animasyonlar `app/globals.css`'te (`sheet-up`, `badge-pop`, `bubble-in`, `fade-in`) |
 | Katalog / arama | [lib/search.ts](lib/search.ts) (`fetchCatalog`, `compareCatalogNames`), [components/SearchView.tsx](components/SearchView.tsx), [app/sell/page.tsx](app/sell/page.tsx) |
 | İlan verme (`/sell`) | [app/sell/page.tsx](app/sell/page.tsx): adım durumu, doğrulama, gönderim (`runSubmit`, `uploadPhotos`). [app/sell/layout.tsx](app/sell/layout.tsx): yazı tipleri ve başlık. [components/sell/FormControls.tsx](components/sell/FormControls.tsx): `Field`, `TextInput`, `GroupedNumberInput`, `SelectInput`, `ChoiceGroup`. [components/sell/CatalogCombobox.tsx](components/sell/CatalogCombobox.tsx): marka/model seçim kutusu. [components/sell/MediaPickers.tsx](components/sell/MediaPickers.tsx): `VideoDropzone`, `PhotoDropzone`. [components/sell/SellChrome.tsx](components/sell/SellChrome.tsx): `SellStepper`, `FormCard`, `SubmitProgress`, `SellActionBar`, `SellSuccess`. [lib/listing.ts](lib/listing.ts): `LISTING_STEPS`, `listingFieldErrors`, `stepFieldErrors`, `groupThousands`, `caretAfterDigits`. [lib/sell-progress.ts](lib/sell-progress.ts): gönderim aşamaları ve yüzde |
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | PWA / TWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir), [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json) (Android paketi `com.gozuyle.twa`) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 13 migration, sonuncusu `20260926210000_profiles_and_messaging.sql`; hepsi uzak veritabanında uygulanmış (son yedisi 26 Eylül 2026'da `db push --linked` ile) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 14 migration, sonuncusu `20260927120000_usernames_and_follows.sql`; hepsi uzak veritabanında uygulanmış (sonuncusu 27 Eylül 2026'da `db push --linked` ile, kod push'undan önce) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
-## 3. 25–26 Eylül 2026 oturumunda tamamlananlar
+## 3. 25–27 Eylül 2026 oturumlarında tamamlananlar
 
 - **Üst çubuk sadeleştirmesi:**
   - Logo yalnızca göz simgesi, **36 px** (`h-9 w-9`), dikeyde ortalı.
@@ -144,11 +149,52 @@ _Son güncelleme: 26 Eylül 2026_
   - **Canlıda doğrulandı:** sayfalar `200`; avatar API'si oturumsuz `401`, 1,1 MB gövdede `413`; yeni kod pakette; uzak veritabanında RLS, yetkiler, bucket ve Realtime sorguyla kontrol edildi.
   - **Görsel doğrulama:** giriş gerektiren ekranlar (ızgara, sohbet) geçici bir önizleme sayfasında sahte veriyle çizilip kontrol edildi (commit'lenmedi).
 
+- **Kullanıcı adı, takip sistemi ve "Takip Edilenler" akışı (`5e30c64`, migration `20260927120000_usernames_and_follows.sql`, 27 Eylül 2026):**
+  - **Veritabanı** (kurallar 1. bölümde):
+    - Kullanıcı adı yalnızca `set_username` RPC'siyle yazılıyor. Profil satırı yoksa açılıyor. İlk belirleme ve ilk değişiklik serbest (yazım hatası düzeltilebilsin); sonraki değişiklik için son değişiklikten itibaren 7 gün bekleniyor. Eski ad hemen boşa çıkıyor.
+    - `check_username` şu değerlerden birini dönüyor: `invalid`, `reserved`, `current`, `taken`, `available`. Yalnızca giriş yapmış kullanıcı çağırabiliyor.
+    - Sayaçlar (`followers_count`, `following_count`) `follows` tetikleyicisiyle güncelleniyor. İki profil satırı id sırasıyla kilitleniyor; karşılıklı eşzamanlı takipte kilitlenme (deadlock) olmuyor. Hesap silinince takipler CASCADE ile gidiyor ve karşı tarafın sayacı düşüyor.
+    - `get_public_profile(ad)` hem misafire hem üyeye açık. Kullanıcı adı, görünen ad, avatar, takipçi, takip edilen, yayındaki ilan sayısı ve oturumdaki kullanıcı için `is_me` / `is_following` dönüyor. WhatsApp numarası asla dönmüyor.
+    - `get_public_profiles(ids)` en fazla 50 kimlik alıyor ve yalnızca herkese açık yüzü olanları dönüyor: kullanıcı adı olan ya da yayında ilanı olan kullanıcılar. Diğer üyelerin adı id ile sorgulanamıyor.
+    - `following_feed()` yalnızca giriş yapmış kullanıcıya açık. `setof vehicles` döndüğü için PostgREST üstüne akış sorgusunun süzgeç, sıralama, imleç ve `videos` birleştirmesini uyguluyor.
+    - **Bilinen PostgREST sınırı:** RPC sonucunda gömülü kaynağa `is` süzgeci uygulanamıyor. `videos.hls_url=not.is.null` "column pgrst_call.hls_url does not exist" hatası veriyor (canlıda denendi). Takip akışı bu süzgeci göndermiyor; `hls_url`'si boş video `toFeedVehicle`'da eleniyor.
+  - **`/@kullanici_adi`:** `next.config.ts` rewrite'ı sayfayı `app/u/[username]`'e yönlendiriyor. `app/@...` klasörü paralel rota yuvası sayıldığı için rewrite gerekti.
+    - Sunucu sayfayı anonim çiziyor. Büyük harfli adres 308 ile küçük harfe yönleniyor. Geçersiz ya da olmayan ad kendi 404 sayfasına düşüyor.
+    - Başlıkta avatar, ad, @ad, İlan | Takipçi | Takip Edilen sayıları ve Takip Et / Takibi Bırak düğmesi var. Kendi profilinde düğme yerine "Profili Düzenle" (→ Vitrinim) çıkıyor. Yanında "Profili paylaş" düğmesi var.
+    - Altında yalnızca yayındaki ilanların 3 sütunlu ızgarası var (Vitrinim karesi, köşe menüsü yok). Metadata'da canonical `/@ad`, OG görseli avatar.
+  - **Takip et / bırak iyimser:** sayı ve düğme hemen değişiyor, sunucu reddederse geri alınıp Türkçe hata gösteriliyor.
+    - Aynı satıcının akıştaki bütün kartları, ilan sayfası ve profil sayfası tek bir depodan okuyor ([lib/use-follow.ts](lib/use-follow.ts)). Depo oturumdaki kullanıcıya bağlı; çıkışta sıfırlanıyor.
+    - Misafir takip etmek isterse önce giriş penceresi açılıyor, girişten sonra takip ediliyor.
+  - **Kullanıcı adı penceresi:** giriş yapmış ama kullanıcı adı olmayan kullanıcıya bir kez açılıyor (layout'ta, 0,9 sn gecikmeyle).
+    - Öneri görünen addan ya da Google adından geliyor, olmazsa e-postanın başından (Türkçe harfler çevriliyor).
+    - Yazarken alan kurala göre süzülüyor (Ş → s, boşluk → _, büyük harf → küçük). Biçim ve rezerve kontrolü anında, alınmış olup olmadığı 400 ms sonra sunucudan geliyor. Yeşil tik / kırmızı çarpı / dönen halka gösteriliyor.
+    - "Daha sonra" 3 gün boyunca tekrar sormuyor (localStorage). İlan verme, sohbet, giriş dönüşü, yönetim ve yasal sayfalarda açılmıyor.
+    - Kaydedince "Vitrinimi gör" ekranı çıkıyor.
+  - **Vitrinim:** adın altında @kullanıcı_adı var (dokununca değiştirilebiliyor); yoksa "Kullanıcı adı belirle" düğmesi çıkıyor. Ayrıca "Herkese açık vitrinim" bağlantısı eklendi.
+    - Sayılar artık İlan | Takipçi | Takip | İzlenme. "Yayında" sayısı "İlanlar" başlığının yanına taşındı.
+  - **Ana sayfa:** başlığın altında cam efektli "Takip Edilenler | Keşfet" sekmeleri var (ARIA sekme deseni, ok tuşları).
+    - Sekme değişince diğer akış silinmiyor, gizleniyor; Keşfet'e dönünce kalınan yerden devam ediliyor ve gizli akışta video oynamıyor. Ses iki akışta ortak.
+    - "Takip Edilenler" ilk açılışta kuruluyor; bu arada takip listesi değiştiyse yeniden kuruluyor.
+    - Boş durumlar: misafire giriş kartı; kimseyi takip etmeyene "Henüz kimseyi takip etmiyorsun. İlgini çeken satıcıları vitrinlerinden takip et!" ve "Keşfet'e dön"; takip ettiklerinin videosu olmayana ayrı bir metin.
+    - `/?feed=following` sekmeyle açılıyor.
+  - **Akış kartı ve ilan sayfası:** kartın sol üstünde satıcının avatarı ve @adı (vitrine gidiyor) ile "Takip et" var. Takip edilen satıcıda düğme yok, yalnızca "Takiptesin" işareti çıkıyor; akışta yanlışlıkla takip bırakılamıyor. Satıcı profilleri akış sayfalarıyla birlikte tek RPC'de isteniyor.
+    - İlan sayfasında "Satıcı" kartı var: avatar, ad, "Vitrini gör", Takip Et / Takibi Bırak.
+  - **Testler (+133):**
+    - [lib/social-rls.test.ts](lib/social-rls.test.ts): 67 test, PGlite, gerçek migration'lar. Kapsadıkları: biçim, küçük harf, rezerve sözcükler ve TS–SQL eşitliği, benzersizlik, 7 gün kuralı, sütun yetkileri, canlıdaki upsert, kendini takip, çift takip, başkası adına takip, engel, saatlik sınır, sayaçlar ve CASCADE, RPC'lerin misafir/üye çıktısı ve numara sızmaması, `following_feed`.
+    - Kontrol çalıştırması: kurallar bozulmuş migration'la 10 test başarısız oldu.
+    - Ayrıca `lib/username.test.ts`, `lib/follows.test.ts`, `lib/use-follow.test.ts` (iyimser takip ve geri alma), `lib/feed.test.ts` (takip akışı sorgusu) ve bileşen testleri (sekmeler, boş durum, takip düğmesi, kullanıcı adı alanı ve canlı kontrol, profil sayıları).
+  - **Doğrulama:**
+    - Üretim derlemesinde 320×568, 390×844 ve 1280×720 boyutlarında taşma yok. Boş durum kartı sekmelerin altında kalıyor.
+    - Giriş gerektiren ve veri isteyen ekranlar (profil başlığı, ızgara, akış kartı satıcı satırı, kullanıcı adı alanının bütün durumları) geçici önizleme sayfasında sahte veriyle kontrol edildi (commit'lenmedi).
+    - Uzak veritabanında sütunlar, kısıtlar, politikalar, tetikleyiciler ve fonksiyon yetkileri sorguyla doğrulandı.
+    - Canlı PostgREST: misafir `get_public_profile` / `get_public_profiles` → 200; `check_username`, `following_feed` ve `follows`'a yazma → 401. İstemcinin kuracağı takip akışı sorgusu (imleçli ve imleçsiz) → 200.
+
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`15c9455`** ("feat(profile-chat): add showcase grid, avatar upload, and realtime listing dm"); production deploy'u `elan-5apv17wj4`. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`5e30c64`** ("feat(social): add unique username, follow system and following feed"); production deploy'u `elan-ibwaxvjkb`, `gozuyle.com`'a bağlı. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: 13 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
+- Veritabanı kodla uyumlu: 14 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
+- **Canlı doğrulama (27 Eylül 2026, `elan-ibwaxvjkb`):** `/`, `/?feed=following`, `/my-listings`, `/search` → 200. `/@ab` ve `/@yok_boyle_biri` → 404 ("Bu kullanıcı bulunamadı"; ikincisinde RPC çağrılıp null döndü). `/@Yok_Boyle` → 308 `/@yok_boyle`. Tarayıcıda sekmeler ve misafir kartı çalışıyor, konsol temiz.
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
 - **DNS** kayıt firmasında (`knuth` / `dijkstra.ihsdns.com`), Vercel nameserver'ları kullanılmıyor: kök alan A `216.198.79.1`, `www` CNAME `cname.vercel-dns.com`. Vercel'deki "Intended Nameservers ☓" uyarısı bu yüzden çıkıyor ve sorun değil.
 - **Yerel `nslookup`:** bu makinenin varsayılan DNS sunucusu yanıt vermiyor; sorgu `nslookup <ad> 1.1.1.1` ile yapılmalı.
@@ -174,6 +220,7 @@ _Son güncelleme: 26 Eylül 2026_
    - **Mesajlaşma (iki hesapla):** ilandan "Mesaj gönder" → sohbet açılmalı; karşı tarafta mesaj sayfa yenilenmeden gelmeli (Realtime), rozet artmalı, sohbet açılınca okundu (mavi çift tik) görünmeli. Engelleme ve şikayetler denenmeli. Canlıda şu an yayında ilan yok (biri satılmış, biri arşivde); deneme için bir ilan yayında olmalı.
    - **Avatar:** telefondan fotoğraf seç → önizleme → kaydet; üst çubukta ve Vitrinim'de görünmeli. Görünen ad düzenlenebilmeli.
    - **Mobil klavye:** iPhone Safari ve Android Chrome'da sohbette klavye açılınca yazma alanı klavyenin hemen üstünde kalmalı.
+   - **Kullanıcı adı ve takip (iki hesapla):** girişte "Kullanıcı adını belirle" penceresi açılmalı; yazarken yeşil tik / kırmızı çarpı doğru çıkmalı (ör. `sell` rezerve, diğer hesabın adı alınmış). Kaydedince `gozuyle.com/@ad` açılmalı. İkinci hesaptan bu sayfada "Takip Et" → sayı hemen artmalı; sayfa yenilenince de doğru kalmalı. "Takibi Bırak" sayıyı düşürmeli. Ana sayfada "Takip Edilenler" sekmesi yalnızca takip edilen satıcının videolarını göstermeli; kimse takip edilmiyorsa boş durum kartı çıkmalı. Akış kartında satıcı satırı ve "Takip et", ilan sayfasında "Satıcı" kartı görünmeli. Engelleyince iki yöndeki takip kalkmalı. Claude giriş yapamadığı için bunlar yalnızca PGlite ve sahte veriyle denendi.
    - Listede olmayan marka/model ile ilan (ör. katalogdaki bir markaya yeni model). İlan açılmalı ve ilanda adıyla görünmeli. Bu, `resolve_listing_catalog`'un canlıdaki ilk gerçek çağrısı olacak; Claude giriş yapamadığı için yalnızca PGlite'ta denendi.
 3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
    - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
@@ -209,6 +256,12 @@ _Son güncelleme: 26 Eylül 2026_
 - Kullanıcıların eklediği marka/modeller için bir yönetim ekranı yok. Yalnızca veritabanında görülebiliyor (`is_user_created = true`). İleride moderasyon paneline "onayla / katalogdaki kayıtla birleştir" eklenebilir.
 - **Kullanıcı şikayetleri** (`user_reports`) moderasyon panelinde görünmüyor; şimdilik yalnızca veritabanında. Panel ilan şikayetlerini (`reports`) gösteriyor; kullanıcı şikayetleri için ayrı bir sekme eklenmeli (Google Play incelemesi için önemli).
 - **Mesaj bildirimleri:** uygulama kapalıyken bildirim yok (web push ya da e-posta). Rozet yalnızca site açıkken güncelleniyor.
+- **Takip sisteminin eksikleri:**
+  - Takipçi / takip edilen listesi sayfası yok (sayılar tıklanmıyor).
+  - "Seni takip etti" bildirimi yok.
+  - Değişen kullanıcı adı hemen boşa çıkıyor; eski adres başkasına geçebilir. Instagram'daki gibi 14 gün tutma yok.
+  - Uygunsuz kullanıcı adları için moderasyon ekranı yok. Yalnızca rezerve liste var; düzeltme şimdilik veritabanından yapılıyor.
+  - Kullanıcı adı olmayan satıcının vitrini yok: akış kartında adı görünüyor ama bağlantı yok.
 - **Vitrinim'de pasif ilanın önizlemesi:** yayında olmayan ilanın herkese açık sayfası yok (sunucu anonim okuyor). Satıcı ilanını önizleyemiyor; yalnızca yönetim menüsü açılıyor.
 - Yasal metinler şablon; hukuki inceleme gerekiyor.
 - Google onay ekranında `supabase.co` alan adı görünebilir; istenirse Supabase'e özel alan adı bağlanabilir. Bağlanırsa `fn_is_vehicle_photo_url`'deki sabit proje adresi de yeni bir migration'la güncellenmeli; güncellenmezse yeni fotoğraf eklemeleri reddedilir.
