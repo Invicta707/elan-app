@@ -1,33 +1,55 @@
 "use client";
 
+import { CircleAlert, MapPin, Phone } from "lucide-react";
 import Link from "next/link";
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import AuthModal from "../../components/AuthModal";
 import FeedHeader from "../../components/FeedHeader";
+import {
+  ChoiceGroup,
+  Field,
+  GroupedNumberInput,
+  SelectInput,
+  TextInput,
+  controlClass,
+  describedBy,
+} from "../../components/sell/FormControls";
+import { PhotoDropzone, VideoDropzone } from "../../components/sell/MediaPickers";
+import {
+  FormCard,
+  SellActionBar,
+  SellStepper,
+  SellSuccess,
+  SubmitProgress,
+} from "../../components/sell/SellChrome";
+import type { PickedPhoto, PickedVideo } from "../../components/sell/types";
 import { useSupabaseSession } from "../../lib/auth";
-import type { FuelType } from "../../lib/feed";
+import type { FuelType, TransmissionType } from "../../lib/feed";
 import {
   EMPTY_LISTING_DRAFT,
+  LISTING_STEPS,
   MAX_PHOTOS,
   PHOTO_BUCKET,
   buildListingRecords,
   buildVehicleImageRow,
+  groupThousands,
+  listingFieldErrors,
   onlyDigits,
   photoRejection,
   photoStoragePath,
+  stepFieldErrors,
   validateListingDraft,
+  type DamageStatus,
   type ListingDraft as Draft,
+  type ListingField,
   type VehicleImageRow,
 } from "../../lib/listing";
 import { fetchCatalog, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
+import {
+  overallSubmitPercent,
+  submitPhaseLabel,
+  type SubmitPhase,
+} from "../../lib/sell-progress";
 import { supabase } from "../../lib/supabase";
 import { uploadVideoToCloudflare } from "../../lib/tus-upload";
 import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/vehicle-labels";
@@ -38,6 +60,9 @@ import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/ve
 const MAX_VIDEO_DURATION_SECONDS = 60;
 const MAX_VIDEO_FILE_BYTES = 500 * 1024 * 1024;
 
+const MAX_PRICE_DIGITS = 12;
+const MAX_MILEAGE_DIGITS = 7;
+
 function toOptions<T extends string>(labels: Record<T, string>): { value: T; label: string }[] {
   return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }));
 }
@@ -45,27 +70,29 @@ function toOptions<T extends string>(labels: Record<T, string>): { value: T; lab
 const BODY_TYPE_OPTIONS = toOptions(BODY_TYPE_LABELS);
 const FUEL_OPTIONS = toOptions(FUEL_LABELS);
 const TRANSMISSION_OPTIONS = toOptions(TRANSMISSION_LABELS);
+const DAMAGE_OPTIONS: readonly { value: DamageStatus; label: string }[] = [
+  { value: "none", label: "Hasarsız / hafif" },
+  { value: "heavy", label: "Ağır hasarlı" },
+];
 
-const fieldClass =
-  "h-12 w-full rounded-md border border-[#C9CED6] bg-white px-3 text-base text-[#15181C] disabled:bg-[#EEF0F3] disabled:text-[#7A808A] focus-visible:border-[#003399] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]/30";
+const LAST_STEP = LISTING_STEPS.length - 1;
+const MEDIA_STEP = LISTING_STEPS.findIndex((s) => s.id === "media");
+const VIDEO_REQUIRED = "Bir video seçmelisin.";
 
-type SubmitPhase =
-  | "idle"
-  | "creating-listing"
-  | "uploading-photos"
-  | "requesting-upload-url"
-  | "uploading-video"
-  | "processing-video"
-  | "done";
+/** Alanın DOM id'si: hatalı ilk alana odaklanmak için sabit */
+const fieldId = (field: ListingField) => `sell-${field}`;
+const VIDEO_INPUT_ID = "sell-video";
+const PHOTOS_INPUT_ID = "sell-photos";
 
-type PickedVideo = {
-  file: File;
-  previewUrl: string;
-  durationSeconds: number | null;
-  isVertical: boolean | null;
+const STEP_OF_FIELD = Object.fromEntries(
+  LISTING_STEPS.flatMap((step, index) => step.fields.map((field) => [field, index])),
+) as Record<ListingField, number>;
+
+const STEP_INTRO: Record<(typeof LISTING_STEPS)[number]["id"], string> = {
+  vehicle: "Aracının modelini ve temel özelliklerini seç.",
+  media: "Dikey video ilanın vitrini; fotoğraflar isteğe bağlı.",
+  details: "Fiyatı, konumu ve alıcıların sana ulaşacağı numarayı gir.",
 };
-
-type PickedPhoto = { file: File; previewUrl: string };
 
 export default function SellPage() {
   const { session, isLoading: isSessionLoading } = useSupabaseSession();
@@ -79,13 +106,21 @@ export default function SellPage() {
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
+  // Adımlar: hatalar, alan terk edilince ya da o adımda "Devam et"e basılınca görünür
+  const [step, setStep] = useState(0);
+  const [attempted, setAttempted] = useState<boolean[]>(() => LISTING_STEPS.map(() => false));
+  const [touched, setTouched] = useState<Partial<Record<ListingField, boolean>>>({});
+
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [phase, setPhase] = useState<SubmitPhase>("idle");
   const [uploadPercent, setUploadPercent] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [devNotice, setDevNotice] = useState<string | null>(null);
+  const [processingConfirmed, setProcessingConfirmed] = useState(false);
 
   const uploadAbortRef = useRef<(() => void) | null>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const stepChangedByUser = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -109,17 +144,84 @@ export default function SellPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isSubmitting = phase !== "idle" && phase !== "done";
+
+  // Yükleme sürerken sayfadan çıkılırsa video yarıda kalır: tarayıcı onay sorar
+  useEffect(() => {
+    if (!isSubmitting) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isSubmitting]);
+
+  // Adım değişince başlığa odaklan (ekran okuyucu yeni adımı okur) ve yukarı kaydır
+  useEffect(() => {
+    if (!stepChangedByUser.current) return;
+    stepChangedByUser.current = false;
+    stepHeadingRef.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
+
   const models = useMemo(
     () => catalog?.models.filter((m) => m.brandId === draft.brandId) ?? [],
     [catalog, draft.brandId],
   );
 
-  const isSubmitting = phase !== "idle" && phase !== "done";
+  const fieldErrors = useMemo(() => listingFieldErrors(draft), [draft]);
+
+  function stepInvalid(index: number): boolean {
+    return (
+      Object.keys(stepFieldErrors(index, fieldErrors)).length > 0 || (index === MEDIA_STEP && !video)
+    );
+  }
+
+  function errorFor(field: ListingField): string | null {
+    return attempted[STEP_OF_FIELD[field]] || touched[field] ? (fieldErrors[field] ?? null) : null;
+  }
+
+  const touch = (field: ListingField) => () => setTouched((t) => (t[field] ? t : { ...t, [field]: true }));
+  const update = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
+
+  function markAttempted(index: number) {
+    setAttempted((current) => current.map((value, i) => value || i === index));
+  }
+
+  function goToStep(index: number) {
+    stepChangedByUser.current = true;
+    setStep(index);
+  }
+
+  /** Adımdaki ilk hatalı alana odaklanır (hata metni görünür olduktan sonra) */
+  function focusFirstInvalid(index: number) {
+    const field = LISTING_STEPS[index].fields.find((f) => fieldErrors[f]);
+    const target = field ? fieldId(field) : index === MEDIA_STEP && !video ? VIDEO_INPUT_ID : null;
+    if (!target) return;
+    // React, form olayının sonunda DOM'u günceller; odak ondan sonra verilir
+    setTimeout(() => {
+      const element = document.getElementById(target);
+      element?.focus({ preventScroll: true });
+      element?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }
+
+  function showStepErrors(index: number) {
+    markAttempted(index);
+    if (index !== step) goToStep(index);
+    focusFirstInvalid(index);
+  }
+
+  /** Stepper'dan: geri her zaman, ileri ancak aradaki adımlar geçerliyse */
+  function canReach(index: number): boolean {
+    for (let i = 0; i < index; i += 1) if (stepInvalid(i)) return false;
+    return true;
+  }
+
+  function selectStep(index: number) {
+    if (index < step || canReach(index)) goToStep(index);
+  }
 
   async function handleVideoPick(file: File | undefined) {
     setVideoError(null);
-    if (video) URL.revokeObjectURL(video.previewUrl);
-    setVideo(null);
     if (!file) return;
 
     if (!file.type.startsWith("video/")) {
@@ -145,6 +247,7 @@ export default function SellPage() {
       return;
     }
 
+    if (video) URL.revokeObjectURL(video.previewUrl);
     setVideo({
       file,
       previewUrl,
@@ -153,12 +256,17 @@ export default function SellPage() {
     });
   }
 
-  function handlePhotosPick(files: FileList | null) {
+  function removeVideo() {
+    if (video) URL.revokeObjectURL(video.previewUrl);
+    setVideo(null);
+    setVideoError(null);
+  }
+
+  function handlePhotosPick(incoming: File[]) {
     setPhotoError(null);
-    if (!files || files.length === 0) return;
+    if (incoming.length === 0) return;
 
     // Sunucu (Storage) aynı kuralları uygular; burada seçim anında açıkça söylenir
-    const incoming = Array.from(files);
     const rejection = incoming.map(photoRejection).find(Boolean);
     if (rejection) setPhotoError(rejection);
 
@@ -172,6 +280,7 @@ export default function SellPage() {
   }
 
   function removePhoto(index: number) {
+    setPhotoError(null);
     setPhotos((current) => {
       const target = current[index];
       if (target) URL.revokeObjectURL(target.previewUrl);
@@ -179,18 +288,33 @@ export default function SellPage() {
     });
   }
 
-  const formError = validateListingDraft(draft) ?? (video ? null : "Bir video seçmelisin.");
+  const formError = validateListingDraft(draft) ?? (video ? null : VIDEO_REQUIRED);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmitting) return;
+
+    // Ara adımlarda "Devam et": yalnızca bu adımın alanları denetlenir
+    if (step < LAST_STEP) {
+      if (stepInvalid(step)) showStepErrors(step);
+      else goToStep(step + 1);
+      return;
+    }
+
+    // Son adım: bütün adımlar; eksik varsa ilk eksik adıma dönülür
+    markAttempted(step);
+    const firstInvalid = LISTING_STEPS.findIndex((_, index) => stepInvalid(index));
+    if (firstInvalid !== -1) {
+      showStepErrors(firstInvalid);
+      return;
+    }
 
     if (formError) {
       setSubmitError(formError);
       return;
     }
     if (!video) {
-      setSubmitError("Bir video seçmelisin.");
+      setSubmitError(VIDEO_REQUIRED);
       return;
     }
 
@@ -212,6 +336,7 @@ export default function SellPage() {
   ) {
     try {
       setDevNotice(null);
+      setProcessingConfirmed(false);
 
       // Taslak, doğrulamadan sonra (giriş penceresi açıkken) değişmiş olabilir;
       // buildListingRecords yeniden doğrular ve geçersizse hata fırlatır.
@@ -304,6 +429,8 @@ export default function SellPage() {
               devBody?.error?.message ??
                 "Video Cloudflare'de henüz işlenmedi; ilan otomatik yayına alınamadı (yerel geliştirme).",
             );
+          } else {
+            setProcessingConfirmed(true);
           }
         } catch (error) {
           console.error("Dev tamamlama isteği başarısız:", error);
@@ -323,45 +450,27 @@ export default function SellPage() {
     return (
       <main className="min-h-dvh bg-[#F2F3F5] text-[#15181C]">
         <FeedHeader activeTab="sell" tone="solid" />
-        <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-24 text-center">
-          <p className="text-[22px] font-semibold [font-family:var(--font-display)]">
-            İlanın alındı!
-          </p>
-          <p className="text-[15px] text-[#5B616B]">
-            Video işlenir işlenmez ilanın yayına girecek. Bu genelde birkaç dakika sürer.
-          </p>
-          {devNotice && (
-            <p className="max-w-xs rounded-md bg-[#FEF6E7] px-3 py-2 text-[13px] text-[#8A6116]">
-              {devNotice}
-            </p>
-          )}
-          <Link
-            href="/"
-            className="mt-2 h-12 rounded-md bg-[#003399] px-6 text-[16px] font-semibold leading-[3rem] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
-          >
-            Akışa dön
-          </Link>
-          <Link
-            href="/my-listings"
-            className="rounded-sm text-[15px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
-          >
-            İlanlarımı gör
-          </Link>
-        </div>
+        <SellSuccess hasPhotos={photos.length > 0} processingConfirmed={processingConfirmed} devNotice={devNotice} />
       </main>
     );
   }
+
+  const current = LISTING_STEPS[step];
+  const brandName = catalog?.brands.find((b) => b.id === draft.brandId)?.name ?? "";
+  const modelName = models.find((m) => m.id === draft.modelId)?.name ?? "";
+  const mediaError = videoError ?? (attempted[MEDIA_STEP] && !video ? VIDEO_REQUIRED : null);
 
   return (
     <main className="min-h-dvh bg-[#F2F3F5] text-[#15181C]">
       <FeedHeader activeTab="sell" tone="solid" />
 
       <form
+        noValidate
         onSubmit={handleSubmit}
-        className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-4 pb-[calc(8rem+var(--bottom-nav-height))]"
+        className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pt-3 pb-[calc(7rem+var(--bottom-nav-height))]"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlan Ver</h1>
+          <h1 className="text-[28px] font-semibold leading-tight [font-family:var(--font-display)]">İlan Ver</h1>
           <Link
             href="/my-listings"
             className="rounded-sm text-[14px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
@@ -370,78 +479,316 @@ export default function SellPage() {
           </Link>
         </div>
 
-        <Section title="Video">
-          <VideoPicker
-            video={video}
-            error={videoError}
-            disabled={isSubmitting}
-            onPick={handleVideoPick}
-          />
-          <p className="mt-2 text-[13px] text-[#5B616B]">
-            Dikey video, en fazla {MAX_VIDEO_DURATION_SECONDS} saniye ve{" "}
-            {Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))} MB.
+        <SellStepper
+          steps={LISTING_STEPS}
+          current={step}
+          reachable={(index) => index < step || canReach(index)}
+          onSelect={selectStep}
+          disabled={isSubmitting}
+        />
+
+        <div className="mt-1">
+          <h2
+            ref={stepHeadingRef}
+            tabIndex={-1}
+            className="text-[20px] font-semibold leading-tight outline-none [font-family:var(--font-display)]"
+          >
+            {isSubmitting ? "İlanın yayınlanıyor" : current.title}
+          </h2>
+          <p className="mt-0.5 text-[14px] text-[#5B616B]">
+            {isSubmitting ? "Bu sayfadan ayrılma; video yüklemesi yarıda kalır." : STEP_INTRO[current.id]}
           </p>
-        </Section>
+        </div>
 
-        <Section title="Fotoğraflar">
-          <PhotoPicker
-            photos={photos}
-            error={photoError}
-            disabled={isSubmitting}
-            onPick={handlePhotosPick}
-            onRemove={removePhoto}
-          />
-        </Section>
+        {isSubmitting ? (
+          <FormCard title="Yayın durumu">
+            <SubmitProgress phase={phase} uploadPercent={uploadPercent} hasPhotos={photos.length > 0} />
+          </FormCard>
+        ) : current.id === "vehicle" ? (
+          <>
+            <FormCard title="Model">
+              {catalogError ? (
+                <p className="flex items-start gap-1.5 text-[14px] text-[#B42318]">
+                  <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                  Marka/model listesi yüklenemedi. Sayfayı yenileyip tekrar dene.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                  <Field id={fieldId("brandId")} label="Marka" error={errorFor("brandId")}>
+                    <SelectInput
+                      id={fieldId("brandId")}
+                      value={draft.brandId}
+                      invalid={Boolean(errorFor("brandId"))}
+                      aria-describedby={describedBy(fieldId("brandId"), { error: errorFor("brandId") })}
+                      disabled={!catalog}
+                      onBlur={touch("brandId")}
+                      onChange={(event) => update({ brandId: event.target.value, modelId: "" })}
+                    >
+                      <option value="">{catalog ? "Seç" : "Yükleniyor…"}</option>
+                      {catalog?.brands.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                  <Field id={fieldId("modelId")} label="Model" error={errorFor("modelId")}>
+                    <SelectInput
+                      id={fieldId("modelId")}
+                      value={draft.modelId}
+                      invalid={Boolean(errorFor("modelId"))}
+                      aria-describedby={describedBy(fieldId("modelId"), { error: errorFor("modelId") })}
+                      disabled={!draft.brandId}
+                      onBlur={touch("modelId")}
+                      onChange={(event) => update({ modelId: event.target.value })}
+                    >
+                      <option value="">{draft.brandId ? "Seç" : "Önce marka"}</option>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                  <Field id={fieldId("year")} label="Model yılı" error={errorFor("year")}>
+                    <TextInput
+                      id={fieldId("year")}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="2019"
+                      maxLength={4}
+                      value={draft.year}
+                      invalid={Boolean(errorFor("year"))}
+                      aria-describedby={describedBy(fieldId("year"), { error: errorFor("year") })}
+                      onBlur={touch("year")}
+                      onChange={(event) => update({ year: onlyDigits(event.target.value).slice(0, 4) })}
+                    />
+                  </Field>
+                  <Field id={fieldId("mileageKm")} label="Kilometre" error={errorFor("mileageKm")}>
+                    <GroupedNumberInput
+                      id={fieldId("mileageKm")}
+                      placeholder="85.000"
+                      trailing="km"
+                      maxDigits={MAX_MILEAGE_DIGITS}
+                      value={draft.mileageKm}
+                      invalid={Boolean(errorFor("mileageKm"))}
+                      aria-describedby={describedBy(fieldId("mileageKm"), { error: errorFor("mileageKm") })}
+                      onBlur={touch("mileageKm")}
+                      onValueChange={(mileageKm) => update({ mileageKm })}
+                    />
+                  </Field>
+                </div>
+              )}
+            </FormCard>
 
-        <Section title="Araç bilgileri">
-          <VehicleFields
-            draft={draft}
-            onChange={setDraft}
-            catalog={catalog}
-            catalogError={catalogError}
-            models={models}
-            disabled={isSubmitting}
-          />
-        </Section>
+            <FormCard title="Özellikler">
+              <div className="flex flex-col gap-5">
+                <Field id={fieldId("bodyType")} label="Kasa tipi" error={errorFor("bodyType")} asGroup>
+                  <ChoiceGroup<BodyType>
+                    id={fieldId("bodyType")}
+                    name="bodyType"
+                    columns={3}
+                    options={BODY_TYPE_OPTIONS}
+                    value={draft.bodyType}
+                    invalid={Boolean(errorFor("bodyType"))}
+                    onChange={(bodyType) => update({ bodyType })}
+                  />
+                </Field>
+                <Field id={fieldId("fuelType")} label="Yakıt türü" error={errorFor("fuelType")} asGroup>
+                  <ChoiceGroup<FuelType>
+                    id={fieldId("fuelType")}
+                    name="fuelType"
+                    columns={3}
+                    options={FUEL_OPTIONS}
+                    value={draft.fuelType}
+                    invalid={Boolean(errorFor("fuelType"))}
+                    onChange={(fuelType) => update({ fuelType })}
+                  />
+                </Field>
+                <Field id={fieldId("transmission")} label="Vites" error={errorFor("transmission")} asGroup>
+                  <ChoiceGroup<TransmissionType>
+                    id={fieldId("transmission")}
+                    name="transmission"
+                    options={TRANSMISSION_OPTIONS}
+                    value={draft.transmission}
+                    invalid={Boolean(errorFor("transmission"))}
+                    onChange={(transmission) => update({ transmission })}
+                  />
+                </Field>
+                <Field id="sell-damageStatus" label="Hasar durumu" asGroup>
+                  <ChoiceGroup<DamageStatus>
+                    id="sell-damageStatus"
+                    name="damageStatus"
+                    options={DAMAGE_OPTIONS}
+                    value={draft.damageStatus}
+                    invalid={false}
+                    onChange={(damageStatus) => update({ damageStatus })}
+                  />
+                </Field>
+              </div>
+            </FormCard>
+          </>
+        ) : current.id === "media" ? (
+          <>
+            <FormCard
+              title="Video"
+              tag={{ label: "Zorunlu", tone: "required" }}
+              description="Alıcılar ilanı akışta bu videoyla görür."
+            >
+              <VideoDropzone
+                id={VIDEO_INPUT_ID}
+                video={video}
+                error={mediaError}
+                disabled={false}
+                maxSeconds={MAX_VIDEO_DURATION_SECONDS}
+                maxBytes={MAX_VIDEO_FILE_BYTES}
+                onPick={handleVideoPick}
+                onRemove={removeVideo}
+              />
+            </FormCard>
+            <FormCard
+              title="Fotoğraflar"
+              tag={{ label: "İsteğe bağlı", tone: "optional" }}
+              description="İlk fotoğraf arama sonuçlarında kapak olur."
+            >
+              <PhotoDropzone
+                id={PHOTOS_INPUT_ID}
+                photos={photos}
+                error={photoError}
+                disabled={false}
+                onPick={handlePhotosPick}
+                onRemove={removePhoto}
+              />
+            </FormCard>
+          </>
+        ) : (
+          <>
+            <FormCard title="Fiyat ve konum">
+              <div className="flex flex-col gap-4">
+                <Field id={fieldId("price")} label="Fiyat" error={errorFor("price")}>
+                  <GroupedNumberInput
+                    id={fieldId("price")}
+                    placeholder="750.000"
+                    leading="₺"
+                    maxDigits={MAX_PRICE_DIGITS}
+                    value={draft.price}
+                    invalid={Boolean(errorFor("price"))}
+                    aria-describedby={describedBy(fieldId("price"), { error: errorFor("price") })}
+                    onBlur={touch("price")}
+                    onValueChange={(price) => update({ price })}
+                    className="text-[18px] font-semibold tabular-nums"
+                  />
+                </Field>
+                <Field id={fieldId("city")} label="Şehir" error={errorFor("city")}>
+                  <TextInput
+                    id={fieldId("city")}
+                    list="sell-city-list"
+                    autoComplete="address-level1"
+                    placeholder="İstanbul"
+                    leading={<MapPin className="h-4 w-4" />}
+                    value={draft.city}
+                    invalid={Boolean(errorFor("city"))}
+                    aria-describedby={describedBy(fieldId("city"), { error: errorFor("city") })}
+                    onBlur={touch("city")}
+                    onChange={(event) => update({ city: event.target.value })}
+                  />
+                  <datalist id="sell-city-list">
+                    {TURKISH_CITIES.map((city) => (
+                      <option key={city} value={city} />
+                    ))}
+                  </datalist>
+                </Field>
+              </div>
+            </FormCard>
 
-        <Section title="İletişim">
-          <ContactField draft={draft} onChange={setDraft} disabled={isSubmitting} />
-        </Section>
+            <FormCard title="Açıklama" tag={{ label: "İsteğe bağlı", tone: "optional" }}>
+              <label htmlFor="sell-description" className="sr-only">
+                Açıklama
+              </label>
+              <textarea
+                id="sell-description"
+                rows={4}
+                placeholder="Bakım geçmişi, ekstralar, değişen parçalar…"
+                value={draft.description}
+                onChange={(event) => update({ description: event.target.value })}
+                className={controlClass(false, "block resize-y px-3.5 py-3 leading-relaxed")}
+              />
+            </FormCard>
+
+            <FormCard title="İletişim">
+              <Field
+                id={fieldId("whatsapp")}
+                label="WhatsApp numarası"
+                error={errorFor("whatsapp")}
+                hint="Alıcılar “WhatsApp'tan yaz” butonuyla bu numaraya ulaşır."
+              >
+                <TextInput
+                  id={fieldId("whatsapp")}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel-national"
+                  placeholder="05XX XXX XX XX"
+                  leading={<Phone className="h-4 w-4" />}
+                  value={draft.whatsapp}
+                  invalid={Boolean(errorFor("whatsapp"))}
+                  aria-describedby={describedBy(fieldId("whatsapp"), { error: errorFor("whatsapp"), hint: true })}
+                  onBlur={touch("whatsapp")}
+                  onChange={(event) => update({ whatsapp: event.target.value })}
+                />
+              </Field>
+            </FormCard>
+
+            <FormCard title="Özet">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[14px]">
+                <dt className="text-[#5B616B]">Araç</dt>
+                <dd className="text-right font-semibold">
+                  {[brandName, modelName, draft.year].filter(Boolean).join(" ") || "—"}
+                </dd>
+                <dt className="text-[#5B616B]">Kilometre</dt>
+                <dd className="text-right font-semibold tabular-nums">
+                  {draft.mileageKm ? `${groupThousands(draft.mileageKm)} km` : "—"}
+                </dd>
+                <dt className="text-[#5B616B]">Fiyat</dt>
+                <dd className="text-right font-semibold tabular-nums">
+                  {draft.price ? `₺${groupThousands(draft.price)}` : "—"}
+                </dd>
+                <dt className="text-[#5B616B]">Medya</dt>
+                <dd className="text-right font-semibold">
+                  {video ? "Video" : "Video yok"}
+                  {photos.length > 0 ? ` · ${photos.length} fotoğraf` : ""}
+                </dd>
+              </dl>
+            </FormCard>
+
+            <p className="px-1 text-[13px] leading-snug text-[#5B616B]">
+              İlanı oluşturarak{" "}
+              <Link href="/terms" className="font-semibold text-[#003399] underline underline-offset-2">
+                Kullanım Koşulları
+              </Link>
+              &apos;nı kabul etmiş olursun. Kurallara aykırı ilanlar yayından kaldırılır.
+            </p>
+          </>
+        )}
 
         <div role="status" aria-live="polite">
           {submitError && (
-            <p className="rounded-md bg-[#FDEDEC] px-3 py-2 text-[14px] text-[#B42318]">
+            <p className="flex items-start gap-2 rounded-xl border border-[#F1C7C3] bg-[#FDEDEC] px-3.5 py-3 text-[14px] text-[#B42318]">
+              <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
               {submitError}
             </p>
           )}
         </div>
 
-        <p className="text-[13px] leading-snug text-[#5B616B]">
-          İlanı yayınlayarak{" "}
-          <Link href="/terms" className="font-semibold text-[#003399] underline underline-offset-2">
-            Kullanım Koşulları
-          </Link>
-          &apos;nı kabul etmiş olursun. Kurallara aykırı ilanlar yayından kaldırılır.
-        </p>
-
-        {/* Mobilde alt gezinme çubuğunun hemen üstünde; güvenli alanı çubuk karşılar */}
-        <div className="fixed inset-x-0 bottom-[var(--bottom-nav-height)] z-30 border-t border-[#E3E6EA] bg-white px-4 pt-3 pb-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto max-w-md">
-            {isSubmitting && (
-              <p className="mb-2 text-center text-[13px] font-medium text-[#5B616B]">
-                {phaseLabel(phase, uploadPercent)}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={isSubmitting || isSessionLoading}
-              aria-busy={isSubmitting}
-              className="h-12 w-full rounded-md bg-[#003399] text-[16px] font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
-            >
-              {isSubmitting ? "Yayınlanıyor…" : "İlanı yayınla"}
-            </button>
-          </div>
-        </div>
+        <SellActionBar
+          stepIndex={step}
+          stepCount={LISTING_STEPS.length}
+          stepTitle={current.title}
+          submitting={isSubmitting}
+          submitPercent={overallSubmitPercent(phase, uploadPercent)}
+          submitLabel={submitPhaseLabel(phase, uploadPercent)}
+          disabled={step === LAST_STEP && isSessionLoading}
+          onBack={() => goToStep(step - 1)}
+        />
       </form>
 
       {showAuthModal && (
@@ -463,23 +810,6 @@ export default function SellPage() {
       )}
     </main>
   );
-}
-
-function phaseLabel(phase: SubmitPhase, uploadPercent: number): string {
-  switch (phase) {
-    case "creating-listing":
-      return "İlan oluşturuluyor…";
-    case "uploading-photos":
-      return "Fotoğraflar yükleniyor…";
-    case "requesting-upload-url":
-      return "Video yüklemesi hazırlanıyor…";
-    case "uploading-video":
-      return `Video yükleniyor… %${uploadPercent}`;
-    case "processing-video":
-      return "Video işleniyor…";
-    default:
-      return "";
-  }
 }
 
 async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<void> {
@@ -513,411 +843,4 @@ function readVideoMeta(url: string): Promise<{ durationSeconds: number; isVertic
     el.onerror = () => reject(new Error("Video meta verisi okunamadı."));
     el.src = url;
   });
-}
-
-// ---------------------------------------------------------------
-// Alt bileşenler
-// ---------------------------------------------------------------
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <h2 className="mb-2 text-[15px] font-semibold">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function VideoPicker({
-  video,
-  error,
-  disabled,
-  onPick,
-}: {
-  video: PickedVideo | null;
-  error: string | null;
-  disabled: boolean;
-  onPick: (file: File | undefined) => void;
-}) {
-  const inputId = useId();
-
-  return (
-    <div>
-      <label
-        htmlFor={inputId}
-        className={`flex aspect-[9/16] w-40 items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-[#C9CED6] bg-white text-center text-[13px] text-[#5B616B] ${
-          disabled ? "pointer-events-none opacity-60" : "cursor-pointer"
-        }`}
-      >
-        {video ? (
-          <video src={video.previewUrl} className="h-full w-full object-cover" muted playsInline />
-        ) : (
-          <span className="px-3">Dikey video seç</span>
-        )}
-      </label>
-      <input
-        id={inputId}
-        type="file"
-        accept="video/*"
-        disabled={disabled}
-        onChange={(event) => onPick(event.target.files?.[0])}
-        className="sr-only"
-      />
-      {error && <p className="mt-2 text-[13px] text-[#B42318]">{error}</p>}
-    </div>
-  );
-}
-
-function PhotoPicker({
-  photos,
-  error,
-  disabled,
-  onPick,
-  onRemove,
-}: {
-  photos: PickedPhoto[];
-  error: string | null;
-  disabled: boolean;
-  onPick: (files: FileList | null) => void;
-  onRemove: (index: number) => void;
-}) {
-  const inputId = useId();
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-2">
-        {photos.map((photo, index) => (
-          <div key={photo.previewUrl} className="relative h-20 w-20 overflow-hidden rounded-md">
-            {/* eslint-disable-next-line @next/next/no-img-element -- yerel object URL, next/image optimize edemez */}
-            <img src={photo.previewUrl} alt="" className="h-full w-full object-cover" />
-            <button
-              type="button"
-              onClick={() => onRemove(index)}
-              disabled={disabled}
-              aria-label="Fotoğrafı kaldır"
-              className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-
-        {photos.length < MAX_PHOTOS && (
-          <label
-            htmlFor={inputId}
-            className={`flex h-20 w-20 items-center justify-center rounded-md border-2 border-dashed border-[#C9CED6] bg-white text-[13px] text-[#5B616B] ${
-              disabled ? "pointer-events-none opacity-60" : "cursor-pointer"
-            }`}
-          >
-            + Ekle
-          </label>
-        )}
-      </div>
-      <input
-        id={inputId}
-        type="file"
-        accept="image/*"
-        multiple
-        disabled={disabled}
-        onChange={(event) => {
-          onPick(event.target.files);
-          event.target.value = "";
-        }}
-        className="sr-only"
-      />
-      {error && <p className="mt-2 text-[13px] text-[#B42318]">{error}</p>}
-    </div>
-  );
-}
-
-function VehicleFields({
-  draft,
-  onChange,
-  catalog,
-  catalogError,
-  models,
-  disabled,
-}: {
-  draft: Draft;
-  onChange: (updater: (d: Draft) => Draft) => void;
-  catalog: Catalog | null;
-  catalogError: boolean;
-  models: Catalog["models"];
-  disabled: boolean;
-}) {
-  const brandId = useId();
-  const modelId = useId();
-  const yearId = useId();
-  const mileageId = useId();
-  const priceId = useId();
-  const cityId = useId();
-  const cityListId = useId();
-  const bodyTypeId = useId();
-  const fuelTypeId = useId();
-  const transmissionLabelId = useId();
-  const damageLabelId = useId();
-  const descriptionId = useId();
-
-  if (catalogError) {
-    return <p className="text-[14px] text-[#B42318]">Marka/model listesi yüklenemedi.</p>;
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor={brandId} className="mb-1.5 block text-[14px] font-semibold">
-            Marka
-          </label>
-          <select
-            id={brandId}
-            value={draft.brandId}
-            disabled={disabled || !catalog}
-            onChange={(event) =>
-              onChange((d) => ({ ...d, brandId: event.target.value, modelId: "" }))
-            }
-            className={fieldClass}
-          >
-            <option value="">Seç</option>
-            {catalog?.brands.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={modelId} className="mb-1.5 block text-[14px] font-semibold">
-            Model
-          </label>
-          <select
-            id={modelId}
-            value={draft.modelId}
-            disabled={disabled || !draft.brandId}
-            onChange={(event) => onChange((d) => ({ ...d, modelId: event.target.value }))}
-            className={fieldClass}
-          >
-            <option value="">{draft.brandId ? "Seç" : "Önce marka seç"}</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor={yearId} className="mb-1.5 block text-[14px] font-semibold">
-            Yıl
-          </label>
-          <input
-            id={yearId}
-            inputMode="numeric"
-            placeholder="2019"
-            disabled={disabled}
-            value={draft.year}
-            onChange={(event) =>
-              onChange((d) => ({ ...d, year: onlyDigits(event.target.value).slice(0, 4) }))
-            }
-            className={fieldClass}
-          />
-        </div>
-        <div>
-          <label htmlFor={mileageId} className="mb-1.5 block text-[14px] font-semibold">
-            Kilometre
-          </label>
-          <input
-            id={mileageId}
-            inputMode="numeric"
-            placeholder="85.000"
-            disabled={disabled}
-            value={draft.mileageKm}
-            onChange={(event) => onChange((d) => ({ ...d, mileageKm: onlyDigits(event.target.value) }))}
-            className={fieldClass}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor={priceId} className="mb-1.5 block text-[14px] font-semibold">
-          Fiyat (₺)
-        </label>
-        <input
-          id={priceId}
-          inputMode="numeric"
-          placeholder="750.000"
-          disabled={disabled}
-          value={draft.price}
-          onChange={(event) => onChange((d) => ({ ...d, price: onlyDigits(event.target.value) }))}
-          className={fieldClass}
-        />
-      </div>
-
-      <div>
-        <label htmlFor={cityId} className="mb-1.5 block text-[14px] font-semibold">
-          Şehir
-        </label>
-        <input
-          id={cityId}
-          list={cityListId}
-          disabled={disabled}
-          value={draft.city}
-          onChange={(event) => onChange((d) => ({ ...d, city: event.target.value }))}
-          className={fieldClass}
-        />
-        <datalist id={cityListId}>
-          {TURKISH_CITIES.map((city) => (
-            <option key={city} value={city} />
-          ))}
-        </datalist>
-      </div>
-
-      <div>
-        <label htmlFor={bodyTypeId} className="mb-1.5 block text-[14px] font-semibold">
-          Kasa tipi
-        </label>
-        <select
-          id={bodyTypeId}
-          value={draft.bodyType}
-          disabled={disabled}
-          onChange={(event) => onChange((d) => ({ ...d, bodyType: event.target.value as BodyType }))}
-          className={fieldClass}
-        >
-          <option value="">Seç</option>
-          {BODY_TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor={fuelTypeId} className="mb-1.5 block text-[14px] font-semibold">
-            Yakıt türü
-          </label>
-          <select
-            id={fuelTypeId}
-            value={draft.fuelType}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange((d) => ({ ...d, fuelType: event.target.value as FuelType }))
-            }
-            className={fieldClass}
-          >
-            <option value="">Seç</option>
-            {FUEL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <span id={transmissionLabelId} className="mb-1.5 block text-[14px] font-semibold">
-            Vites
-          </span>
-          <div role="group" aria-labelledby={transmissionLabelId} className="flex gap-2">
-            {TRANSMISSION_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                disabled={disabled}
-                onClick={() => onChange((d) => ({ ...d, transmission: option.value }))}
-                aria-pressed={draft.transmission === option.value}
-                className={`h-12 flex-1 rounded-md border text-[14px] font-semibold ${
-                  draft.transmission === option.value
-                    ? "border-[#003399] bg-[#EAEFF7] text-[#003399]"
-                    : "border-[#C9CED6] bg-white text-[#15181C]"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <span id={damageLabelId} className="mb-1.5 block text-[14px] font-semibold">
-          Hasar durumu
-        </span>
-        <div role="group" aria-labelledby={damageLabelId} className="flex gap-2">
-          {(
-            [
-              { value: "none", label: "Hasarsız / hafif" },
-              { value: "heavy", label: "Ağır hasarlı" },
-            ] as const
-          ).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              disabled={disabled}
-              onClick={() => onChange((d) => ({ ...d, damageStatus: option.value }))}
-              aria-pressed={draft.damageStatus === option.value}
-              className={`h-11 flex-1 rounded-md border text-[14px] font-semibold ${
-                draft.damageStatus === option.value
-                  ? "border-[#003399] bg-[#EAEFF7] text-[#003399]"
-                  : "border-[#C9CED6] bg-white text-[#15181C]"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor={descriptionId} className="mb-1.5 block text-[14px] font-semibold">
-          Açıklama
-        </label>
-        <textarea
-          id={descriptionId}
-          rows={4}
-          placeholder="Aracınla ilgili eklemek istediklerin…"
-          disabled={disabled}
-          value={draft.description}
-          onChange={(event) => onChange((d) => ({ ...d, description: event.target.value }))}
-          className="w-full rounded-md border border-[#C9CED6] bg-white px-3 py-2.5 text-base text-[#15181C] disabled:bg-[#EEF0F3] focus-visible:border-[#003399] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]/30"
-        />
-      </div>
-    </div>
-  );
-}
-
-function ContactField({
-  draft,
-  onChange,
-  disabled,
-}: {
-  draft: Draft;
-  onChange: (updater: (d: Draft) => Draft) => void;
-  disabled: boolean;
-}) {
-  const whatsappId = useId();
-
-  return (
-    <div>
-      <label htmlFor={whatsappId} className="mb-1.5 block text-[14px] font-semibold">
-        WhatsApp numarası
-      </label>
-      <input
-        id={whatsappId}
-        type="tel"
-        inputMode="tel"
-        placeholder="05XX XXX XX XX"
-        disabled={disabled}
-        value={draft.whatsapp}
-        onChange={(event) => onChange((d) => ({ ...d, whatsapp: event.target.value }))}
-        className={fieldClass}
-      />
-      <p className="mt-1.5 text-[13px] text-[#5B616B]">
-        Alıcılar &quot;WhatsApp&apos;tan yaz&quot; butonuyla bu numaraya ulaşır.
-      </p>
-    </div>
-  );
 }

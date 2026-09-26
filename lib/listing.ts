@@ -57,6 +57,78 @@ export function validateListingDraft(draft: ListingDraft, now: Date = new Date()
   return null;
 }
 
+// ---------------------------------------------------------------
+// Adımlı form: alan hataları, adımlar ve sayı biçimi
+// ---------------------------------------------------------------
+
+/** Doğrulanan alanlar (hasar durumu ve açıklama her zaman geçerlidir) */
+export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "description">;
+export type ListingFieldErrors = Partial<Record<ListingField, string>>;
+
+/**
+ * Her alanın kendi hatası; form, mesajı alanın hemen altında gösterir.
+ * Kurallar validateListingDraft ile aynıdır (lib/listing.test.ts ikisini
+ * karşılaştırır); son kapı yine validateListingDraft / buildListingRecords.
+ */
+export function listingFieldErrors(draft: ListingDraft, now: Date = new Date()): ListingFieldErrors {
+  const errors: ListingFieldErrors = {};
+  const maxYear = now.getFullYear() + 1;
+  const year = Number(draft.year);
+
+  if (!draft.brandId) errors.brandId = "Marka seç.";
+  if (!draft.modelId) errors.modelId = draft.brandId ? "Model seç." : "Önce marka seç.";
+  if (!year || year < MIN_YEAR || year > maxYear) errors.year = `${MIN_YEAR}–${maxYear} arasında bir yıl gir.`;
+  if (!onlyDigits(draft.mileageKm)) errors.mileageKm = "Kilometreyi gir.";
+  if (!onlyDigits(draft.price)) errors.price = "Fiyatı gir.";
+  if (!draft.city.trim()) errors.city = "Şehir seç ya da yaz.";
+  if (!draft.bodyType) errors.bodyType = "Kasa tipi seç.";
+  if (!draft.fuelType) errors.fuelType = "Yakıt türü seç.";
+  if (!draft.transmission) errors.transmission = "Vites tipi seç.";
+  if (!normalizeTurkishPhone(draft.whatsapp)) errors.whatsapp = "Geçerli bir WhatsApp numarası gir.";
+  return errors;
+}
+
+export type ListingStepId = "vehicle" | "media" | "details";
+
+/** İlan verme adımları; doğrulanan her alan tam olarak bir adımda yer alır. */
+export const LISTING_STEPS: readonly { id: ListingStepId; title: string; fields: readonly ListingField[] }[] = [
+  {
+    id: "vehicle",
+    title: "Araç Bilgileri",
+    fields: ["brandId", "modelId", "year", "mileageKm", "bodyType", "fuelType", "transmission"],
+  },
+  // Video zorunluluğu dosya seçimine bağlı; formda ayrıca denetlenir
+  { id: "media", title: "Medya & Video", fields: [] },
+  { id: "details", title: "Fiyat & Detaylar", fields: ["price", "city", "whatsapp"] },
+];
+
+/** Hataların yalnızca bu adımdaki alanlara ait olanları */
+export function stepFieldErrors(stepIndex: number, errors: ListingFieldErrors): ListingFieldErrors {
+  const result: ListingFieldErrors = {};
+  for (const field of LISTING_STEPS[stepIndex]?.fields ?? []) {
+    if (errors[field]) result[field] = errors[field];
+  }
+  return result;
+}
+
+/** Rakamları binlik ayraçla yazar: "1250000" → "1.250.000" (Number'a çevirmeden, hassasiyet kaybı yok) */
+export function groupThousands(digits: string): string {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
+ * Biçimlenmiş metinde, baştan `digitCount` rakamın hemen sonrasındaki imleç
+ * konumu. Kullanıcı ortadan bir rakam silince imleç sona kaçmasın diye.
+ */
+export function caretAfterDigits(formatted: string, digitCount: number): number {
+  if (digitCount <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < formatted.length; i += 1) {
+    if (/\d/.test(formatted[i]) && ++seen === digitCount) return i + 1;
+  }
+  return formatted.length;
+}
+
 export type VehicleInsert = {
   seller_id: string;
   brand_id: string;

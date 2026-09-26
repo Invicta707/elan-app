@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  EMPTY_LISTING_DRAFT,
+  LISTING_STEPS,
   MAX_PHOTO_BYTES,
   buildListingRecords,
   buildVehicleImageRow,
+  caretAfterDigits,
+  groupThousands,
+  listingFieldErrors,
   photoRejection,
   photoStoragePath,
+  stepFieldErrors,
   validateListingDraft,
   type ListingDraft,
+  type ListingField,
 } from "./listing";
 
 const NOW = new Date("2026-09-25T12:00:00Z");
@@ -144,5 +151,91 @@ describe("fotoğraf kayıtları", () => {
       display_order: 2,
       is_primary: false,
     });
+  });
+});
+
+describe("listingFieldErrors", () => {
+  const cases: Partial<ListingDraft>[] = [
+    {},
+    { brandId: "" },
+    { modelId: "" },
+    { year: "" },
+    { year: "1969" },
+    { year: "2028" },
+    { year: "2027" },
+    { mileageKm: "" },
+    { price: "" },
+    { city: "   " },
+    { bodyType: "" },
+    { fuelType: "" },
+    { transmission: "" },
+    { whatsapp: "12345" },
+    { brandId: "", price: "", whatsapp: "" },
+  ];
+
+  it.each(cases)("validateListingDraft ile aynı kararı verir: %j", (change) => {
+    const draft = { ...validDraft, ...change };
+    const fieldErrors = listingFieldErrors(draft, NOW);
+    expect(Object.keys(fieldErrors).length === 0).toBe(validateListingDraft(draft, NOW) === null);
+  });
+
+  it("her hatalı alan kendi mesajını alır", () => {
+    expect(listingFieldErrors({ ...validDraft, brandId: "", modelId: "", year: "1969", city: " " }, NOW)).toEqual({
+      brandId: "Marka seç.",
+      modelId: "Önce marka seç.",
+      year: "1970–2027 arasında bir yıl gir.",
+      city: "Şehir seç ya da yaz.",
+    });
+    expect(listingFieldErrors({ ...validDraft, modelId: "" }, NOW)).toEqual({ modelId: "Model seç." });
+  });
+
+  it("boş taslakta açıklama ve hasar dışındaki bütün alanlar hatalı", () => {
+    expect(Object.keys(listingFieldErrors(EMPTY_LISTING_DRAFT, NOW)).sort()).toEqual(
+      ["brandId", "city", "fuelType", "mileageKm", "modelId", "price", "transmission", "whatsapp", "year", "bodyType"].sort(),
+    );
+  });
+});
+
+describe("LISTING_STEPS", () => {
+  it("doğrulanan her alan tam olarak bir adımda", () => {
+    const all = Object.keys(listingFieldErrors(EMPTY_LISTING_DRAFT, NOW)) as ListingField[];
+    const inSteps = LISTING_STEPS.flatMap((step) => step.fields);
+    expect([...inSteps].sort()).toEqual([...all].sort());
+    expect(new Set(inSteps).size).toBe(inSteps.length);
+  });
+
+  it("adım sırası: araç, medya, fiyat ve detaylar", () => {
+    expect(LISTING_STEPS.map((s) => s.title)).toEqual(["Araç Bilgileri", "Medya & Video", "Fiyat & Detaylar"]);
+  });
+
+  it("stepFieldErrors yalnızca o adımın hatalarını döner", () => {
+    const errors = listingFieldErrors({ ...validDraft, brandId: "", price: "" }, NOW);
+    expect(Object.keys(stepFieldErrors(0, errors))).toEqual(["brandId"]);
+    expect(stepFieldErrors(1, errors)).toEqual({});
+    expect(Object.keys(stepFieldErrors(2, errors))).toEqual(["price"]);
+    expect(stepFieldErrors(9, errors)).toEqual({});
+  });
+});
+
+describe("groupThousands / caretAfterDigits", () => {
+  it.each([
+    ["", ""],
+    ["5", "5"],
+    ["850", "850"],
+    ["8500", "8.500"],
+    ["750000", "750.000"],
+    ["1250000", "1.250.000"],
+    ["999999999999", "999.999.999.999"],
+  ])("%s → %s", (digits, formatted) => {
+    expect(groupThousands(digits)).toBe(formatted);
+  });
+
+  it("imleç, sayılan rakamın hemen sonrasına gelir; ayraçlar atlanır", () => {
+    expect(caretAfterDigits("1.250.000", 0)).toBe(0);
+    expect(caretAfterDigits("1.250.000", 1)).toBe(1);
+    expect(caretAfterDigits("1.250.000", 2)).toBe(3);
+    expect(caretAfterDigits("1.250.000", 4)).toBe(5);
+    expect(caretAfterDigits("1.250.000", 7)).toBe(9);
+    expect(caretAfterDigits("1.250.000", 99)).toBe(9);
   });
 });
