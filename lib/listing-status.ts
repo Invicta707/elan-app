@@ -69,7 +69,16 @@ function actionFor(from: VehicleStatus, target: VehicleStatus): StatusAction {
   }
 }
 
-/** Bu durumdaki bir ilan için gösterilecek aksiyonlar. */
-export function statusActions(status: VehicleStatus): StatusAction[] {
-  return OWNER_TRANSITIONS[status].map((target) => actionFor(status, target));
+/**
+ * Bu durumdaki bir ilan için gösterilecek aksiyonlar. İşlenmiş videosu olmayan
+ * ilan yayına alınamaz (veritabanında fn_check_vehicle_publishable, bkz.
+ * *_harden_listing_rls.sql); o buton hiç gösterilmez.
+ */
+export function statusActions(
+  status: VehicleStatus,
+  { hasPlayableVideo }: { hasPlayableVideo: boolean },
+): StatusAction[] {
+  return OWNER_TRANSITIONS[status]
+    .filter((target) => target !== "active" || hasPlayableVideo)
+    .map((target) => actionFor(status, target));
 }

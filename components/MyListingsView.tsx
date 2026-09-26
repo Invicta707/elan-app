@@ -8,6 +8,7 @@ import FeedHeader from "./FeedHeader";
 import { useSupabaseSession } from "../lib/auth";
 import {
   STATUS_LABELS,
+  canTransition,
   statusActions,
   type StatusAction,
   type VehicleStatus,
@@ -182,7 +183,9 @@ function ListingCard({
     }
   }
 
-  const actions = statusActions(listing.status);
+  const actions = statusActions(listing.status, { hasPlayableVideo: listing.hasPlayableVideo });
+  // Yayına alma butonu videosu işlenmemiş ilanda gizli; nedenini söyle
+  const waitsForVideo = canTransition(listing.status, "active") && !listing.hasPlayableVideo;
 
   return (
     <article className="rounded-lg border border-[#E3E6EA] bg-white p-3">
@@ -225,6 +228,10 @@ function ListingCard({
       <div role="status" aria-live="polite">
         {error && <p className="mt-2 rounded-md bg-[#FDEDEC] px-3 py-2 text-[13px] text-[#B42318]">{error}</p>}
       </div>
+
+      {waitsForVideo && (
+        <p className="mt-2 text-[13px] text-[#5B616B]">Yayına almak için videonun işlenmesi gerekiyor.</p>
+      )}
 
       {confirming ? (
         <div className="mt-3 rounded-md bg-[#FDEDEC] p-3">

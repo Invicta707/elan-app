@@ -9,6 +9,32 @@ import {
   type VehicleStatus,
 } from "./listing-status";
 
+const RPC_MIGRATION = "20260925150000_set_vehicle_status_rpc.sql";
+// Tabloya doğrudan yazan istekleri denetleyen tetikleyici; davranışı lib/listing-rls.test.ts sınar
+const GUARD_MIGRATION = "20260926170000_harden_listing_rls.sql";
+
+function readMigration(name: string): string {
+  return readFileSync(`supabase/migrations/${name}`, "utf8");
+}
+
+/** SQL'deki `case ... when '<durum>' then array[...]` tablosu */
+function transitionsFromSql(sql: string): Partial<Record<VehicleStatus, string[]>> {
+  const table: Partial<Record<VehicleStatus, string[]>> = {};
+  for (const [, from, list] of sql.matchAll(/when '(\w+)'\s+then array\[([^\]]*)\]/g)) {
+    table[from as VehicleStatus] = [...list.matchAll(/'(\w+)'/g)].map((m) => m[1]);
+  }
+  return table;
+}
+
+function expectSameAsOwnerTransitions(sql: string) {
+  const fromSql = transitionsFromSql(sql);
+  expect(Object.keys(fromSql).length).toBeGreaterThan(0);
+  for (const status of VEHICLE_STATUSES) {
+    // SQL'de listelenmeyen durum "else array[]" dalına düşer: geçiş yok
+    expect([...(fromSql[status] ?? [])].sort()).toEqual([...OWNER_TRANSITIONS[status]].sort());
+  }
+}
+
 describe("OWNER_TRANSITIONS", () => {
   it.each<[VehicleStatus, VehicleStatus[]]>([
     ["active", ["sold", "archived"]],
@@ -44,21 +70,19 @@ describe("OWNER_TRANSITIONS", () => {
   });
 
   it("veritabanındaki set_vehicle_status ile aynı tablo", () => {
-    const sql = readFileSync("supabase/migrations/20260925150000_set_vehicle_status_rpc.sql", "utf8");
-    const fromSql: Partial<Record<VehicleStatus, string[]>> = {};
-    for (const [, from, list] of sql.matchAll(/when '(\w+)'\s+then array\[([^\]]*)\]/g)) {
-      fromSql[from as VehicleStatus] = [...list.matchAll(/'(\w+)'/g)].map((m) => m[1]);
-    }
-    for (const status of VEHICLE_STATUSES) {
-      // SQL'de listelenmeyen durum "else array[]" dalına düşer: geçiş yok
-      expect([...(fromSql[status] ?? [])].sort()).toEqual([...OWNER_TRANSITIONS[status]].sort());
-    }
+    expectSameAsOwnerTransitions(readMigration(RPC_MIGRATION));
+  });
+
+  it("tabloya doğrudan yazan istekleri denetleyen tetikleyiciyle aynı tablo", () => {
+    expectSameAsOwnerTransitions(readMigration(GUARD_MIGRATION));
   });
 });
 
 describe("statusActions", () => {
+  const withVideo = { hasPlayableVideo: true };
+
   it("yayındaki ilan: satıldı (onaylı) ve yayından kaldır", () => {
-    expect(statusActions("active")).toEqual([
+    expect(statusActions("active", withVideo)).toEqual([
       {
         target: "sold",
         label: "Satıldı olarak işaretle",
@@ -70,24 +94,36 @@ describe("statusActions", () => {
   });
 
   it("yayından kaldırılmış ilan: yayına al ve satıldı", () => {
-    expect(statusActions("archived").map((a) => [a.target, a.label])).toEqual([
+    expect(statusActions("archived", withVideo).map((a) => [a.target, a.label])).toEqual([
       ["active", "Yayına al"],
       ["sold", "Satıldı olarak işaretle"],
     ]);
   });
 
+  it("videosu işlenmemiş ilan yayına alınamaz; diğer aksiyonlar kalır", () => {
+    const noVideo = { hasPlayableVideo: false };
+    expect(statusActions("archived", noVideo).map((a) => a.target)).toEqual(["sold"]);
+    for (const status of VEHICLE_STATUSES) {
+      expect(statusActions(status, noVideo).map((a) => a.target)).toEqual(
+        statusActions(status, withVideo)
+          .map((a) => a.target)
+          .filter((target) => target !== "active"),
+      );
+    }
+  });
+
   it("hiç yayınlanmamış ilan geri çekilebilir", () => {
-    expect(statusActions("pending_video").map((a) => a.label)).toEqual(["İlanı geri çek"]);
-    expect(statusActions("draft").map((a) => a.label)).toEqual(["İlanı geri çek"]);
+    expect(statusActions("pending_video", withVideo).map((a) => a.label)).toEqual(["İlanı geri çek"]);
+    expect(statusActions("draft", withVideo).map((a) => a.label)).toEqual(["İlanı geri çek"]);
   });
 
   it("satılan ilanda aksiyon yok", () => {
-    expect(statusActions("sold")).toEqual([]);
+    expect(statusActions("sold", withVideo)).toEqual([]);
   });
 
   it("geri alınamayan tek işlem onay ister", () => {
     for (const status of VEHICLE_STATUSES) {
-      for (const action of statusActions(status)) {
+      for (const action of statusActions(status, withVideo)) {
         expect(action.confirm !== null).toBe(action.target === "sold");
       }
     }
