@@ -52,6 +52,8 @@ export default function AuthGatedLink({ href, className, children, ...aria }: Au
               setShowAuth(false);
               router.push(href);
             }}
+            // Google ile girişte sayfadan çıkılır; dönüşte doğrudan hedefe gidilir
+            oauthReturnTo={href}
           />,
           document.body,
         )}
@@ -64,7 +66,11 @@ export default function AuthGatedLink({ href, className, children, ...aria }: Au
  * içinde çizilen pencere tıklanamazdı. Yazı tipleri sayfanın <main>'inden
  * gelmediği için burada verilir.
  */
-export function AuthModalPortal(props: { onClose: () => void; onAuthenticated: () => void }) {
+export function AuthModalPortal(props: {
+  onClose: () => void;
+  onAuthenticated: () => void;
+  oauthReturnTo?: string;
+}) {
   return (
     <div className={`${displayFont.variable} ${bodyFont.variable} [font-family:var(--font-body)]`}>
       <AuthModal {...props} />

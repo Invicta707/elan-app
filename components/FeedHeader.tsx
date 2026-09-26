@@ -39,8 +39,8 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
           aria-label="gözüyle ana sayfa"
           className={`pointer-events-auto flex h-11 items-center justify-self-start rounded-sm px-1 ${focusRing(overlay)}`}
         >
-          {/* Sadece göz simgesi; renk başlıktan gelir (akışta beyaz, açık sayfalarda koyu) */}
-          <Logo className="h-7" showText={false} />
+          {/* Sadece göz simgesi (36px, dikeyde ortalı); renk başlıktan gelir (akışta beyaz, açık sayfalarda koyu) */}
+          <Logo className="h-9" iconClassName="h-9 w-9" showText={false} />
         </Link>
 
         <nav aria-label="Ana gezinme" className="pointer-events-auto flex items-center gap-6">
@@ -56,7 +56,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
             ortada kalması için yan sütunlar alanı eşit paylaşır. Sağ sütun bu
             yüzden genişliğe göre küçülür (eşikler logo + sekmeler + butonların
             ölçülmüş genişliğine göre): dar başlıkta "İlan Ver" yuvarlak "+"
-            ikonuna döner; masaüstünde ≈580px'ten kısa pencerede kalp, ≈490px'ten
+            ikonuna döner; masaüstünde ≈600px'ten kısa pencerede kalp, ≈510px'ten
             kısada "+" gizlenir. Profil her zaman görünür. Butonlar asla alt
             satıra kırılmaz. Mobilde kalp ve "+" alt gezinme çubuğunda. */}
         <div className="flex items-center justify-self-end gap-2">
@@ -64,7 +64,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
             href="/favorites"
             aria-label="Favorilerim"
             aria-current={activeTab === "favorites" ? "page" : undefined}
-            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[19rem]:flex ${
+            className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:@min-[19.75rem]:flex ${
               overlay ? "bg-black/35" : "bg-white"
             } ${focusRing(overlay)}`}
           >
@@ -80,7 +80,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay" }: Fee
             <AuthGatedLink
               href="/sell"
               aria-label="İlan Ver"
-              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[15px] font-semibold md:inline-flex md:@max-[15.75rem]:hidden @min-[32.5rem]:w-auto @min-[32.5rem]:px-4 ${
+              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[15px] font-semibold md:inline-flex md:@max-[16.5rem]:hidden @min-[32.5rem]:w-auto @min-[32.5rem]:px-4 ${
                 overlay
                   ? "border border-white/40 bg-black/35 text-white"
                   : "border border-[#15181C] bg-white text-[#15181C]"

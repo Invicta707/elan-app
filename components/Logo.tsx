@@ -4,8 +4,11 @@
 export default function Logo({
   className = "h-7 text-white",
   showText = true,
+  iconClassName = "h-6 w-6",
 }: {
   className?: string;
+  /** Göz simgesinin boyutu */
+  iconClassName?: string;
   /** false: sadece göz simgesi (üst çubuk). Erişilebilir ad kullanıldığı yerde verilir. */
   showText?: boolean;
 }) {
@@ -13,7 +16,7 @@ export default function Logo({
     <div className={`flex items-center gap-2.5 font-bold tracking-tight select-none ${className}`}>
       <svg
         viewBox="0 0 100 100"
-        className="h-6 w-6 flex-shrink-0"
+        className={`${iconClassName} flex-shrink-0`}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { AUTH_CALLBACK_PATH, AUTH_RETURN_KEY, safeReturnPath } from "../lib/auth-redirect";
 import { supabase } from "../lib/supabase";
 
 type AuthMode = "login" | "signup" | "magic";
@@ -11,11 +12,16 @@ type AuthModalProps = {
   onClose: () => void;
   /** Giriş/kayıt başarıyla tamamlanınca çağrılır (supabase istemcisindeki oturum zaten güncel) */
   onAuthenticated?: () => void;
+  /**
+   * Google ile girişte, dönüşte gidilecek site içi yol (ör. "+ İlan Ver" için "/sell").
+   * Verilmezse pencerenin açıldığı sayfaya dönülür.
+   */
+  oauthReturnTo?: string;
 };
 
-// Supabase Auth ile çalışan sade giriş/kayıt modalı: e-posta+şifre ya da
+// Supabase Auth ile çalışan sade giriş/kayıt modalı: Google, e-posta+şifre ya da
 // şifresiz "magic link". FilterSheet ile aynı alttan açılan dialog deseni.
-export default function AuthModal({ onClose, onAuthenticated }: AuthModalProps) {
+export default function AuthModal({ onClose, onAuthenticated, oauthReturnTo }: AuthModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const emailId = useId();
@@ -26,6 +32,8 @@ export default function AuthModal({ onClose, onAuthenticated }: AuthModalProps) 
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Google'a yönlendirme başladı (e-posta girişinin "loading" durumundan ayrı etiket için)
+  const [isGoogleRedirecting, setGoogleRedirecting] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -42,6 +50,33 @@ export default function AuthModal({ onClose, onAuthenticated }: AuthModalProps) 
 
   function close() {
     dialogRef.current?.close();
+  }
+
+  // Google'a gidilir, dönüşte /auth/callback oturumu işleyip kullanıcıyı geri getirir
+  async function handleGoogle() {
+    if (status === "loading") return;
+    setStatus("loading");
+    setGoogleRedirecting(true);
+    setErrorMessage(null);
+    try {
+      sessionStorage.setItem(
+        AUTH_RETURN_KEY,
+        safeReturnPath(oauthReturnTo ?? `${window.location.pathname}${window.location.search}`),
+      );
+    } catch {
+      // Depolama engelli: dönüşte ana sayfaya gidilir
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}${AUTH_CALLBACK_PATH}` },
+    });
+    if (error) {
+      setStatus("error");
+      setGoogleRedirecting(false);
+      setErrorMessage(translateAuthError(error.message));
+    }
+    // Başarılıysa tarayıcı Google'a gider; sayfa değişene kadar buton "Yönlendiriliyor…" kalır
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -127,99 +162,117 @@ export default function AuthModal({ onClose, onAuthenticated }: AuthModalProps) 
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div>
-                <label htmlFor={emailId} className="mb-1.5 block text-[14px] font-semibold">
-                  E-posta
-                </label>
-                <input
-                  id={emailId}
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className={fieldClass}
-                />
+            <div className="flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={handleGoogle}
+                disabled={status === "loading"}
+                className="flex h-12 items-center justify-center gap-3 rounded-md border border-[#C9CED6] bg-white px-4 text-[16px] font-semibold text-[#15181C] hover:bg-[#F7F8FA] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+              >
+                <GoogleIcon className="h-5 w-5 shrink-0" />
+                {isGoogleRedirecting ? "Yönlendiriliyor…" : "Google ile devam et"}
+              </button>
+
+              <div className="flex items-center gap-3 text-[13px] text-[#5B616B]">
+                <span aria-hidden="true" className="h-px flex-1 bg-[#E3E6EA]" />
+                veya
+                <span aria-hidden="true" className="h-px flex-1 bg-[#E3E6EA]" />
               </div>
 
-              {!isMagic && (
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div>
-                  <label htmlFor={passwordId} className="mb-1.5 block text-[14px] font-semibold">
-                    Şifre
+                  <label htmlFor={emailId} className="mb-1.5 block text-[14px] font-semibold">
+                    E-posta
                   </label>
                   <input
-                    id={passwordId}
-                    type="password"
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    id={emailId}
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
                     required
-                    minLength={6}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                     className={fieldClass}
                   />
                 </div>
-              )}
 
-              <div role="status" aria-live="polite">
-                {errorMessage && <p className="text-[13px] text-[#B42318]">{errorMessage}</p>}
-              </div>
-
-              <button
-                type="submit"
-                disabled={status === "loading"}
-                aria-busy={status === "loading"}
-                className="h-12 rounded-md bg-[#003399] text-[16px] font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
-              >
-                {status === "loading"
-                  ? "Gönderiliyor…"
-                  : isMagic
-                    ? "Bağlantı gönder"
-                    : mode === "signup"
-                      ? "Hesap oluştur"
-                      : "Giriş yap"}
-              </button>
-
-              <div className="flex flex-col items-center gap-2 pt-1 text-[14px]">
                 {!isMagic && (
+                  <div>
+                    <label htmlFor={passwordId} className="mb-1.5 block text-[14px] font-semibold">
+                      Şifre
+                    </label>
+                    <input
+                      id={passwordId}
+                      type="password"
+                      autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+                )}
+
+                <div role="status" aria-live="polite">
+                  {errorMessage && <p className="text-[13px] text-[#B42318]">{errorMessage}</p>}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={status === "loading"}
+                  aria-busy={status === "loading"}
+                  className="h-12 rounded-md bg-[#003399] text-[16px] font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+                >
+                  {status === "loading"
+                    ? "Gönderiliyor…"
+                    : isMagic
+                      ? "Bağlantı gönder"
+                      : mode === "signup"
+                        ? "Hesap oluştur"
+                        : "Giriş yap"}
+                </button>
+
+                <div className="flex flex-col items-center gap-2 pt-1 text-[14px]">
+                  {!isMagic && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode(mode === "signup" ? "login" : "signup");
+                        setErrorMessage(null);
+                      }}
+                      className="rounded-sm font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+                    >
+                      {mode === "signup"
+                        ? "Zaten hesabın var mı? Giriş yap"
+                        : "Hesabın yok mu? Kayıt ol"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
-                      setMode(mode === "signup" ? "login" : "signup");
+                      setMode(isMagic ? "login" : "magic");
                       setErrorMessage(null);
                     }}
-                    className="rounded-sm font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+                    className="rounded-sm text-[#5B616B] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
                   >
-                    {mode === "signup"
-                      ? "Zaten hesabın var mı? Giriş yap"
-                      : "Hesabın yok mu? Kayıt ol"}
+                    {isMagic ? "Şifreyle giriş yap" : "Şifresiz, e-posta bağlantısıyla giriş yap"}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode(isMagic ? "login" : "magic");
-                    setErrorMessage(null);
-                  }}
-                  className="rounded-sm text-[#5B616B] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
-                >
-                  {isMagic ? "Şifreyle giriş yap" : "Şifresiz, e-posta bağlantısıyla giriş yap"}
-                </button>
-              </div>
+                </div>
 
-              <p className="text-center text-[12px] leading-snug text-[#5B616B]">
-                Devam ederek{" "}
-                <Link href="/terms" className="font-semibold text-[#003399] underline underline-offset-2">
-                  Kullanım Koşulları
-                </Link>
-                &apos;nı ve{" "}
-                <Link href="/privacy" className="font-semibold text-[#003399] underline underline-offset-2">
-                  Gizlilik Politikası
-                </Link>
-                &apos;nı kabul etmiş olursun.
-              </p>
-            </form>
+                <p className="text-center text-[12px] leading-snug text-[#5B616B]">
+                  Devam ederek{" "}
+                  <Link href="/terms" className="font-semibold text-[#003399] underline underline-offset-2">
+                    Kullanım Koşulları
+                  </Link>
+                  &apos;nı ve{" "}
+                  <Link href="/privacy" className="font-semibold text-[#003399] underline underline-offset-2">
+                    Gizlilik Politikası
+                  </Link>
+                  &apos;nı kabul etmiş olursun.
+                </p>
+              </form>
+            </div>
           )}
         </div>
       </div>
@@ -255,6 +308,30 @@ function CloseIcon({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+// Google'ın resmî çok renkli "G" işareti (marka yönergelerindeki renkler)
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
     </svg>
   );
 }
