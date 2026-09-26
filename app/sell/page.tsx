@@ -9,11 +9,11 @@ import {
   ChoiceGroup,
   Field,
   GroupedNumberInput,
-  SelectInput,
   TextInput,
   controlClass,
   describedBy,
 } from "../../components/sell/FormControls";
+import { CatalogCombobox } from "../../components/sell/CatalogCombobox";
 import { PhotoDropzone, VideoDropzone } from "../../components/sell/MediaPickers";
 import {
   FormCard,
@@ -24,6 +24,7 @@ import {
 } from "../../components/sell/SellChrome";
 import type { PickedPhoto, PickedVideo } from "../../components/sell/types";
 import { useSupabaseSession } from "../../lib/auth";
+import { MAX_BRAND_NAME, MAX_MODEL_NAME } from "../../lib/catalog-search";
 import type { FuelType, TransmissionType } from "../../lib/feed";
 import {
   EMPTY_LISTING_DRAFT,
@@ -32,6 +33,8 @@ import {
   PHOTO_BUCKET,
   buildListingRecords,
   buildVehicleImageRow,
+  catalogIds,
+  catalogRpcArgs,
   groupThousands,
   listingFieldErrors,
   onlyDigits,
@@ -39,6 +42,7 @@ import {
   photoStoragePath,
   stepFieldErrors,
   validateListingDraft,
+  type CatalogSelection,
   type DamageStatus,
   type ListingDraft as Draft,
   type ListingField,
@@ -110,6 +114,8 @@ export default function SellPage() {
   const [step, setStep] = useState(0);
   const [attempted, setAttempted] = useState<boolean[]>(() => LISTING_STEPS.map(() => false));
   const [touched, setTouched] = useState<Partial<Record<ListingField, boolean>>>({});
+  // Marka/model kutusuna yazılıp listeden seçilmemiş metin (hata metninde anılır)
+  const [pending, setPending] = useState<{ brand: string | null; model: string | null }>({ brand: null, model: null });
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [phase, setPhase] = useState<SubmitPhase>("idle");
@@ -176,8 +182,13 @@ export default function SellPage() {
   }
 
   function errorFor(field: ListingField): string | null {
-    return attempted[STEP_OF_FIELD[field]] || touched[field] ? (fieldErrors[field] ?? null) : null;
+    if (!(attempted[STEP_OF_FIELD[field]] || touched[field])) return null;
+    const error = fieldErrors[field] ?? null;
+    const typed = field === "brandId" ? pending.brand : field === "modelId" ? pending.model : null;
+    return error && typed ? `Listeden seç ya da “${typed.trim()}” olarak kullan.` : error;
   }
+
+  const hasBrand = Boolean(draft.brandId || draft.brandName);
 
   const touch = (field: ListingField) => () => setTouched((t) => (t[field] ? t : { ...t, [field]: true }));
   const update = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
@@ -349,9 +360,12 @@ export default function SellPage() {
 
       // 2) İlan "pending_video" durumunda açılır; video hazır olunca webhook
       // (bkz. app/api/webhooks/cloudflare/route.ts) "active" yapar.
+      // Marka/model listeden seçildiyse id'ler hazır; yazılan adı RPC bulur ya da kataloğa ekler
+      const catalogRow = catalogIds(records.catalog) ?? (await resolveCatalog(records.catalog));
+
       const { data: vehicle, error: vehicleError } = await supabase
         .from("vehicles")
-        .insert(records.vehicle)
+        .insert({ ...records.vehicle, ...catalogRow })
         .select("id")
         .single();
 
@@ -456,8 +470,8 @@ export default function SellPage() {
   }
 
   const current = LISTING_STEPS[step];
-  const brandName = catalog?.brands.find((b) => b.id === draft.brandId)?.name ?? "";
-  const modelName = models.find((m) => m.id === draft.modelId)?.name ?? "";
+  const brandName = draft.brandId ? (catalog?.brands.find((b) => b.id === draft.brandId)?.name ?? "") : draft.brandName;
+  const modelName = draft.modelId ? (models.find((m) => m.id === draft.modelId)?.name ?? "") : draft.modelName;
   const mediaError = videoError ?? (attempted[MEDIA_STEP] && !video ? VIDEO_REQUIRED : null);
 
   return (
@@ -514,41 +528,56 @@ export default function SellPage() {
                 </p>
               ) : (
                 <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-                  <Field id={fieldId("brandId")} label="Marka" error={errorFor("brandId")}>
-                    <SelectInput
+                  <Field
+                    id={fieldId("brandId")}
+                    label="Marka"
+                    error={errorFor("brandId")}
+                    className="col-span-2 sm:col-span-1"
+                  >
+                    <CatalogCombobox
                       id={fieldId("brandId")}
-                      value={draft.brandId}
-                      invalid={Boolean(errorFor("brandId"))}
-                      aria-describedby={describedBy(fieldId("brandId"), { error: errorFor("brandId") })}
+                      options={catalog?.brands ?? []}
+                      selectedId={draft.brandId}
+                      customName={draft.brandName}
+                      maxLength={MAX_BRAND_NAME}
+                      placeholder={catalog ? "Marka ara ya da yaz" : "Yükleniyor…"}
+                      emptyHint="Marka adını yaz."
                       disabled={!catalog}
+                      invalid={Boolean(errorFor("brandId"))}
+                      describedBy={describedBy(fieldId("brandId"), { error: errorFor("brandId") })}
                       onBlur={touch("brandId")}
-                      onChange={(event) => update({ brandId: event.target.value, modelId: "" })}
-                    >
-                      <option value="">{catalog ? "Seç" : "Yükleniyor…"}</option>
-                      {catalog?.brands.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </SelectInput>
+                      onPendingChange={(text) => setPending((p) => ({ ...p, brand: text }))}
+                      onChange={({ id, name }) => {
+                        if (id === draft.brandId && name === draft.brandName) return;
+                        // Marka değişince model sıfırlanır (katalog modeli yalnızca kendi markasında geçerli)
+                        update({ brandId: id, brandName: name, modelId: "", modelName: "" });
+                        setPending((p) => ({ ...p, model: null }));
+                      }}
+                    />
                   </Field>
-                  <Field id={fieldId("modelId")} label="Model" error={errorFor("modelId")}>
-                    <SelectInput
+                  <Field
+                    id={fieldId("modelId")}
+                    label="Model"
+                    error={errorFor("modelId")}
+                    className="col-span-2 sm:col-span-1"
+                  >
+                    <CatalogCombobox
+                      // Marka değişince kutu (yazılan metinle birlikte) sıfırdan kurulur
+                      key={draft.brandId || `yeni:${draft.brandName}`}
                       id={fieldId("modelId")}
-                      value={draft.modelId}
+                      options={draft.brandId ? models : []}
+                      selectedId={draft.modelId}
+                      customName={draft.modelName}
+                      maxLength={MAX_MODEL_NAME}
+                      placeholder={hasBrand ? "Model ara ya da yaz" : "Önce marka seç"}
+                      emptyHint="Yeni marka için model adını yaz."
+                      disabled={!hasBrand}
                       invalid={Boolean(errorFor("modelId"))}
-                      aria-describedby={describedBy(fieldId("modelId"), { error: errorFor("modelId") })}
-                      disabled={!draft.brandId}
+                      describedBy={describedBy(fieldId("modelId"), { error: errorFor("modelId") })}
                       onBlur={touch("modelId")}
-                      onChange={(event) => update({ modelId: event.target.value })}
-                    >
-                      <option value="">{draft.brandId ? "Seç" : "Önce marka"}</option>
-                      {models.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </SelectInput>
+                      onPendingChange={(text) => setPending((p) => ({ ...p, model: text }))}
+                      onChange={({ id, name }) => update({ modelId: id, modelName: name })}
+                    />
                   </Field>
                   <Field id={fieldId("year")} label="Model yılı" error={errorFor("year")}>
                     <TextInput
@@ -810,6 +839,16 @@ export default function SellPage() {
       )}
     </main>
   );
+}
+
+/** Yazılan marka/model adını kataloğun id'lerine çevirir (bkz. *_user_catalog_entries.sql) */
+async function resolveCatalog(catalog: CatalogSelection): Promise<{ brand_id: string; model_id: string }> {
+  const { data, error } = await supabase.rpc("resolve_listing_catalog", catalogRpcArgs(catalog));
+  const row = (Array.isArray(data) ? data[0] : data) as { brand_id?: string; model_id?: string } | null;
+  if (error || !row?.brand_id || !row?.model_id) {
+    throw new Error("Marka/model kaydedilemedi: " + (error?.message ?? "bilinmeyen hata"));
+  }
+  return { brand_id: row.brand_id, model_id: row.model_id };
 }
 
 async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<void> {

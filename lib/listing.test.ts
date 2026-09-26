@@ -6,6 +6,8 @@ import {
   buildListingRecords,
   buildVehicleImageRow,
   caretAfterDigits,
+  catalogIds,
+  catalogRpcArgs,
   groupThousands,
   listingFieldErrors,
   photoRejection,
@@ -20,7 +22,9 @@ const NOW = new Date("2026-09-25T12:00:00Z");
 
 const validDraft: ListingDraft = {
   brandId: "brand-1",
+  brandName: "",
   modelId: "model-1",
+  modelName: "",
   year: "2019",
   mileageKm: "85000",
   price: "750000",
@@ -41,6 +45,8 @@ describe("validateListingDraft", () => {
   it.each<[string, Partial<ListingDraft>, string]>([
     ["marka yok", { brandId: "" }, "Marka ve model seçmelisin."],
     ["model yok", { modelId: "" }, "Marka ve model seçmelisin."],
+    ["yazılan marka geçersiz", { brandId: "", brandName: "<script>", modelId: "", modelName: "X" }, "Marka ve model seçmelisin."],
+    ["yeni markanın modeli katalogdan olamaz", { brandId: "", brandName: "Togg" }, "Marka ve model seçmelisin."],
     ["yıl boş", { year: "" }, "Geçerli bir yıl gir."],
     ["yıl çok eski", { year: "1969" }, "Geçerli bir yıl gir."],
     ["yıl gelecekte", { year: "2028" }, "Geçerli bir yıl gir."],
@@ -53,6 +59,13 @@ describe("validateListingDraft", () => {
     ["numara geçersiz", { whatsapp: "12345" }, "Geçerli bir WhatsApp numarası gir."],
   ])("%s", (_name, change, message) => {
     expect(validateListingDraft({ ...validDraft, ...change }, NOW)).toBe(message);
+  });
+
+  it("listede olmayan marka ve model yazılabilir", () => {
+    expect(validateListingDraft({ ...validDraft, modelId: "", modelName: "M340i" }, NOW)).toBeNull();
+    expect(
+      validateListingDraft({ ...validDraft, brandId: "", brandName: "Togg", modelId: "", modelName: "T10X" }, NOW),
+    ).toBeNull();
   });
 
   it("gelecek yılın modeli kabul edilir", () => {
@@ -74,10 +87,9 @@ describe("buildListingRecords", () => {
 
     expect(records).toEqual({
       profile: { id: "user-1", whatsapp_number: "905445673430" },
+      catalog: { brandId: "brand-1", brandName: null, modelId: "model-1", modelName: null },
       vehicle: {
         seller_id: "user-1",
-        brand_id: "brand-1",
-        model_id: "model-1",
         year: 2019,
         mileage_km: 85000,
         price: 1250000,
@@ -91,6 +103,30 @@ describe("buildListingRecords", () => {
         status: "pending_video",
       },
     });
+  });
+
+  it("katalog seçiminde id'ler doğrudan yazılır; yazılan adda RPC'ye ad gider", () => {
+    const fromCatalog = buildListingRecords("user-1", validDraft).catalog;
+    expect(catalogIds(fromCatalog)).toEqual({ brand_id: "brand-1", model_id: "model-1" });
+
+    const newModel = buildListingRecords("user-1", { ...validDraft, modelId: "", modelName: "  M340i   xDrive " }).catalog;
+    expect(newModel).toEqual({ brandId: "brand-1", brandName: null, modelId: null, modelName: "M340i xDrive" });
+    expect(catalogIds(newModel)).toBeNull();
+    expect(catalogRpcArgs(newModel)).toEqual({
+      p_brand_id: "brand-1",
+      p_brand_name: null,
+      p_model_id: null,
+      p_model_name: "M340i xDrive",
+    });
+
+    const newBrand = buildListingRecords("user-1", {
+      ...validDraft,
+      brandId: "",
+      brandName: " Togg ",
+      modelId: "",
+      modelName: "T10X",
+    }).catalog;
+    expect(newBrand).toEqual({ brandId: null, brandName: "Togg", modelId: null, modelName: "T10X" });
   });
 
   it("boş açıklama null olarak yazılır", () => {
@@ -171,6 +207,11 @@ describe("listingFieldErrors", () => {
     { transmission: "" },
     { whatsapp: "12345" },
     { brandId: "", price: "", whatsapp: "" },
+    { modelId: "", modelName: "M340i" },
+    { brandId: "", brandName: "Togg", modelId: "", modelName: "T10X" },
+    { brandId: "", brandName: "Togg" },
+    { brandId: "", brandName: "<b>", modelId: "", modelName: "X" },
+    { modelId: "", modelName: "   " },
   ];
 
   it.each(cases)("validateListingDraft ile aynı kararı verir: %j", (change) => {
@@ -181,12 +222,21 @@ describe("listingFieldErrors", () => {
 
   it("her hatalı alan kendi mesajını alır", () => {
     expect(listingFieldErrors({ ...validDraft, brandId: "", modelId: "", year: "1969", city: " " }, NOW)).toEqual({
-      brandId: "Marka seç.",
+      brandId: "Marka seç ya da yaz.",
       modelId: "Önce marka seç.",
       year: "1970–2027 arasında bir yıl gir.",
       city: "Şehir seç ya da yaz.",
     });
-    expect(listingFieldErrors({ ...validDraft, modelId: "" }, NOW)).toEqual({ modelId: "Model seç." });
+    expect(listingFieldErrors({ ...validDraft, modelId: "" }, NOW)).toEqual({ modelId: "Model seç ya da yaz." });
+    expect(listingFieldErrors({ ...validDraft, brandId: "", brandName: "Togg", modelId: "" }, NOW)).toEqual({
+      modelId: "Model seç ya da yaz.",
+    });
+    expect(
+      listingFieldErrors({ ...validDraft, modelId: "", modelName: "a".repeat(61) }, NOW),
+    ).toEqual({ modelId: "En fazla 60 karakter olabilir." });
+    expect(listingFieldErrors({ ...validDraft, brandId: "", brandName: "<b>", modelId: "", modelName: "X" }, NOW)).toEqual({
+      brandId: "Yalnızca harf, rakam, boşluk ve - . / + & ' kullanılabilir.",
+    });
   });
 
   it("boş taslakta açıklama ve hasar dışındaki bütün alanlar hatalı", () => {
@@ -210,7 +260,8 @@ describe("LISTING_STEPS", () => {
 
   it("stepFieldErrors yalnızca o adımın hatalarını döner", () => {
     const errors = listingFieldErrors({ ...validDraft, brandId: "", price: "" }, NOW);
-    expect(Object.keys(stepFieldErrors(0, errors))).toEqual(["brandId"]);
+    // Marka boşalınca katalog modeli de geçersiz: katalog modeli yalnızca katalogdaki markayla anlamlı
+    expect(Object.keys(stepFieldErrors(0, errors))).toEqual(["brandId", "modelId"]);
     expect(stepFieldErrors(1, errors)).toEqual({});
     expect(Object.keys(stepFieldErrors(2, errors))).toEqual(["price"]);
     expect(stepFieldErrors(9, errors)).toEqual({});

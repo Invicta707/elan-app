@@ -285,6 +285,9 @@ async function fetchAllRows<T>(table: "brands" | "models", columns: string): Pro
     const { data, error } = await supabase
       .from(table)
       .select(columns)
+      // Kullanıcıların /sell'de yazdığı adlar ortak listeye (filtreler, seçim kutusu) girmez;
+      // ilanın kendisinde adıyla görünür (bkz. *_user_catalog_entries.sql)
+      .eq("is_user_created", false)
       .order("id")
       .range(from, from + CATALOG_CHUNK - 1);
 

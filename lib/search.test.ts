@@ -176,16 +176,30 @@ describe("compareCatalogNames", () => {
 describe("fetchCatalog", () => {
   const from = vi.mocked(supabase.from);
 
-  // from(tablo).select().order("id").range(): ilk sayfada satırlar, sonra boş parça
+  // from(tablo).select().eq(...).order("id").range(): ilk sayfada satırlar, sonra boş parça
+  const filters: [string, string, unknown][] = [];
   function mockCatalogTables(rows: Record<string, unknown[]>) {
+    filters.length = 0;
     from.mockImplementation(((table: string) => ({
       select: () => ({
-        order: () => ({
-          range: async (start: number) => ({ data: start === 0 ? rows[table] : [], error: null }),
-        }),
+        eq: (column: string, value: unknown) => {
+          filters.push([table, column, value]);
+          return {
+            order: () => ({
+              range: async (start: number) => ({ data: start === 0 ? rows[table] : [], error: null }),
+            }),
+          };
+        },
       }),
     })) as never);
   }
+
+  it("kullanıcıların eklediği marka/modeller ortak listeye girmez", async () => {
+    mockCatalogTables({ brands: [], models: [] });
+    await fetchCatalog();
+    expect(filters).toContainEqual(["brands", "is_user_created", false]);
+    expect(filters).toContainEqual(["models", "is_user_created", false]);
+  });
 
   it("markaları ve modelleri doğal sırayla döner (veritabanındaki id sırasından bağımsız)", async () => {
     mockCatalogTables({

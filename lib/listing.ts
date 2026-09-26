@@ -1,3 +1,4 @@
+import { MAX_BRAND_NAME, MAX_MODEL_NAME, catalogNameError, cleanCatalogName } from "./catalog-search";
 import type { FuelType, TransmissionType } from "./feed";
 import { normalizeTurkishPhone } from "./phone";
 import type { BodyType } from "./search";
@@ -9,8 +10,12 @@ import type { BodyType } from "./search";
 export type DamageStatus = "none" | "heavy";
 
 export type ListingDraft = {
+  /** Katalogdan seçilen marka; boşsa brandName (kullanıcının yazdığı yeni marka) */
   brandId: string;
+  brandName: string;
+  /** Katalogdan seçilen model (yalnızca katalogdaki markanın); boşsa modelName */
   modelId: string;
+  modelName: string;
   year: string;
   mileageKm: string;
   price: string;
@@ -25,7 +30,9 @@ export type ListingDraft = {
 
 export const EMPTY_LISTING_DRAFT: ListingDraft = {
   brandId: "",
+  brandName: "",
   modelId: "",
+  modelName: "",
   year: "",
   mileageKm: "",
   price: "",
@@ -42,9 +49,23 @@ export const onlyDigits = (value: string) => value.replace(/\D/g, "");
 
 const MIN_YEAR = 1970;
 
+/** Marka: katalogdan seçilmiş ya da geçerli bir ad yazılmış olmalı */
+function brandError(draft: ListingDraft): string | null {
+  if (draft.brandId) return null;
+  if (!cleanCatalogName(draft.brandName)) return "Marka seç ya da yaz.";
+  return catalogNameError(draft.brandName, MAX_BRAND_NAME);
+}
+
+/** Model: katalogdaki markanın katalog modeli ya da geçerli bir ad */
+function modelError(draft: ListingDraft): string | null {
+  if (draft.modelId && draft.brandId) return null;
+  if (!cleanCatalogName(draft.modelName)) return brandError(draft) ? "Önce marka seç." : "Model seç ya da yaz.";
+  return catalogNameError(draft.modelName, MAX_MODEL_NAME);
+}
+
 /** İlk hatanın kullanıcıya gösterilecek metnini, form geçerliyse null döner. */
 export function validateListingDraft(draft: ListingDraft, now: Date = new Date()): string | null {
-  if (!draft.brandId || !draft.modelId) return "Marka ve model seçmelisin.";
+  if (brandError(draft) || modelError(draft)) return "Marka ve model seçmelisin.";
   const year = Number(draft.year);
   if (!year || year < MIN_YEAR || year > now.getFullYear() + 1) return "Geçerli bir yıl gir.";
   if (!onlyDigits(draft.mileageKm)) return "Kilometreyi gir.";
@@ -62,7 +83,9 @@ export function validateListingDraft(draft: ListingDraft, now: Date = new Date()
 // ---------------------------------------------------------------
 
 /** Doğrulanan alanlar (hasar durumu ve açıklama her zaman geçerlidir) */
-export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "description">;
+/** Doğrulanan alanlar (hasar durumu ve açıklama her zaman geçerli; yazılan marka/model adı
+ * hatası marka/model alanında gösterilir) */
+export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "description" | "brandName" | "modelName">;
 export type ListingFieldErrors = Partial<Record<ListingField, string>>;
 
 /**
@@ -75,8 +98,10 @@ export function listingFieldErrors(draft: ListingDraft, now: Date = new Date()):
   const maxYear = now.getFullYear() + 1;
   const year = Number(draft.year);
 
-  if (!draft.brandId) errors.brandId = "Marka seç.";
-  if (!draft.modelId) errors.modelId = draft.brandId ? "Model seç." : "Önce marka seç.";
+  const brand = brandError(draft);
+  if (brand) errors.brandId = brand;
+  const model = modelError(draft);
+  if (model) errors.modelId = model;
   if (!year || year < MIN_YEAR || year > maxYear) errors.year = `${MIN_YEAR}–${maxYear} arasında bir yıl gir.`;
   if (!onlyDigits(draft.mileageKm)) errors.mileageKm = "Kilometreyi gir.";
   if (!onlyDigits(draft.price)) errors.price = "Fiyatı gir.";
@@ -148,10 +173,38 @@ export type VehicleInsert = {
   status: "pending_video";
 };
 
+/**
+ * Marka ve model: katalogdan seçildiyse id, yeni yazıldıysa ad. İkisi de
+ * katalogdansa id'ler doğrudan yazılır; değilse resolve_listing_catalog
+ * RPC'si adı bulur ya da kataloğa ekler ve id'leri döner.
+ */
+export type CatalogSelection = {
+  brandId: string | null;
+  brandName: string | null;
+  modelId: string | null;
+  modelName: string | null;
+};
+
 export type ListingRecords = {
   profile: { id: string; whatsapp_number: string };
-  vehicle: VehicleInsert;
+  catalog: CatalogSelection;
+  vehicle: Omit<VehicleInsert, "brand_id" | "model_id">;
 };
+
+/** Marka ve model katalogdan mı (RPC'ye gerek yok)? */
+export function catalogIds(catalog: CatalogSelection): { brand_id: string; model_id: string } | null {
+  return catalog.brandId && catalog.modelId ? { brand_id: catalog.brandId, model_id: catalog.modelId } : null;
+}
+
+/** resolve_listing_catalog RPC'sinin parametreleri */
+export function catalogRpcArgs(catalog: CatalogSelection) {
+  return {
+    p_brand_id: catalog.brandId,
+    p_brand_name: catalog.brandName,
+    p_model_id: catalog.modelId,
+    p_model_name: catalog.modelName,
+  };
+}
 
 /**
  * profiles ve vehicles tablolarına yazılacak kayıtlar. Taslak geçersizse
@@ -167,10 +220,14 @@ export function buildListingRecords(sellerId: string, draft: ListingDraft): List
 
   return {
     profile: { id: sellerId, whatsapp_number: whatsappNumber },
+    catalog: {
+      brandId: draft.brandId || null,
+      brandName: draft.brandId ? null : cleanCatalogName(draft.brandName),
+      modelId: draft.brandId && draft.modelId ? draft.modelId : null,
+      modelName: draft.brandId && draft.modelId ? null : cleanCatalogName(draft.modelName),
+    },
     vehicle: {
       seller_id: sellerId,
-      brand_id: draft.brandId,
-      model_id: draft.modelId,
       year: Number(draft.year),
       mileage_km: Number(onlyDigits(draft.mileageKm)),
       price: Number(onlyDigits(draft.price)),
