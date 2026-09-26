@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -206,6 +207,18 @@ export default function AuthModal({ onClose, onAuthenticated }: AuthModalProps) 
                   {isMagic ? "Şifreyle giriş yap" : "Şifresiz, e-posta bağlantısıyla giriş yap"}
                 </button>
               </div>
+
+              <p className="text-center text-[12px] leading-snug text-[#5B616B]">
+                Devam ederek{" "}
+                <Link href="/terms" className="font-semibold text-[#003399] underline underline-offset-2">
+                  Kullanım Koşulları
+                </Link>
+                &apos;nı ve{" "}
+                <Link href="/privacy" className="font-semibold text-[#003399] underline underline-offset-2">
+                  Gizlilik Politikası
+                </Link>
+                &apos;nı kabul etmiş olursun.
+              </p>
             </form>
           )}
         </div>

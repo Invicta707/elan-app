@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BottomNav from "../components/BottomNav";
@@ -27,6 +27,16 @@ export const metadata: Metadata = {
   }),
   title: "Elan | Videolu araç ilanları",
   description: "Araçları kısa videolarla keşfet, satıcıya tek dokunuşla WhatsApp'tan yaz.",
+  // Ana ekrana ekleme ve Play Store (TWA) paketi bu manifest'i okur
+  // (public/manifest.json; ikonlar: scripts/generate-icons.mjs)
+  manifest: "/manifest.json",
+  icons: { apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { title: "Elan", statusBarStyle: "black" },
+};
+
+// Tarayıcı çubuğu / uygulama başlığı rengi: manifest'teki theme_color ile aynı
+export const viewport: Viewport = {
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

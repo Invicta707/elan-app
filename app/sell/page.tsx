@@ -417,6 +417,14 @@ export default function SellPage() {
           )}
         </div>
 
+        <p className="text-[13px] leading-snug text-[#5B616B]">
+          İlanı yayınlayarak{" "}
+          <Link href="/terms" className="font-semibold text-[#003399] underline underline-offset-2">
+            Kullanım Koşulları
+          </Link>
+          &apos;nı kabul etmiş olursun. Kurallara aykırı ilanlar yayından kaldırılır.
+        </p>
+
         {/* Mobilde alt gezinme çubuğunun hemen üstünde; güvenli alanı çubuk karşılar */}
         <div className="fixed inset-x-0 bottom-[var(--bottom-nav-height)] z-30 border-t border-[#E3E6EA] bg-white px-4 pt-3 pb-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto max-w-md">

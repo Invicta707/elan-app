@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type Hls from "hls.js";
 import FavoriteButton from "./FavoriteButton";
+import ReportButton from "./ReportButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
@@ -73,6 +74,7 @@ export default function VideoCard({
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const { contact: handleContact, isContacting, notice } = useSellerContact(vehicle);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
+  const [isReportOpen, setReportOpen] = useState(false);
 
   const hasVideoError = failedUrl === vehicle.hlsUrl;
 
@@ -172,8 +174,10 @@ export default function VideoCard({
     };
   }, [shouldLoad, vehicle.hlsUrl, tryPlay]);
 
-  // 2) Aktif kartsa oynat, değilse durdurup başa sar. Detay çekmecesi açıkken
-  // sadece duraklatılır (başa sarılmaz); kapanınca kaldığı yerden sürer.
+  // 2) Aktif kartsa oynat, değilse durdurup başa sar. Detay çekmecesi ya da
+  // bildirim penceresi açıkken sadece duraklatılır (başa sarılmaz); kapanınca
+  // kaldığı yerden sürer.
+  const isOverlayOpen = isDetailsOpen || isReportOpen;
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -181,12 +185,12 @@ export default function VideoCard({
     if (!isActive) {
       video.pause();
       video.currentTime = 0;
-    } else if (isDetailsOpen) {
+    } else if (isOverlayOpen) {
       video.pause();
     } else {
       void tryPlay();
     }
-  }, [isActive, isDetailsOpen, tryPlay]);
+  }, [isActive, isOverlayOpen, tryPlay]);
 
   // 3) Ortak ses durumunu bu karta uygula
   useEffect(() => {
@@ -372,6 +376,8 @@ export default function VideoCard({
                 Detaylar
               </span>
             </button>
+
+            <ReportButton vehicleId={vehicle.id} variant="overlay" onOpenChange={setReportOpen} />
 
             <button
               type="button"

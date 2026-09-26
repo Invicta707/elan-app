@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import FavoriteButton from "../../../components/FavoriteButton";
+import ReportButton from "../../../components/ReportButton";
 import BackButton from "../../../components/vehicle/BackButton";
 import SpecsTable, { formatVehiclePrice } from "../../../components/vehicle/SpecsTable";
 import { VehiclePageActions, VehiclePageGallery } from "../../../components/vehicle/VehiclePageClient";
@@ -124,6 +125,10 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
             </p>
           </section>
         )}
+
+        <div className="-ml-2 mt-6 border-t border-[#E3E6EA] pt-3">
+          <ReportButton vehicleId={vehicle.id} variant="page" />
+        </div>
       </div>
 
       <VehiclePageActions
