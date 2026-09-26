@@ -17,7 +17,7 @@ _Son güncelleme: 26 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 28 dosya, **434 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 28 dosya, **436 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -45,7 +45,7 @@ _Son güncelleme: 26 Eylül 2026_
 | İlan verme (`/sell`) | [app/sell/page.tsx](app/sell/page.tsx): adım durumu, doğrulama, gönderim (`runSubmit`, `uploadPhotos`). [app/sell/layout.tsx](app/sell/layout.tsx): yazı tipleri ve başlık. [components/sell/FormControls.tsx](components/sell/FormControls.tsx): `Field`, `TextInput`, `GroupedNumberInput`, `SelectInput`, `ChoiceGroup`. [components/sell/MediaPickers.tsx](components/sell/MediaPickers.tsx): `VideoDropzone`, `PhotoDropzone`. [components/sell/SellChrome.tsx](components/sell/SellChrome.tsx): `SellStepper`, `FormCard`, `SubmitProgress`, `SellActionBar`, `SellSuccess`. [lib/listing.ts](lib/listing.ts): `LISTING_STEPS`, `listingFieldErrors`, `stepFieldErrors`, `groupThousands`, `caretAfterDigits`. [lib/sell-progress.ts](lib/sell-progress.ts): gönderim aşamaları ve yüzde |
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
-| PWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir) |
+| PWA / TWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir), [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json) (Android paketi `com.gozuyle.twa`) |
 | Veritabanı | [supabase/migrations/](supabase/migrations/): 11 migration, sonuncusu `20260926190000_rate_limits.sql`; hepsi uzak veritabanında uygulanmış (son beşi 26 Eylül 2026'da `db push --linked` ile) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
@@ -99,7 +99,7 @@ _Son güncelleme: 26 Eylül 2026_
 
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`869865a`** ("feat(sell): modernize listing creation flow with multi-step wizard, media grid, and formatted inputs"). Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`f5f41ff`** ("feat(android): add assetlinks.json for TWA verification"). Ondan önceki büyük değişiklik `869865a`: yeni ilan verme akışı. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
 - Veritabanı kodla uyumlu: 11 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
@@ -130,7 +130,11 @@ _Son güncelleme: 26 Eylül 2026_
    - Doğrulama: Let's Encrypt sertifikası (SAN `www.gozuyle.com`), `https://www.gozuyle.com/` → `308` + `Location: https://gozuyle.com/`. Yol ve sorgu korunuyor; `http://www` iki adımda `https://gozuyle.com/`'a (200) varıyor.
 4. **`destek@gozuyle.com`:** gerçek bir posta kutusu ya da yönlendirme kurulmalı, ya da `NEXT_PUBLIC_SUPPORT_EMAIL` tanımlanmalı. Adres gizlilik politikasında yayında.
 5. **Vercel'deki fazla kayıt:** Preview'a ait eski `CLOUDFLARE_STREAM_WEBHOOK_SECRET` kaydı (id `TZ5cSerrSmMsQUac`) silinmeli. API ile silme izin denetimine takılmıştı.
-6. **Play Store (TWA):** `/.well-known/assetlinks.json` gerekiyor; bunun için imzalama sertifikasının SHA-256 parmak izi lazım.
+6. ✅ **Play Store (TWA) Digital Asset Links: yayında (26 Eylül 2026, `f5f41ff`); Play App Signing parmak izi bekleniyor.**
+   - [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json): paket `com.gozuyle.twa`, PWABuilder'ın imzalama anahtarının SHA-256'sı (`EB:1F:55:…:01:95:2D`). Biçimi [lib/pwa-manifest.test.ts](lib/pwa-manifest.test.ts) denetliyor.
+   - Canlıda doğrulandı: `200`, `application/json`, repodaki dosyayla aynı gövde; `www` 308 ile kök alan adına yönleniyor. Google Digital Asset Links API (`statements:list`) kaydı hatasız okuyor.
+   - **Kalan:** uygulama Play Console'a **Play App Signing** ile yüklenirse Google yeniden imzalar ve telefondaki uygulamanın parmak izi değişir. Bu yapılmazsa doğrulama başarısız olur ve uygulamada adres çubuğu görünür. Play Console → Test and release → App integrity → App signing → *App signing key certificate* SHA-256 değeri `sha256_cert_fingerprints` dizisine **ikinci değer** olarak eklenmeli. Mevcut değer, doğrudan yüklenen APK'lar için kalmalı.
+   - Kullanıcı APK'yı telefonda deniyor (26 Eylül 2026). Adres çubuğu görünmüyorsa doğrulama çalışıyor demektir.
 7. ✅ **Moderasyon paneline erişim: tamamlandı (26 Eylül 2026).** `ADMIN_EMAILS` Production ve Preview'a Secret olarak eklendi (15:13 UTC). Ondan sonra başlayan deploy (`elan-6ie9dxson`) `gozuyle.com`'a bağlı. Canlıda token olmadan API `401`, sayfa `200` + `noindex` dönüyor. Yönetici hesabıyla uçtan uca deneme 2. maddede.
 8. ✅ **Storage yükleme politikası: tamamlandı (26 Eylül 2026).**
    - Sorun: `vehicle-photos` bucket'ının "Authenticated users can upload vehicle photos" INSERT politikası yalnızca `bucket_id`'ye bakıyordu; giriş yapmış herkes her yola, her tür ve boyutta dosya yükleyebiliyordu.
