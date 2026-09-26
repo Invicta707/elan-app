@@ -73,7 +73,9 @@ _Son güncelleme: 26 Eylül 2026_
 
 - Son kod commit'i **`4e1e2a4`** ("feat: add natural numeric sorting for models and rate limiting to reports api"). Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `4e1e2a4`'ün production deploy'u (`elan-dt0fvy2l8`, git'ten) **Ready** durumunda ve `gozuyle.com`'a bağlı; canlı site ile repo aynı kodu çalıştırıyor.
-- **Alan adları:** `gozuyle.com` 200. `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor. `www.gozuyle.com` son kontrolde yanıt vermiyordu.
+- **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
+- **DNS** kayıt firmasında (`knuth` / `dijkstra.ihsdns.com`), Vercel nameserver'ları kullanılmıyor: kök alan A `216.198.79.1`, `www` CNAME `cname.vercel-dns.com`. Vercel'deki "Intended Nameservers ☓" uyarısı bu yüzden çıkıyor ve sorun değil.
+- **Yerel `nslookup`:** bu makinenin varsayılan DNS sunucusu yanıt vermiyor; sorgu `nslookup <ad> 1.1.1.1` ile yapılmalı.
 - **Vercel env (Production + Preview):**
   - Config: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL=https://gozuyle.com`.
   - Sensitive: `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_STREAM_WEBHOOK_SECRET`.
@@ -86,7 +88,10 @@ _Son güncelleme: 26 Eylül 2026_
 
 1. **Supabase → URL Configuration:** Site URL `https://gozuyle.com` olmalı; Redirect URLs'te `https://gozuyle.com/**` bulunmalı (`/auth/callback`'i kapsar). Bu doğrulanmadı ve Google girişi buna bağlı.
 2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği).
-3. **`www.gozuyle.com`:** Vercel → Domains'ten SSL ve DNS durumuna bakılmalı.
+3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
+   - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
+   - Dashboard'dan eklendi ve 308 ile `gozuyle.com`'a yönlendirildi.
+   - Doğrulama: Let's Encrypt sertifikası (SAN `www.gozuyle.com`), `https://www.gozuyle.com/` → `308` + `Location: https://gozuyle.com/`. Yol ve sorgu korunuyor; `http://www` iki adımda `https://gozuyle.com/`'a (200) varıyor.
 4. **`destek@gozuyle.com`:** gerçek bir posta kutusu ya da yönlendirme kurulmalı, ya da `NEXT_PUBLIC_SUPPORT_EMAIL` tanımlanmalı. Adres gizlilik politikasında yayında.
 5. **Vercel'deki fazla kayıt:** Preview'a ait eski `CLOUDFLARE_STREAM_WEBHOOK_SECRET` kaydı (id `TZ5cSerrSmMsQUac`) silinmeli. API ile silme izin denetimine takılmıştı.
 6. **Play Store (TWA):** `/.well-known/assetlinks.json` gerekiyor; bunun için imzalama sertifikasının SHA-256 parmak izi lazım.
