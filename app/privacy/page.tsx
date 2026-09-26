@@ -80,7 +80,7 @@ export default function PrivacyPage() {
       <p>
         Hesap bilgilerin hesabın açık olduğu sürece saklanır. İlanlarını yayından kaldırabilir ya da
         arşivleyebilirsin. Hesabını sildiğinde kişisel verilerin, yasal olarak saklamamız gerekenler dışında
-        silinir.
+        hemen silinir.
       </p>
 
       <h2>Hakların</h2>
@@ -92,9 +92,17 @@ export default function PrivacyPage() {
         <li>işlemeye itiraz etme ve zarara uğradıysan giderilmesini talep etme</li>
       </ul>
       <p>
-        haklarına sahipsin. Hesabının ve verilerinin silinmesi dahil taleplerini{" "}
-        <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> adresine iletebilirsin; en geç 30 gün
-        içinde yanıtlarız.
+        haklarına sahipsin. Taleplerini <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>{" "}
+        adresine iletebilirsin; en geç 30 gün içinde yanıtlarız.
+      </p>
+
+      <h2>Hesabını silme</h2>
+      <p>
+        Hesabını ve tüm verilerini dilediğin zaman <Link href="/account">Hesabım</Link> sayfasındaki{" "}
+        <strong>Hesabımı sil</strong> butonuyla kalıcı olarak silebilirsin. Hesabınla birlikte ilanların,
+        videoların, fotoğrafların, favorilerin ve iletişim bilgilerin silinir. Başkalarının ilanları için yaptığın
+        bildirimler, kimliğinden ayrılarak moderasyon amacıyla saklanabilir. Hesabına giriş yapamıyorsan silme
+        talebini yukarıdaki adrese gönderebilirsin.
       </p>
 
       <h2>Çocuklar</h2>

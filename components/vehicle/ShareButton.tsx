@@ -1,51 +1,122 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shareOrCopy, vehiclePath, type ShareOutcome } from "../../lib/share";
+import { shareListing, shareMessage, vehiclePath, type ShareEnvironment } from "../../lib/share";
 
-const MESSAGES: Partial<Record<ShareOutcome, string>> = {
-  copied: "Bağlantı kopyalandı.",
-  failed: "Paylaşılamadı. Adres çubuğundaki bağlantıyı kopyalayabilirsin.",
-};
+type Message = { text: string; whatsappUrl: string | null };
+
+function browserShareEnvironment(): ShareEnvironment {
+  return {
+    nav: navigator,
+    // Fare/touchpad: Windows/macOS'un paylaşım penceresi yerine kopyala + WhatsApp Web
+    isDesktop: window.matchMedia("(hover: hover) and (pointer: fine)").matches,
+    openWindow: (url) => {
+      // "noopener" özelliği verilirse window.open her zaman null döner ve
+      // engellenip engellenmediği anlaşılamaz; bağlantı sonradan koparılır
+      const opened = window.open(url, "_blank");
+      if (opened) opened.opener = null;
+      return opened !== null;
+    },
+  };
+}
 
 export default function ShareButton({
   vehicleId,
   title,
   text,
+  variant = "pill",
   className = "",
 }: {
   vehicleId: string;
   title: string;
   text: string;
+  /**
+   * pill: beyaz zeminde metinli buton (ilan sayfası, detay çekmecesi)
+   * overlay: dikey videonun üstünde, sağdaki buton sütununda (etiketli)
+   */
+  variant?: "pill" | "overlay";
   className?: string;
 }) {
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+  const overlay = variant === "overlay";
 
   useEffect(() => {
     if (!message) return;
-    const timer = window.setTimeout(() => setMessage(null), 3000);
+    // WhatsApp bağlantısı içeren mesaj dokunulabilsin diye daha uzun kalır
+    const timer = window.setTimeout(() => setMessage(null), message.whatsappUrl ? 6000 : 3000);
     return () => window.clearTimeout(timer);
   }, [message]);
 
   async function handleShare() {
     const url = new URL(vehiclePath(vehicleId), window.location.origin).toString();
-    const outcome = await shareOrCopy({ url, title, text }, navigator);
-    setMessage(MESSAGES[outcome] ?? null);
+    const outcome = await shareListing({ url, title, text }, browserShareEnvironment());
+    const shown = shareMessage(outcome);
+    setMessage(
+      shown && outcome.kind === "fallback"
+        ? { text: shown.text, whatsappUrl: shown.showWhatsappLink ? outcome.whatsappUrl : null }
+        : null,
+    );
   }
 
   return (
     <div className={`relative ${className}`}>
-      <button
-        type="button"
-        onClick={handleShare}
-        className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[#C9CED6] bg-white px-3 text-[15px] font-semibold text-[#15181C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+      {overlay ? (
+        <button
+          type="button"
+          onClick={handleShare}
+          aria-label="İlanı paylaş"
+          className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
+            <ShareIcon className="h-5 w-5" />
+          </span>
+          <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            Paylaş
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleShare}
+          className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[#C9CED6] bg-white px-3 text-[15px] font-semibold text-[#15181C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+        >
+          <ShareIcon className="h-5 w-5 shrink-0" />
+          İlanı paylaş
+        </button>
+      )}
+
+      <div
+        role="status"
+        aria-live="polite"
+        className={
+          overlay
+            ? "absolute right-full top-1 z-10 mr-2 w-max max-w-[13rem]"
+            : "absolute inset-x-0 bottom-full mb-2 flex justify-center"
+        }
       >
-        <ShareIcon className="h-5 w-5 shrink-0" />
-        İlanı paylaş
-      </button>
-      <p role="status" aria-live="polite" className="absolute inset-x-0 -top-7 text-center text-[13px] font-medium text-[#1B7A3D]">
-        {message}
-      </p>
+        {message && (
+          <p
+            className={`pointer-events-auto rounded-md px-2.5 py-1.5 text-[12.5px] font-medium leading-snug ${
+              overlay ? "bg-[#15181C]/90 text-white" : "bg-[#15181C] text-white shadow-md"
+            }`}
+          >
+            {message.text}
+            {message.whatsappUrl && (
+              <>
+                {" "}
+                <a
+                  href={message.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#6EE7A0] underline underline-offset-2"
+                >
+                  WhatsApp&apos;ta paylaş
+                </a>
+              </>
+            )}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

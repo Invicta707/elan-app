@@ -23,7 +23,17 @@ export default function MyListingsView() {
     <>
       <FeedHeader activeTab="my-listings" tone="solid" />
       <div className="mx-auto max-w-2xl px-4 pt-2 pb-[max(2.5rem,calc(var(--bottom-nav-height)+1.5rem),env(safe-area-inset-bottom))]">
-        <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlanlarım</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">İlanlarım</h1>
+          {/* Çıkış ve hesap silme */}
+          <Link
+            href="/account"
+            className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#C9CED6] bg-white px-3.5 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+          >
+            <UserIcon className="h-4 w-4" />
+            Hesabım
+          </Link>
+        </div>
 
         {isLoading ? (
           <ListSkeleton />
@@ -272,5 +282,23 @@ function ListSkeleton() {
         <div key={i} className="h-28 animate-pulse rounded-lg bg-[#E6E8EB] motion-reduce:animate-none" />
       ))}
     </div>
+  );
+}
+
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </svg>
   );
 }

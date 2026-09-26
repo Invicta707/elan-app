@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type Hls from "hls.js";
 import FavoriteButton from "./FavoriteButton";
 import ReportButton from "./ReportButton";
+import ShareButton from "./vehicle/ShareButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
+import { buildVehicleShareText } from "../lib/vehicle-page";
 import { FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
 type VideoCardProps = {
@@ -361,6 +363,13 @@ export default function VideoCard({
 
           <div className="flex shrink-0 flex-col items-center gap-4">
             <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
+
+            <ShareButton
+              vehicleId={vehicle.id}
+              title={title}
+              text={buildVehicleShareText(vehicle)}
+              variant="overlay"
+            />
 
             <button
               type="button"
