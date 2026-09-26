@@ -147,6 +147,7 @@ const STATUS_BADGE: Record<VehicleStatus, string> = {
   draft: "bg-[#FEF6E7] text-[#8A6116]",
   sold: "bg-[#EAEFF7] text-[#003399]",
   archived: "bg-[#EEF0F3] text-[#5B616B]",
+  rejected: "bg-[#FDEDEC] text-[#B42318]",
 };
 
 const ACTION_TONE: Record<StatusAction["tone"], string> = {

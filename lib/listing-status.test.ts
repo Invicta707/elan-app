@@ -16,6 +16,7 @@ describe("OWNER_TRANSITIONS", () => {
     ["draft", ["archived"]],
     ["pending_video", ["archived"]],
     ["sold", []],
+    ["rejected", []],
   ])("%s → %j", (from, targets) => {
     expect(OWNER_TRANSITIONS[from]).toEqual(targets);
   });
@@ -29,6 +30,13 @@ describe("OWNER_TRANSITIONS", () => {
 
   it("satılan ilan son durumdur", () => {
     for (const to of VEHICLE_STATUSES) expect(canTransition("sold", to)).toBe(false);
+  });
+
+  it("moderasyonla kaldırılan ilan satıcı için son durumdur; satıcı bu duruma da getiremez", () => {
+    for (const status of VEHICLE_STATUSES) {
+      expect(canTransition("rejected", status)).toBe(false);
+      expect(canTransition(status, "rejected")).toBe(false);
+    }
   });
 
   it("aynı duruma geçiş yok", () => {

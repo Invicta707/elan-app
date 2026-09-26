@@ -3,7 +3,8 @@
 // sadece hangi butonların gösterileceğini belirler. İkisinin aynı kaldığını
 // lib/listing-status.test.ts migration dosyasını okuyarak doğrular.
 
-export type VehicleStatus = "draft" | "pending_video" | "active" | "sold" | "archived";
+/** rejected: moderasyonla yayından kaldırıldı; satıcı bu durumdan çıkamaz (bkz. *_moderation.sql) */
+export type VehicleStatus = "draft" | "pending_video" | "active" | "sold" | "archived" | "rejected";
 
 export const VEHICLE_STATUSES: readonly VehicleStatus[] = [
   "draft",
@@ -11,6 +12,7 @@ export const VEHICLE_STATUSES: readonly VehicleStatus[] = [
   "active",
   "sold",
   "archived",
+  "rejected",
 ];
 
 export const STATUS_LABELS: Record<VehicleStatus, string> = {
@@ -19,6 +21,7 @@ export const STATUS_LABELS: Record<VehicleStatus, string> = {
   active: "Yayında",
   sold: "Satıldı",
   archived: "Yayından kaldırıldı",
+  rejected: "Kural ihlali nedeniyle kaldırıldı",
 };
 
 export const OWNER_TRANSITIONS: Record<VehicleStatus, readonly VehicleStatus[]> = {
@@ -27,6 +30,7 @@ export const OWNER_TRANSITIONS: Record<VehicleStatus, readonly VehicleStatus[]> 
   draft: ["archived"],
   pending_video: ["archived"],
   sold: [],
+  rejected: [],
 };
 
 export function canTransition(from: VehicleStatus, to: VehicleStatus): boolean {

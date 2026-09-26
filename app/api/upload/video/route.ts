@@ -34,8 +34,8 @@ type UploadRequestBody = {
 // sınır olmazsa tek bir hesap tüm kotayı kilitleyebilir.
 const MAX_PENDING_UPLOADS_PER_USER = 5;
 
-// Satılmış ya da arşivlenmiş ilana video eklenmez
-const LOCKED_VEHICLE_STATUSES = new Set(["sold", "archived"]);
+// Satılmış, arşivlenmiş ya da moderasyonla kaldırılmış ilana video eklenmez
+const LOCKED_VEHICLE_STATUSES = new Set(["sold", "archived", "rejected"]);
 
 // details: hata ayıklama için Cloudflare'in ham mesajı (varsa). message zaten
 // kullanıcıya gösterilebilir bir metin; details onu Cloudflare'in orijinal
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     return errorResponse(
       409,
       "vehicle_locked",
-      "Satılmış ya da arşivlenmiş bir ilana video eklenemez.",
+      "Satılmış, arşivlenmiş ya da yayından kaldırılmış bir ilana video eklenemez.",
     );
   }
 
