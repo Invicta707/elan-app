@@ -17,7 +17,7 @@ _Son güncelleme: 26 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 28 dosya, **436 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 30 dosya, **549 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -25,7 +25,11 @@ _Son güncelleme: 26 Eylül 2026_
   - **İlan durumu:** `draft`, `pending_video`, `active`, `sold`, `archived`, `rejected` (moderasyon). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor.
   - **Yayın şartı:** ilan yalnızca işlenmiş bir videosu varsa (`videos.status = 'ready'` ve `hls_url` dolu) `active` olabilir. Kural isteği kim yaparsa yapsın geçerli; fotoğraf tek başına yetmez.
   - **Fotoğraf adresi:** `vehicle_images.image_url` yalnızca `https://<proje>.supabase.co/storage/v1/object/public/vehicle-photos/<ilan>/<sıra>.<uzantı>` olabilir (`fn_is_vehicle_photo_url`). Proje adresi migration'a sabit yazıldı.
-  - Katalog: 36 marka, 300 model.
+  - Katalog: 36 marka, 300 model (kürate edilmiş, `is_user_created = false`).
+  - **Kullanıcının yazdığı marka/model:** kataloğa `is_user_created = true` ve `created_by` ile eklenir.
+    - Ekleme yalnızca `resolve_listing_catalog` RPC'siyle yapılıyor: giriş şart, ad denetleniyor, kullanıcı başına 24 saatte 10 yeni kayıt sınırı var.
+    - Aynı adın farklı yazımları tek kayıttır: `fn_catalog_key` ile büyük/küçük harf, Türkçe/aksanlı harf ve noktalama önemsiz; benzersiz indeks bunu zorluyor.
+    - Bu kayıtlar arama filtrelerine ve seçim kutusuna girmiyor, ilanda adıyla görünüyor. `vehicles.brand_id` / `model_id` yabancı anahtarları değişmedi.
 
 ## 2. Kritik dosyalar
 
@@ -42,11 +46,11 @@ _Son güncelleme: 26 Eylül 2026_
 | Moderasyon | [app/admin/reports/page.tsx](app/admin/reports/page.tsx), [components/ModerationView.tsx](components/ModerationView.tsx), [app/api/admin/reports/route.ts](app/api/admin/reports/route.ts), [lib/moderation.ts](lib/moderation.ts), [lib/moderation-server.ts](lib/moderation-server.ts) (`authorizeAdmin`: `ADMIN_EMAILS`, onaylı e-posta) |
 | İlanlarım / durum | [components/MyListingsView.tsx](components/MyListingsView.tsx), [lib/my-listings.ts](lib/my-listings.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
 | Katalog / arama | [lib/search.ts](lib/search.ts) (`fetchCatalog`, `compareCatalogNames`), [components/SearchView.tsx](components/SearchView.tsx), [app/sell/page.tsx](app/sell/page.tsx) |
-| İlan verme (`/sell`) | [app/sell/page.tsx](app/sell/page.tsx): adım durumu, doğrulama, gönderim (`runSubmit`, `uploadPhotos`). [app/sell/layout.tsx](app/sell/layout.tsx): yazı tipleri ve başlık. [components/sell/FormControls.tsx](components/sell/FormControls.tsx): `Field`, `TextInput`, `GroupedNumberInput`, `SelectInput`, `ChoiceGroup`. [components/sell/MediaPickers.tsx](components/sell/MediaPickers.tsx): `VideoDropzone`, `PhotoDropzone`. [components/sell/SellChrome.tsx](components/sell/SellChrome.tsx): `SellStepper`, `FormCard`, `SubmitProgress`, `SellActionBar`, `SellSuccess`. [lib/listing.ts](lib/listing.ts): `LISTING_STEPS`, `listingFieldErrors`, `stepFieldErrors`, `groupThousands`, `caretAfterDigits`. [lib/sell-progress.ts](lib/sell-progress.ts): gönderim aşamaları ve yüzde |
+| İlan verme (`/sell`) | [app/sell/page.tsx](app/sell/page.tsx): adım durumu, doğrulama, gönderim (`runSubmit`, `uploadPhotos`). [app/sell/layout.tsx](app/sell/layout.tsx): yazı tipleri ve başlık. [components/sell/FormControls.tsx](components/sell/FormControls.tsx): `Field`, `TextInput`, `GroupedNumberInput`, `SelectInput`, `ChoiceGroup`. [components/sell/CatalogCombobox.tsx](components/sell/CatalogCombobox.tsx): marka/model seçim kutusu. [components/sell/MediaPickers.tsx](components/sell/MediaPickers.tsx): `VideoDropzone`, `PhotoDropzone`. [components/sell/SellChrome.tsx](components/sell/SellChrome.tsx): `SellStepper`, `FormCard`, `SubmitProgress`, `SellActionBar`, `SellSuccess`. [lib/listing.ts](lib/listing.ts): `LISTING_STEPS`, `listingFieldErrors`, `stepFieldErrors`, `groupThousands`, `caretAfterDigits`. [lib/sell-progress.ts](lib/sell-progress.ts): gönderim aşamaları ve yüzde |
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | PWA / TWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir), [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json) (Android paketi `com.gozuyle.twa`) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 11 migration, sonuncusu `20260926190000_rate_limits.sql`; hepsi uzak veritabanında uygulanmış (son beşi 26 Eylül 2026'da `db push --linked` ile) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 12 migration, sonuncusu `20260926200000_user_catalog_entries.sql`; hepsi uzak veritabanında uygulanmış (son altısı 26 Eylül 2026'da `db push --linked` ile) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
@@ -96,12 +100,19 @@ _Son güncelleme: 26 Eylül 2026_
   - **Girdiler:** fiyat ve km binlik ayraçlı (`₺`, `km` ekleri); imleç yerinde kalıyor, ayraca Backspace önündeki rakamı siliyor. Kasa, yakıt, vites ve hasar gerçek radyo grupları (ok tuşlarıyla gezilebiliyor).
   - **Yapı:** `app/sell/page.tsx` durum ve gönderim mantığını tutuyor (`runSubmit`, `uploadPhotos`). Görsel parçalar `components/sell/` altında. Yazı tipleri ve sayfa başlığı `app/sell/layout.tsx`'ten geliyor.
   - **Doğrulama (üretim derlemesi):** 320, 375 ve 1280 px'te taşma yok, konsol temiz. Adım doğrulaması, odak, binlik ayraç ve imleç, PNG kabul / GIF ret, tarayıcıda üretilen dikey video ve oturumsuz gönderimde giriş penceresi denendi.
+- **Marka/model seçim kutusu (`82b4fc7`, migration `20260926200000_user_catalog_entries.sql`):** marka ve model artık aramalı, serbest metin destekli seçim kutusu (`CatalogCombobox`).
+  - **Arama:** yazım hatasına dayanıklı. Sıra: birebir > adın başı > kelimenin başı > seri eşleşmesi ("320" → 3 Serisi, "c200" → C Serisi) > adın içinde > 1–2 harf yazım hatası (4+ harfte). Eşitlerde doğal sıra.
+  - **Serbest metin:** listede birebir yoksa en altta **"… olarak kullan"** çıkıyor. Seçim ancak listeden seçilince ya da Enter'la kesinleşiyor. Alan terk edilince birebir eşleşen ad otomatik seçiliyor; eşleşme yoksa metin kalıyor ve hata "Listeden seç ya da “…” olarak kullan." diyor. Esc geri alıyor.
+  - **Erişilebilirlik ve mobil:** ARIA combobox (ok tuşları, `aria-activedescendant`). Mobilde odakta kutu ekranın üstüne kaydırılıyor; liste yüksekliği `visualViewport`'a göre (klavye açıkken taşmıyor). Seçenekler en az 44 px. Mobilde marka ve model tam genişlik.
+  - **Veri:** taslakta `brandId` / `brandName` ve `modelId` / `modelName` var. Listeden seçildiyse id'ler doğrudan yazılıyor; yeni adda gönderimde `resolve_listing_catalog` id'leri buluyor ya da ekliyor, sonra ilan açılıyor. Yeni markanın modeli de yeni olmak zorunda.
+  - **Testler:** `lib/catalog-search.test.ts` (sıralama, yazım hatası, ad kuralları) ve `lib/catalog-rls.test.ts` (PGlite: RPC, tekilleştirme, günlük sınır, yetkiler, TS ve SQL kurallarının birebir aynılığı).
+  - **Canlıda doğrulandı:** `/sell`'de 36 marka listeleniyor; "mercedes benz" → Mercedes-Benz, "c200" → C Serisi. `/search` filtreleri 36 markayla yükleniyor, konsol temiz.
 
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`f5f41ff`** ("feat(android): add assetlinks.json for TWA verification"). Ondan önceki büyük değişiklik `869865a`: yeni ilan verme akışı. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`82b4fc7`** ("feat(sell): implement creatable combobox with fuzzy search for brand and model"). Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: 11 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
+- Veritabanı kodla uyumlu: 12 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
 - **DNS** kayıt firmasında (`knuth` / `dijkstra.ihsdns.com`), Vercel nameserver'ları kullanılmıyor: kök alan A `216.198.79.1`, `www` CNAME `cname.vercel-dns.com`. Vercel'deki "Intended Nameservers ☓" uyarısı bu yüzden çıkıyor ve sorun değil.
 - **Yerel `nslookup`:** bu makinenin varsayılan DNS sunucusu yanıt vermiyor; sorgu `nslookup <ad> 1.1.1.1` ile yapılmalı.
@@ -124,6 +135,7 @@ _Son güncelleme: 26 Eylül 2026_
    - Yayın durumu kartında video yüzde çubuğu ilerlemeli; başarı ekranında "İşleniyor" görünmeli.
    - Gerçek sürükle-bırak ve iOS/Android cihazlar Claude tarafından denenmedi.
    - "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
+   - Listede olmayan marka/model ile ilan (ör. katalogdaki bir markaya yeni model). İlan açılmalı ve ilanda adıyla görünmeli. Bu, `resolve_listing_catalog`'un canlıdaki ilk gerçek çağrısı olacak; Claude giriş yapamadığı için yalnızca PGlite'ta denendi.
 3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
    - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
    - Dashboard'dan eklendi ve 308 ile `gozuyle.com`'a yönlendirildi.
@@ -155,6 +167,7 @@ _Son güncelleme: 26 Eylül 2026_
 - ✅ `/api/reports` için kalıcı istek sınırı: tamamlandı (26 Eylül 2026). Veritabanı sayacı ve kullanıcı bazlı kurallar kuruldu; ayrıntılar 3. bölümde. Hobby planda Vercel Firewall kuralı eklenemiyor.
   - Kalan küçük not: anonim istekler hâlâ IP'ye göre sayılıyor. CGNAT arkasındaki çok sayıda anonim bildiren aynı IP'nin dakikada 5 hakkını paylaşır. Trafik artarsa anonim sınır gözden geçirilmeli.
   - Gizlilik politikasına "kötüye kullanımı önlemek için IP adresinin anahtarlı özeti en fazla 24 saat saklanır" benzeri bir cümle eklenmesi düşünülebilir (hukuki inceleme maddesiyle birlikte).
+- Kullanıcıların eklediği marka/modeller için bir yönetim ekranı yok. Yalnızca veritabanında görülebiliyor (`is_user_created = true`). İleride moderasyon paneline "onayla / katalogdaki kayıtla birleştir" eklenebilir.
 - Yasal metinler şablon; hukuki inceleme gerekiyor.
 - Google onay ekranında `supabase.co` alan adı görünebilir; istenirse Supabase'e özel alan adı bağlanabilir. Bağlanırsa `fn_is_vehicle_photo_url`'deki sabit proje adresi de yeni bir migration'la güncellenmeli; güncellenmezse yeni fotoğraf eklemeleri reddedilir.
 
