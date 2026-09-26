@@ -16,10 +16,12 @@ import { useSupabaseSession } from "../../lib/auth";
 import type { FuelType } from "../../lib/feed";
 import {
   EMPTY_LISTING_DRAFT,
+  MAX_PHOTOS,
   PHOTO_BUCKET,
   buildListingRecords,
   buildVehicleImageRow,
   onlyDigits,
+  photoRejection,
   photoStoragePath,
   validateListingDraft,
   type ListingDraft as Draft,
@@ -35,8 +37,6 @@ import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/ve
 // aynı değerler tekrarlanıyor. Asıl doğrulama /api/upload/video ve Cloudflare'de yapılır.
 const MAX_VIDEO_DURATION_SECONDS = 60;
 const MAX_VIDEO_FILE_BYTES = 500 * 1024 * 1024;
-const MAX_PHOTOS = 10;
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 function toOptions<T extends string>(labels: Record<T, string>): { value: T; label: string }[] {
   return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }));
@@ -157,14 +157,13 @@ export default function SellPage() {
     setPhotoError(null);
     if (!files || files.length === 0) return;
 
+    // Sunucu (Storage) aynı kuralları uygular; burada seçim anında açıkça söylenir
     const incoming = Array.from(files);
-    const rejected = incoming.some((f) => !f.type.startsWith("image/") || f.size > MAX_PHOTO_BYTES);
-    if (rejected) {
-      setPhotoError(`Fotoğraflar en fazla ${Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB olabilir.`);
-    }
+    const rejection = incoming.map(photoRejection).find(Boolean);
+    if (rejection) setPhotoError(rejection);
 
     setPhotos((current) => {
-      const valid = incoming.filter((f) => f.type.startsWith("image/") && f.size <= MAX_PHOTO_BYTES);
+      const valid = incoming.filter((f) => photoRejection(f) === null);
       const room = MAX_PHOTOS - current.length;
       if (valid.length > room) setPhotoError(`En fazla ${MAX_PHOTOS} fotoğraf seçebilirsin.`);
       const accepted = valid.slice(0, Math.max(0, room));

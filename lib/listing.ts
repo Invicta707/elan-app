@@ -120,6 +120,29 @@ export function buildListingRecords(sellerId: string, draft: ListingDraft): List
 
 export const PHOTO_BUCKET = "vehicle-photos";
 
+// Sunucudaki sınırlarla aynı: bucket'ın file_size_limit / allowed_mime_types
+// değerleri ve fn_can_upload_vehicle_photo'nun yol kuralı (sıra 0–9, bu
+// uzantılar). Bkz. supabase/migrations/*_vehicle_photos_storage_limits.sql;
+// lib/storage-rls.test.ts ikisini karşılaştırır.
+export const MAX_PHOTOS = 10;
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+/**
+ * HEIC yok: tarayıcıların çoğu gösteremez. iPhone'da Safari, galeriden seçilen
+ * HEIC fotoğrafı yüklemeden önce JPEG'e çevirir.
+ */
+export const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+/** Fotoğraf yüklenemeyecekse kullanıcıya gösterilecek neden, uygunsa null. */
+export function photoRejection(file: { type: string; size: number }): string | null {
+  if (!(PHOTO_MIME_TYPES as readonly string[]).includes(file.type.toLowerCase())) {
+    return "Fotoğraflar JPEG, PNG ya da WebP biçiminde olmalı.";
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    return `Fotoğraflar en fazla ${MAX_PHOTO_BYTES / (1024 * 1024)} MB olabilir.`;
+  }
+  return null;
+}
+
 /**
  * Depolama anahtarı: <ilan>/<sıra>.<uzantı>. Dosya adı kullanılmaz; Supabase
  * Storage ASCII dışı karakterli (ş, ğ, ı…) anahtarları "Invalid key" hatasıyla

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_PHOTO_BYTES,
   buildListingRecords,
   buildVehicleImageRow,
+  photoRejection,
   photoStoragePath,
   validateListingDraft,
   type ListingDraft,
@@ -100,6 +102,25 @@ describe("buildListingRecords", () => {
       "Geçerli bir WhatsApp numarası gir.",
     );
     expect(() => buildListingRecords("user-1", { ...validDraft, bodyType: "" })).toThrow("Kasa tipi seç.");
+  });
+});
+
+describe("photoRejection", () => {
+  it.each(["image/jpeg", "image/png", "image/webp", "IMAGE/JPEG"])("%s kabul edilir", (type) => {
+    expect(photoRejection({ type, size: MAX_PHOTO_BYTES })).toBeNull();
+  });
+
+  it.each(["image/heic", "image/heif", "image/gif", "image/svg+xml", "image/avif", "text/html", ""])(
+    "%s reddedilir",
+    (type) => {
+      expect(photoRejection({ type, size: 1000 })).toBe("Fotoğraflar JPEG, PNG ya da WebP biçiminde olmalı.");
+    },
+  );
+
+  it("10 MB'ın üstü reddedilir", () => {
+    expect(photoRejection({ type: "image/jpeg", size: MAX_PHOTO_BYTES + 1 })).toBe(
+      "Fotoğraflar en fazla 10 MB olabilir.",
+    );
   });
 });
 

@@ -12,12 +12,12 @@ _Son güncelleme: 26 Eylül 2026_
   - [AGENTS.md](AGENTS.md) gereği kod yazmadan önce `node_modules/next/dist/docs/` okunmalı.
   - `params` ve `searchParams` Promise olarak geliyor; `themeColor` metadata'da değil, `viewport` export'unda.
 - **Tailwind CSS 4.3:** `@container` sorguları kullanılıyor (başlık yerleşimi).
-- **Supabase:** Auth (e-posta/şifre, magic link, Google OAuth; `flowType: implicit`), Postgres + RLS, Storage (uygulama `vehicle-photos` bucket'ını kullanıyor; `vehicle-images` bucket'ı da var ama kullanılmıyor).
+- **Supabase:** Auth (e-posta/şifre, magic link, Google OAuth; `flowType: implicit`), Postgres + RLS, Storage (uygulama `vehicle-photos` bucket'ını kullanıyor: 10 MB, jpeg/png/webp; `vehicle-images` bucket'ı da var ama kullanılmıyor).
   - Tarayıcı istemcisi [lib/supabase.ts](lib/supabase.ts): tembel Proxy, ilk kullanımda kurulur. Env eksikse import'ta değil kullanımda hata verir; `then` erişimini ayrıca karşılar.
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 25 dosya, **332 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 26 dosya, **370 test**, hepsi `lib/*.test.ts` altında. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -45,7 +45,8 @@ _Son güncelleme: 26 Eylül 2026_
 | Akış | [components/VideoCard.tsx](components/VideoCard.tsx) (sağ sütun: Favori, Paylaş, Detaylar, Bildir, Ses), [components/vehicle/ShareButton.tsx](components/vehicle/ShareButton.tsx), [lib/share.ts](lib/share.ts) |
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | PWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#0A0A0A`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu üretir) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 9 migration, sonuncusu `20260926170000_harden_listing_rls.sql`; hepsi uzak veritabanında uygulanmış (son üçü 26 Eylül 2026'da `db push --linked` ile) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 10 migration, sonuncusu `20260926180000_vehicle_photos_storage_limits.sql`; hepsi uzak veritabanında uygulanmış (son dördü 26 Eylül 2026'da `db push --linked` ile) |
+| Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
 ## 3. 25–26 Eylül 2026 oturumunda tamamlananlar
@@ -83,16 +84,17 @@ _Son güncelleme: 26 Eylül 2026_
 
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`270d328`** ("feat: harden listing status transitions and vehicle images rls"). Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
-- İkisi birlikte `origin/main`'e push'landı; production deploy'u GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: `270d328`'e kadarki bütün migration'lar uzak veritabanında uygulanmış durumda.
+- Son commit "feat: restrict vehicle photo uploads to owners and image types" (Storage sınırları; bu dosya da aynı commit'te güncellendi). Güncel `HEAD` için `git log -1` kullanın.
+- `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
+- Veritabanı kodla uyumlu: 10 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
 - **Alan adları:** `gozuyle.com` 200. `www.gozuyle.com` 308 ile, `elan-app-amber.vercel.app` 307 ile `gozuyle.com`'a yönlendiriyor.
 - **DNS** kayıt firmasında (`knuth` / `dijkstra.ihsdns.com`), Vercel nameserver'ları kullanılmıyor: kök alan A `216.198.79.1`, `www` CNAME `cname.vercel-dns.com`. Vercel'deki "Intended Nameservers ☓" uyarısı bu yüzden çıkıyor ve sorun değil.
 - **Yerel `nslookup`:** bu makinenin varsayılan DNS sunucusu yanıt vermiyor; sorgu `nslookup <ad> 1.1.1.1` ile yapılmalı.
 - **Vercel env (Production + Preview):**
   - Config: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL=https://gozuyle.com`.
   - Sensitive: `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_STREAM_WEBHOOK_SECRET`.
-  - Tanımlı değil: `ADMIN_EMAILS` (moderasyon paneli, yalnızca sunucuda okunur) ve `NEXT_PUBLIC_SUPPORT_EMAIL`.
+  - Secret: `ADMIN_EMAILS` (moderasyon paneli, yalnızca sunucuda okunur; 26 Eylül 2026'da eklendi).
+  - Tanımlı değil: `NEXT_PUBLIC_SUPPORT_EMAIL`.
   - `NEXT_PUBLIC_*` değerleri build sırasında pakete gömülür; değiştirince yeniden deploy gerekir.
 - **Supabase CLI** global kurulu değil. Kullanılan yol: `~/AppData/Local/npm-cache/_npx/aa8e5c70f9d8d161/node_modules/.bin/supabase` (`db query/push --linked`). Docker olmadığı için `db dump` çalışmıyor.
 
@@ -101,7 +103,7 @@ _Son güncelleme: 26 Eylül 2026_
 **Kullanıcı tarafında:**
 
 1. **Supabase → URL Configuration:** Site URL `https://gozuyle.com` olmalı; Redirect URLs'te `https://gozuyle.com/**` bulunmalı (`/auth/callback`'i kapsar). Bu doğrulanmadı ve Google girişi buna bağlı.
-2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli. Bir de "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
+2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli, fotoğraflı ilan verme (JPEG/PNG/WebP yüklenmeli; GIF ya da 10 MB üstü dosyada Türkçe hata çıkmalı; iPhone'dan seçilen fotoğraf JPEG olarak gitmeli). Bir de "İlanlarım"da videosu hazır olmayan arşivlenmiş ilan: "Yayına al" gizli olmalı ve açıklama görünmeli.
 3. ✅ **`www.gozuyle.com`: tamamlandı (26 Eylül 2026).**
    - Sorun DNS'te değildi: CNAME kaydı (`cname.vercel-dns.com`) zaten doğruydu. `www` Vercel projesine eklenmediği için yalnızca `gozuyle.com` için sertifika vardı.
    - Dashboard'dan eklendi ve 308 ile `gozuyle.com`'a yönlendirildi.
@@ -109,11 +111,15 @@ _Son güncelleme: 26 Eylül 2026_
 4. **`destek@gozuyle.com`:** gerçek bir posta kutusu ya da yönlendirme kurulmalı, ya da `NEXT_PUBLIC_SUPPORT_EMAIL` tanımlanmalı. Adres gizlilik politikasında yayında.
 5. **Vercel'deki fazla kayıt:** Preview'a ait eski `CLOUDFLARE_STREAM_WEBHOOK_SECRET` kaydı (id `TZ5cSerrSmMsQUac`) silinmeli. API ile silme izin denetimine takılmıştı.
 6. **Play Store (TWA):** `/.well-known/assetlinks.json` gerekiyor; bunun için imzalama sertifikasının SHA-256 parmak izi lazım.
-7. **Moderasyon paneline erişim:** Vercel env'e `ADMIN_EMAILS` (virgülle ayrılmış, onaylı e-postalar) eklenmeli ve yeniden deploy edilmeli. Tanımlanana kadar panel herkesi geri yönlendirir.
-8. **Storage yükleme politikası (yalnızca Supabase panelinden):**
-   - Sorun: `vehicle-photos` bucket'ının "Authenticated users can upload vehicle photos" INSERT politikası, giriş yapmış herkesin her yola, her tür ve boyutta dosya yüklemesine izin veriyor. Bucket'ta MIME ya da boyut sınırı da yok.
-   - Migration'lar `storage.objects` politikalarını değiştiremiyor: `postgres` rolü, tablonun sahibi olan `supabase_storage_admin`'in üyesi değil.
-   - Çözüm seçenekleri: politika panelden daraltılmalı ya da uygulama `vehicle-images` bucket'ına taşınmalı. O bucket'ta 10 MB sınırı, yalnızca jpeg/png/webp ve sahibe bağlı politikalar var; ancak geçiş uygulama kodunu, hesap silmeyi ve `fn_is_vehicle_photo_url`'i de değiştirir.
+7. ✅ **Moderasyon paneline erişim: tamamlandı (26 Eylül 2026).** `ADMIN_EMAILS` Production ve Preview'a Secret olarak eklendi (15:13 UTC). Ondan sonra başlayan deploy (`elan-6ie9dxson`) `gozuyle.com`'a bağlı. Canlıda token olmadan API `401`, sayfa `200` + `noindex` dönüyor. Yönetici hesabıyla uçtan uca deneme 2. maddede.
+8. **Storage yükleme politikası: son adım panelde.**
+   - Sorun: `vehicle-photos` bucket'ının "Authenticated users can upload vehicle photos" INSERT politikası yalnızca `bucket_id`'ye bakıyor; giriş yapmış herkes her yola yükleyebiliyor.
+   - Yapıldı (migration `20260926180000_vehicle_photos_storage_limits.sql`):
+     - Bucket'a 10 MB ve yalnızca `image/jpeg`, `image/png`, `image/webp` sınırı. Tür ve boyut artık her yüklemede sunucuda denetleniyor.
+     - Yükleme kuralını tutan `public.fn_can_upload_vehicle_photo(name)` fonksiyonu. Şartlar: yükleyen ilanın satıcısı, ilan `draft` ya da `pending_video`, yol `<ilan>/<0-9>.<jpeg|png|webp>`.
+     - İstemci aynı kuralları `photoRejection` ile seçim anında uyguluyor.
+   - **Kalan (yalnızca panelden):** Supabase → Storage → Policies → `vehicle-photos` → "Authenticated users can upload vehicle photos" politikasının ifadesi `bucket_id = 'vehicle-photos' and public.fn_can_upload_vehicle_photo(name)` olmalı. Migration'lar `storage.objects` politikalarını değiştiremiyor, çünkü `postgres` rolü `supabase_storage_admin`'in üyesi değil. Bu adım yapılana kadar giriş yapmış herkes geçerli türde ve boyuttaki dosyaları her yola yükleyebilir.
+   - İstenirse aynı ekranda DELETE politikası "Users can delete own vehicle photos" da düzeltilebilir: `foldername[1] = auth.uid()` şartı uygulamanın yoluyla (`<ilan>/…`) hiç eşleşmiyor. Güvenlik açığı değil; satıcı fotoğrafını istemciden silemiyor, hesap silme ise servis anahtarıyla çalışıyor.
 
 **Teknik ve ürün:**
 
