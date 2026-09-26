@@ -1,7 +1,7 @@
 import type { VehicleStatus } from "./listing-status";
 import { supabase } from "./supabase";
 
-// "İlanlarım": giriş yapan satıcının ilanları ve durum değişikliği.
+// "Vitrinim": giriş yapan satıcının ilanları ve durum değişikliği.
 
 export type MyListing = {
   id: string;
@@ -15,7 +15,10 @@ export type MyListing = {
   createdAt: string;
   /** Kapak fotoğrafı, yoksa video kapağı */
   coverUrl: string | null;
+  /** Vitrin ızgarası (dikey kareler): video kapağı, yoksa kapak fotoğrafı */
+  posterUrl: string | null;
   hasPlayableVideo: boolean;
+  viewsCount: number;
 };
 
 export type MyListingRow = {
@@ -27,6 +30,7 @@ export type MyListingRow = {
   mileage_km: number;
   city: string | null;
   created_at: string;
+  views_count?: number | null;
   brand: { name: string } | null;
   model: { name: string } | null;
   images: { image_url: string | null; is_primary: boolean; display_order: number }[] | null;
@@ -39,6 +43,7 @@ export function toMyListing(row: MyListingRow): MyListing {
     .sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || a.display_order - b.display_order);
   const videos = row.videos ?? [];
   const readyVideo = videos.find((v) => v.status === "ready" && v.hls_url);
+  const videoPoster = readyVideo?.thumbnail_url ?? videos.find((v) => v.thumbnail_url)?.thumbnail_url ?? null;
 
   return {
     id: row.id,
@@ -55,7 +60,9 @@ export function toMyListing(row: MyListingRow): MyListing {
       readyVideo?.thumbnail_url ??
       videos.find((v) => v.thumbnail_url)?.thumbnail_url ??
       null,
+    posterUrl: videoPoster ?? images[0]?.image_url ?? null,
     hasPlayableVideo: Boolean(readyVideo),
+    viewsCount: Number(row.views_count ?? 0),
   };
 }
 
@@ -63,7 +70,7 @@ export async function fetchMyListings(sellerId: string): Promise<MyListing[]> {
   const { data, error } = await supabase
     .from("vehicles")
     .select(
-      `id, status, year, price, currency, mileage_km, city, created_at,
+      `id, status, year, price, currency, mileage_km, city, created_at, views_count,
        brand:brands(name),
        model:models(name),
        images:vehicle_images(image_url, is_primary, display_order),

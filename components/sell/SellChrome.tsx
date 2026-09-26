@@ -318,7 +318,7 @@ export function SellSuccess({
             href="/my-listings"
             className="inline-flex h-12 items-center justify-center rounded-xl bg-[#003399] text-[16px] font-semibold text-white hover:bg-[#002B82] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#003399]/30"
           >
-            İlanlarımı gör
+            Vitrinimi gör
           </Link>
           <Link
             href="/"

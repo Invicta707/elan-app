@@ -6,6 +6,7 @@ import { bodyFont, displayFont } from "../app/fonts";
 import { fetchVehicleDetails, type FeedVehicle, type VehicleDetails } from "../lib/feed";
 import { buildVehicleShareText } from "../lib/vehicle-page";
 import FavoriteButton from "./FavoriteButton";
+import MessageSellerButton from "./vehicle/MessageSellerButton";
 import PhotoGallery, { GallerySkeleton } from "./vehicle/PhotoGallery";
 import ShareButton from "./vehicle/ShareButton";
 import SpecsTable, { formatVehiclePrice } from "./vehicle/SpecsTable";
@@ -39,6 +40,7 @@ export default function VehicleDetailSheet(props: VehicleDetailSheetProps) {
 }
 
 function Sheet({ vehicle, onClose, onContact, isContacting, notice }: VehicleDetailSheetProps) {
+  const [messageNotice, setMessageNotice] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -319,16 +321,21 @@ function Sheet({ vehicle, onClose, onContact, isContacting, notice }: VehicleDet
 
         <div className="shrink-0 border-t border-[#E3E6EA] bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div role="status" aria-live="polite">
-            {notice && <p className="mb-2 text-center text-[13px] text-[#B42318]">{notice}</p>}
+            {(messageNotice ?? notice) && (
+              <p className="mb-2 text-center text-[13px] text-[#B42318]">{messageNotice ?? notice}</p>
+            )}
           </div>
-          <div className="flex gap-2">
+          {/* İki iletişim yolu eşit ağırlıkta; paylaş yalnızca simge */}
+          <div className="@container flex gap-2">
             <ShareButton
               vehicleId={vehicle.id}
               title={title}
               text={buildVehicleShareText(vehicle)}
-              className="flex-1"
+              variant="icon"
+              className="shrink-0"
             />
-            <WhatsAppButton onClick={onContact} isContacting={isContacting} className="flex-[1.25]" />
+            <MessageSellerButton vehicleId={vehicle.id} onNotice={setMessageNotice} className="min-w-0 flex-1" />
+            <WhatsAppButton onClick={onContact} isContacting={isContacting} className="min-w-0 flex-1" />
           </div>
         </div>
       </div>

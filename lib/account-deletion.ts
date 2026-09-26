@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AVATAR_BUCKET } from "./avatar";
 import { PHOTO_BUCKET } from "./listing";
 
 // Hesap silme (Google Play: uygulama içinden hesap silme zorunluluğu).
@@ -6,9 +7,10 @@ import { PHOTO_BUCKET } from "./listing";
 // Veritabanında her şey auth kaydına bağlı ve CASCADE ile silinir:
 //   auth.users → public.users → vehicles → videos, vehicle_images, interactions, reports
 //   auth.users → profiles;  public.users → interactions (favoriler dahil)
+//   auth.users → conversations → messages; user_blocks; user_reports (bildirilen olarak)
 //   Kullanıcının başkalarının ilanları için yaptığı bildirimler kalır, kimliği silinir (SET NULL).
-// Veritabanı dışındaki dosyalar (Storage'daki fotoğraflar, Cloudflare Stream
-// videoları) ayrıca silinir.
+// Veritabanı dışındaki dosyalar (Storage'daki ilan fotoğrafları ve profil
+// fotoğrafı, Cloudflare Stream videoları) ayrıca silinir.
 
 type VehicleMediaRow = { id: string; videos: { stream_uid: string | null }[] | null };
 
@@ -47,6 +49,12 @@ export async function deleteAccount(userId: string, deps: AccountDeletionDeps): 
     }
     photoPaths.push(...(files ?? []).map((file) => `${vehicle.id}/${file.name}`));
   }
+  const { data: avatarFiles, error: avatarError } = await supabase.storage.from(AVATAR_BUCKET).list(userId, { limit: 100 });
+  if (avatarError) {
+    console.error("Hesap silme: profil fotoğrafı listelenemedi:", avatarError);
+    return { ok: false, error: "lookup_failed" };
+  }
+  const avatarPaths = (avatarFiles ?? []).map((file) => `${userId}/${file.name}`);
 
   // 2) Hesap: veritabanındaki tüm veriler CASCADE ile gider
   const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
@@ -63,6 +71,13 @@ export async function deleteAccount(userId: string, deps: AccountDeletionDeps): 
     if (error) {
       cleanupFailures += photoPaths.length;
       console.error("Hesap silme: fotoğraflar silinemedi:", photoPaths, error);
+    }
+  }
+  if (avatarPaths.length > 0) {
+    const { error } = await supabase.storage.from(AVATAR_BUCKET).remove(avatarPaths);
+    if (error) {
+      cleanupFailures += avatarPaths.length;
+      console.error("Hesap silme: profil fotoğrafı silinemedi:", avatarPaths, error);
     }
   }
   const results = await Promise.allSettled(streamUids.map((uid) => deps.deleteStreamVideo(uid)));

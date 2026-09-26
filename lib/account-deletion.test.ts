@@ -54,7 +54,7 @@ const SELLER = {
     { id: "veh-1", videos: [{ stream_uid: "cf-1" }] },
     { id: "veh-2", videos: [{ stream_uid: null }, { stream_uid: "cf-2" }] },
   ],
-  files: { "veh-1": [{ name: "0.jpg" }, { name: "1.jpg" }], "veh-2": [{ name: "0.png" }] },
+  files: { "veh-1": [{ name: "0.jpg" }, { name: "1.jpg" }], "veh-2": [{ name: "0.png" }], "user-1": [{ name: "1700.webp" }] },
 };
 
 beforeEach(() => {
@@ -77,12 +77,14 @@ describe("deleteAccount", () => {
       "select vehicles(id, videos(stream_uid)) seller_id=user-1",
       "list vehicle-photos/veh-1",
       "list vehicle-photos/veh-2",
+      "list avatars/user-1",
       "deleteUser user-1",
       "remove vehicle-photos",
+      "remove avatars",
       "cloudflare cf-1",
       "cloudflare cf-2",
     ]);
-    expect(removed).toEqual(["veh-1/0.jpg", "veh-1/1.jpg", "veh-2/0.png"]);
+    expect(removed).toEqual(["veh-1/0.jpg", "veh-1/1.jpg", "veh-2/0.png", "user-1/1700.webp"]);
   });
 
   it("ilanı olmayan kullanıcıda sadece hesap silinir", async () => {
@@ -92,7 +94,11 @@ describe("deleteAccount", () => {
       ok: true,
       vehicles: 0,
     });
-    expect(order).toEqual(["select vehicles(id, videos(stream_uid)) seller_id=user-1", "deleteUser user-1"]);
+    expect(order).toEqual([
+      "select vehicles(id, videos(stream_uid)) seller_id=user-1",
+      "list avatars/user-1",
+      "deleteUser user-1",
+    ]);
     expect(deleteStreamVideo).not.toHaveBeenCalled();
   });
 
@@ -127,7 +133,8 @@ describe("deleteAccount", () => {
     });
     await expect(deleteAccount("user-1", { supabase, deleteStreamVideo })).resolves.toMatchObject({
       ok: true,
-      cleanupFailures: 3 + 1,
+      // 3 ilan fotoğrafı + 1 profil fotoğrafı + 1 video
+      cleanupFailures: 3 + 1 + 1,
     });
   });
 });

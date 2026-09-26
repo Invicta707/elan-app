@@ -6,11 +6,18 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { AuthModalPortal } from "./AuthGatedLink";
 import { useSupabaseSession } from "../lib/auth";
+import { useMyProfile } from "../lib/use-my-profile";
+import { useUnreadCount } from "../lib/use-unread-count";
+import Avatar from "./ui/Avatar";
+import UnreadBadge from "./ui/UnreadBadge";
 
-// Üst çubuktaki profil butonu: misafirde giriş penceresini açar, oturum açıksa
-// kullanıcının baş harfiyle avatar gösterir ve Hesabım sayfasına götürür.
+// Üst çubuktaki profil butonu: misafirde giriş penceresini açar; oturum açıksa
+// profil fotoğrafını (yoksa baş harf) ve okunmamış mesaj rozetini gösterir,
+// Vitrinim'e (profil) götürür.
 export default function HeaderProfileButton({ overlay }: { overlay: boolean }) {
   const { session, isLoading } = useSupabaseSession();
+  const { profile } = useMyProfile();
+  const unread = useUnreadCount();
   const pathname = usePathname();
   const [showAuth, setShowAuth] = useState(false);
 
@@ -25,18 +32,19 @@ export default function HeaderProfileButton({ overlay }: { overlay: boolean }) {
 
   if (session) {
     const email = session.user.email ?? "";
-    const initial = (email.trim()[0] ?? "?").toLocaleUpperCase("tr");
-    const active = pathname === "/account";
+    const name = profile?.displayName ?? email;
+    const active = pathname === "/my-listings" || pathname === "/account";
     return (
       <Link
-        href="/account"
-        aria-label={email ? `Hesabım (${email})` : "Hesabım"}
+        href="/my-listings"
+        aria-label={profile?.displayName ? `Vitrinim (${profile.displayName})` : "Vitrinim"}
         aria-current={active ? "page" : undefined}
-        className={`${base} text-[16px] font-bold [font-family:var(--font-display)] ${
-          overlay ? "bg-white text-[#0A0A0A]" : "bg-[#15181C] text-white"
-        } ${active ? (overlay ? "ring-2 ring-white/60" : "ring-2 ring-[#003399]/40") : ""}`}
+        className={`${base} relative transition-transform active:scale-95 ${
+          active ? (overlay ? "ring-2 ring-white/70" : "ring-2 ring-[#003399]/50") : ""
+        }`}
       >
-        <span aria-hidden="true">{initial}</span>
+        <Avatar url={profile?.avatarUrl} name={name} size={40} className={overlay ? "ring-2 ring-white/80" : ""} />
+        <UnreadBadge count={unread} className="absolute -right-1 -top-1" />
       </Link>
     );
   }

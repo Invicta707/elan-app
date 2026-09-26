@@ -10,7 +10,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "search", href: "/search", label: "Ara" },
   { key: "sell", href: "/sell", label: "İlan Ver" },
   { key: "favorites", href: "/favorites", label: "Favoriler" },
-  { key: "my-listings", href: "/my-listings", label: "İlanlarım" },
+  { key: "my-listings", href: "/my-listings", label: "Vitrinim" },
 ];
 
 /**
@@ -36,4 +36,9 @@ export function isNavItemActive(href: string, pathname: string | null): boolean 
   if (!pathname) return false;
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Alt gezinme çubuğunun gizlendiği sayfalar: tam ekran sohbet (/messages/<id>) */
+export function isNavHidden(pathname: string | null): boolean {
+  return Boolean(pathname?.startsWith("/messages/") && pathname.length > "/messages/".length);
 }

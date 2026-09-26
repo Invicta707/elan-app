@@ -24,6 +24,8 @@ export type VehicleSpecs = {
 
 export type VehiclePageData = VehicleSpecs & {
   id: string;
+  /** Kendi ilanında "Mesaj gönder" gizlenir */
+  sellerId: string | null;
   status: VehicleStatus;
   description: string | null;
   /** Kapak (is_primary) başta, sonra sırayla */
@@ -35,6 +37,7 @@ export type VehiclePageData = VehicleSpecs & {
 
 export type VehiclePageRow = {
   id: string;
+  seller_id?: string | null;
   status: VehicleStatus;
   year: number;
   price: number | string;
@@ -62,6 +65,7 @@ export function toVehiclePage(row: VehiclePageRow): VehiclePageData {
 
   return {
     id: row.id,
+    sellerId: row.seller_id ?? null,
     status: row.status,
     brandName: row.brand?.name ?? "",
     modelName: row.model?.name ?? "",
@@ -91,7 +95,7 @@ export async function fetchVehiclePage(id: string): Promise<VehiclePageData | nu
   const { data, error } = await supabase
     .from("vehicles")
     .select(
-      `id, status, year, price, currency, mileage_km, fuel_type, transmission, body_type,
+      `id, seller_id, status, year, price, currency, mileage_km, fuel_type, transmission, body_type,
        city, has_heavy_damage, description,
        brand:brands(name),
        model:models(name),

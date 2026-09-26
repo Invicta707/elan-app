@@ -17,6 +17,7 @@ const VEHICLE_ID = "151ebbc0-627b-4ba4-a03b-6c4394ecda68";
 
 const row: VehiclePageRow = {
   id: VEHICLE_ID,
+  seller_id: "seller-1",
   status: "active",
   year: 2021,
   price: "3450000",
@@ -42,6 +43,7 @@ describe("toVehiclePage", () => {
   it("satırı sayfa verisine çevirir, kapağı başa alır", () => {
     expect(toVehiclePage(row)).toEqual({
       id: VEHICLE_ID,
+      sellerId: "seller-1",
       status: "active",
       brandName: "Porsche",
       modelName: "911 Carrera S",

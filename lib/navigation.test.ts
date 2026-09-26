@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_ITEMS, isNavItemActive, shouldNavigateBack } from "./navigation";
+import { NAV_ITEMS, isNavHidden, isNavItemActive, shouldNavigateBack } from "./navigation";
 
 describe("shouldNavigateBack", () => {
   const origin = "https://elan.test";
@@ -63,7 +63,17 @@ describe("isNavItemActive", () => {
       ["/search", "Ara"],
       ["/sell", "İlan Ver"],
       ["/favorites", "Favoriler"],
-      ["/my-listings", "İlanlarım"],
+      ["/my-listings", "Vitrinim"],
     ]);
+  });
+});
+
+describe("isNavHidden", () => {
+  it("yalnızca tam ekran sohbette alt çubuk gizlenir", () => {
+    expect(isNavHidden("/messages/abc")).toBe(true);
+    expect(isNavHidden("/messages")).toBe(false);
+    expect(isNavHidden("/messages/")).toBe(false);
+    expect(isNavHidden("/my-listings")).toBe(false);
+    expect(isNavHidden(null)).toBe(false);
   });
 });

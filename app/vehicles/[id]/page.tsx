@@ -133,6 +133,7 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
 
       <VehiclePageActions
         vehicle={vehicle}
+        sellerId={vehicle.sellerId}
         shareTitle={buildVehicleTitle(vehicle)}
         shareText={buildVehicleShareText(vehicle)}
       />

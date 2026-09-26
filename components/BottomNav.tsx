@@ -3,16 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { bodyFont } from "../app/fonts";
-import { NAV_ITEMS, isNavItemActive, type NavItemKey } from "../lib/navigation";
+import { NAV_ITEMS, isNavItemActive, isNavHidden, type NavItemKey } from "../lib/navigation";
+import { useUnreadCount } from "../lib/use-unread-count";
 import AuthGatedLink from "./AuthGatedLink";
+import UnreadBadge from "./ui/UnreadBadge";
 
 // Mobil alt gezinme çubuğu (md ve üstünde gizli). Yüksekliği app/globals.css'teki
 // --bottom-nav-height ile aynıdır: sayfalar alt boşluklarını ve akış
 // yüksekliğini bu değişkenle ayarlar.
 export default function BottomNav() {
   const pathname = usePathname();
+  const unread = useUnreadCount();
   // Siyah video akışının üstünde koyu, açık zeminli sayfalarda açık tonda
   const dark = pathname === "/";
+
+  // Tam ekran sohbette gizli: yazma alanı ve klavye için yer kalır
+  if (isNavHidden(pathname)) return null;
 
   return (
     <nav
@@ -52,7 +58,16 @@ export default function BottomNav() {
           return (
             <li key={item.key} className="flex">
               <Link href={item.href} aria-current={active ? "page" : undefined} className={className}>
-                <NavIcon itemKey={item.key} active={active} />
+                <span className="relative">
+                  <NavIcon itemKey={item.key} active={active} />
+                  {/* Okunmamış mesajlar Vitrinim'de (Mesajlar oradan açılır) */}
+                  {item.key === "my-listings" && (
+                    <UnreadBadge
+                      count={unread}
+                      className={`absolute -right-2.5 -top-1.5 ${dark ? "[--badge-ring:#000]" : ""}`}
+                    />
+                  )}
+                </span>
                 <span>{item.label}</span>
               </Link>
             </li>

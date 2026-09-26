@@ -33,8 +33,9 @@ export default function ShareButton({
   /**
    * pill: beyaz zeminde metinli buton (ilan sayfası, detay çekmecesi)
    * overlay: dikey videonun üstünde, sağdaki buton sütununda (etiketli)
+   * icon: yuvarlak, yalnızca simge (ilan sayfasının alt çubuğu: yanında iki iletişim butonu)
    */
-  variant?: "pill" | "overlay";
+  variant?: "pill" | "overlay" | "icon";
   className?: string;
 }) {
   const [message, setMessage] = useState<Message | null>(null);
@@ -73,6 +74,15 @@ export default function ShareButton({
           <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
             Paylaş
           </span>
+        </button>
+      ) : variant === "icon" ? (
+        <button
+          type="button"
+          onClick={handleShare}
+          aria-label="İlanı paylaş"
+          className="flex h-12 w-12 items-center justify-center rounded-full border border-[#C9CED6] bg-white text-[#15181C] transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+        >
+          <ShareIcon className="h-5 w-5" />
         </button>
       ) : (
         <button

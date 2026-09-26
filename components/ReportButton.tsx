@@ -70,7 +70,8 @@ type Status =
   | { state: "error"; message: string }
   | { state: "sent"; already: boolean };
 
-function ReportDialog({ vehicleId, onClose }: { vehicleId: string; onClose: () => void }) {
+/** İlan bildirim penceresi; sohbet menüsü de kullanır (document.body'ye portal ile) */
+export function ReportDialog({ vehicleId, onClose }: { vehicleId: string; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const detailsId = useId();

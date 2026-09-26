@@ -52,7 +52,7 @@ export default function AccountView() {
                   href="/my-listings"
                   className="inline-flex h-11 items-center rounded-md border border-[#C9CED6] px-4 text-[15px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
                 >
-                  İlanlarım
+                  Vitrinim
                 </Link>
                 <button
                   type="button"

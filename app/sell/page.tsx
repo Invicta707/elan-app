@@ -489,7 +489,7 @@ export default function SellPage() {
             href="/my-listings"
             className="rounded-sm text-[14px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
           >
-            İlanlarım
+            Vitrinim
           </Link>
         </div>
 

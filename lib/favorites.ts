@@ -108,7 +108,7 @@ export async function removeRemoteFavorite(userId: string, vehicleId: string): P
 const CARD_QUERY_CHUNK = 50;
 
 export function toFavoriteCard(row: MyListingRow): VehicleCardData {
-  // Kapak ve oynatılabilir video seçimi İlanlarım'daki kurallarla aynı
+  // Kapak ve oynatılabilir video seçimi Vitrinim'deki kurallarla aynı
   const listing = toMyListing(row);
   return {
     id: row.id,
