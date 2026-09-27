@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_FAILURES,
+  MAX_FAILURE_LENGTH,
   REJECT_THRESHOLD,
+  THUMBNAIL_TIMESTAMP_PCT,
   combineVerdicts,
+  coverFrameUrl,
   decide,
   localTextScores,
   moderationReasonCode,
@@ -11,6 +15,7 @@ import {
   videoFrameTimes,
   videoFrameUrl,
   videoModerationFrames,
+  videoModerationTargets,
   type ModerationVerdict,
 } from "./content-moderation";
 
@@ -151,10 +156,84 @@ describe("video kareleri", () => {
     expect(videoFrameUrl(`${THUMB}?time=1s`, 30)).toBe(`${THUMB}?time=30s&height=480`);
   });
 
-  it("kapak + örnek kareler", () => {
+  it("kapak + örnek kareler; kapak zamanıyla istenir (zamansız adres ready'den ~40 sn sonra hazır oluyor)", () => {
     expect(videoModerationFrames(THUMB, 10)).toEqual([
-      `${THUMB}?height=480`,
+      `${THUMB}?time=2s&height=480`,
       ...[1, 3, 5, 7, 9].map((t) => `${THUMB}?time=${t}s&height=480`),
     ]);
+    expect(videoModerationFrames(THUMB, 10).some((url) => !url.includes("time="))).toBe(false);
+  });
+
+  it("kapak zamanı: sürenin %20'si, tek ondalık (Cloudflare'in thumbnailTimestampPct karesi)", () => {
+    expect(THUMBNAIL_TIMESTAMP_PCT).toBe(0.2);
+    expect(coverFrameUrl(THUMB, 28)).toBe(`${THUMB}?time=5.6s&height=480`);
+    expect(coverFrameUrl(THUMB, 2)).toBe(`${THUMB}?time=0.4s&height=480`);
+    expect(coverFrameUrl(THUMB, 11)).toBe(`${THUMB}?time=2.2s&height=480`);
+    expect(coverFrameUrl(THUMB, 37, 720)).toBe(`${THUMB}?time=7.4s&height=720`);
+    // Adresteki eski zaman değişir
+    expect(coverFrameUrl(`${THUMB}?time=1s`, 15)).toBe(`${THUMB}?time=3s&height=480`);
+  });
+
+  it("süre bilinmiyorsa kapak zamansız adrese düşer", () => {
+    expect(coverFrameUrl(THUMB, null)).toBe(`${THUMB}?height=480`);
+    expect(coverFrameUrl(THUMB, 0)).toBe(`${THUMB}?height=480`);
+    expect(coverFrameUrl(THUMB, Number.NaN)).toBe(`${THUMB}?height=480`);
+  });
+
+  it("kareler adlarıyla (denetlenemezse kayda yazılır); aynı adres bir kez", () => {
+    expect(videoModerationTargets(THUMB, 3)).toEqual([
+      { url: `${THUMB}?time=0.6s&height=480`, label: "kapak" },
+      { url: `${THUMB}?time=0s&height=480`, label: "kare 0 sn" },
+      { url: `${THUMB}?time=1s&height=480`, label: "kare 1 sn" },
+      { url: `${THUMB}?time=2s&height=480`, label: "kare 2 sn" },
+    ]);
+    // Kapak bir ara kareye denk gelirse (5 sn → kapak 1 sn, kareler 0–4) o kare tekrar istenmez
+    expect(videoModerationTargets(THUMB, 5).map((f) => f.label)).toEqual([
+      "kapak",
+      "kare 0 sn",
+      "kare 2 sn",
+      "kare 3 sn",
+      "kare 4 sn",
+    ]);
+    expect(videoModerationTargets(THUMB, 15).map((f) => f.label)).toEqual([
+      "kapak",
+      "kare 1 sn",
+      "kare 4 sn",
+      "kare 7 sn",
+      "kare 10 sn",
+      "kare 13 sn",
+    ]);
+  });
+
+  it("ara kareler videonun sonundan önce (süre yuvarlansa da)", () => {
+    for (const duration of [1, 2, 3, 4, 5, 9, 10, 28, 60]) {
+      for (const t of videoFrameTimes(duration)) expect(t).toBeLessThan(duration);
+    }
+  });
+});
+
+describe("denetlenemeyenler (failures)", () => {
+  it("unavailableVerdict nedeni taşır ve uzun metni kısaltır", () => {
+    expect(unavailableVerdict("sightengine", "kapak: sightengine 400 media_error")).toEqual({
+      decision: "flagged",
+      reasons: ["unavailable"],
+      scores: {},
+      provider: "sightengine",
+      failures: ["kapak: sightengine 400 media_error"],
+    });
+    expect(unavailableVerdict("x", "a".repeat(500)).failures?.[0]).toHaveLength(MAX_FAILURE_LENGTH);
+    expect(unavailableVerdict("none")).not.toHaveProperty("failures");
+  });
+
+  it("combineVerdicts nedenleri birleştirir, tekrarı atar, en fazla 10 satır", () => {
+    const combined = combineVerdicts([
+      decide({}, "local"),
+      unavailableVerdict("s", "kapak: 404"),
+      unavailableVerdict("s", "kapak: 404"),
+      ...Array.from({ length: 12 }, (_, i) => unavailableVerdict("s", `kare ${i} sn: 500`)),
+    ]);
+    expect(combined.failures?.[0]).toBe("kapak: 404");
+    expect(combined.failures).toHaveLength(MAX_FAILURES);
+    expect(combineVerdicts([decide({}, "local")])).not.toHaveProperty("failures");
   });
 });

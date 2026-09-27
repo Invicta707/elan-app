@@ -26,6 +26,8 @@ const ENUM_MIGRATION = "20260928100000_vehicle_status_pending_moderation.sql";
 const CONTENT_MIGRATION = "20260928100100_content_moderation.sql";
 /** Zorunlu yönetici onayı: 'pending_approval' (içerik denetimi kurallarının üstüne) */
 const APPROVAL_MIGRATION = "20260928120000_vehicle_status_pending_approval.sql";
+/** Denetim kaydında denetlenemeyen görseller ve nedeni (failures) */
+const FAILURES_MIGRATION = "20260928140000_moderation_event_failures.sql";
 /** Uygulanma sırasıyla; son ikisi test edilen migration'lar */
 const MIGRATIONS = [
   "20260925150000_set_vehicle_status_rpc.sql",
@@ -255,6 +257,7 @@ beforeAll(async () => {
   await db.exec(readMigration(ENUM_MIGRATION));
   await db.exec(readMigration(CONTENT_MIGRATION));
   await db.exec(readMigration(APPROVAL_MIGRATION));
+  await db.exec(readMigration(FAILURES_MIGRATION));
 }, 60_000);
 
 afterAll(async () => {
@@ -269,6 +272,7 @@ describe("migration", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(migrations.indexOf(CONTENT_MIGRATION)).toBe(migrations.indexOf(ENUM_MIGRATION) + 1);
     expect(migrations.indexOf(APPROVAL_MIGRATION)).toBeGreaterThan(migrations.indexOf(CONTENT_MIGRATION));
+    expect(migrations.indexOf(FAILURES_MIGRATION)).toBeGreaterThan(migrations.indexOf(APPROVAL_MIGRATION));
   });
 
   it("vehicle_status'a pending_moderation eklendi", async () => {
@@ -639,6 +643,46 @@ describe("content_moderation_events: yalnızca sunucu", () => {
       ),
     ).toEqual({ ok: true, rows: 1 });
     expect(await run(db, serviceRole, "select * from public.content_moderation_events")).toMatchObject({ ok: true });
+  });
+
+  it("failures: denetlenemeyen görseller ve nedeni; yazılmazsa boş dizi, en fazla 10 satır", async () => {
+    const failure = "kapak: sightengine 400 media_error: Could not download media. HTTP 404";
+    expect(
+      await run(
+        db,
+        serviceRole,
+        `insert into public.content_moderation_events (subject_type, subject_id, provider, decision, reasons, failures)
+         values ('listing', '99999999-9999-4999-8999-000000000001', 'sightengine', 'flagged', '{unavailable}', $1)`,
+        [[failure]],
+      ),
+    ).toEqual({ ok: true, rows: 1 });
+    const { rows } = await db.query<{ failures: string[] }>(
+      "select failures from public.content_moderation_events where subject_id = '99999999-9999-4999-8999-000000000001'",
+    );
+    expect(rows).toEqual([{ failures: [failure] }]);
+
+    // Eski kod sütunu hiç göndermez: kayıt yine yazılır
+    const { rows: plain } = await db.query<{ failures: string[] }>(
+      "insert into public.content_moderation_events (subject_type, provider, decision) values ('avatar', 'x', 'safe') returning failures",
+    );
+    expect(plain).toEqual([{ failures: [] }]);
+
+    expect(
+      await run(
+        db,
+        serviceRole,
+        "insert into public.content_moderation_events (subject_type, provider, decision, failures) values ('listing', 'x', 'flagged', $1)",
+        [Array.from({ length: 11 }, (_, i) => `kare ${i}: hata`)],
+      ),
+    ).toMatchObject({ ok: false, code: "23514" });
+  });
+
+  it("failures migration'ı tekrar çalıştırılabilir; kullanıcıya açılmaz", async () => {
+    await db.exec(readMigration(FAILURES_MIGRATION));
+    expect(await run(db, seller, "select failures from public.content_moderation_events")).toMatchObject({
+      ok: false,
+      code: "42501",
+    });
   });
 });
 

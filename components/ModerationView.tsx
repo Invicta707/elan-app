@@ -1,6 +1,8 @@
 "use client";
 
+import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import FeedHeader from "./FeedHeader";
@@ -36,7 +38,16 @@ export default function ModerationView() {
     <>
       <FeedHeader activeTab="my-listings" tone="solid" />
       <div className="mx-auto max-w-3xl px-4 pt-2 pb-[max(2.5rem,calc(var(--bottom-nav-height)+1.5rem),env(safe-area-inset-bottom))]">
-        <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">Moderasyon</h1>
+        <div className="-ml-2 flex items-center gap-1">
+          <Link
+            href="/my-listings"
+            aria-label="Vitrinim'e dön"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[#15181C] transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+          >
+            <ChevronLeft aria-hidden="true" className="h-6 w-6" />
+          </Link>
+          <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">Moderasyon</h1>
+        </div>
         {/* Kullanıcı değişince kuyruklar sıfırdan yüklenir */}
         {userId ? (
           <div key={userId}>

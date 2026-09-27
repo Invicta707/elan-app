@@ -34,15 +34,33 @@ export function getSupabaseAdmin(): SupabaseClient {
  * anahtarlarda Supabase Auth'a sorar.
  */
 export async function getAuthenticatedUserId(request: Request): Promise<string | null> {
+  return (await getAuthenticatedUser(request))?.id ?? null;
+}
+
+/**
+ * getAuthenticatedUserId gibi; ek olarak token'daki e-posta (küçük harf). Bu
+ * e-posta token üretildiği andaki değerdir: yetki kararında tek başına
+ * kullanılmaz (bkz. lib/moderation-server.ts checkAdminStatus).
+ */
+export async function getAuthenticatedUser(request: Request): Promise<{ id: string; email: string | null } | null> {
   const token = bearerToken(request);
   if (!token) return null;
 
-  const { data, error } = await getSupabaseAdmin().auth.getClaims(token);
+  // Bozuk biçimli token'da getClaims hata döndürmek yerine fırlatıyor ("Invalid
+  // UTF-8 sequence"); oturum yok sayılır (401), istek 500'e düşmez.
+  let result: Awaited<ReturnType<SupabaseClient["auth"]["getClaims"]>>;
+  try {
+    result = await getSupabaseAdmin().auth.getClaims(token);
+  } catch {
+    return null;
+  }
+  const { data, error } = result;
   const claims = data?.claims;
   if (error || !claims?.sub || claims.role !== "authenticated" || claims.is_anonymous === true) {
     return null;
   }
-  return claims.sub;
+  const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() || null : null;
+  return { id: claims.sub, email };
 }
 
 /** "Authorization: Bearer <token>" başlığındaki token (doğrulanmamış) */

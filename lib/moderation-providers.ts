@@ -12,7 +12,11 @@ import { probability, type CategoryScores } from "./content-moderation";
 // Görsel sağlayıcı yoksa denetim "yapılamadı" sayılır: ilanlar yayına girmez,
 // yönetim panelinde insan onayı bekler; avatar yüklenemez.
 
-export type ImageInput = { url: string } | { bytes: Uint8Array; mimeType: string };
+/**
+ * label: denetlenemezse kayda yazılan ad ("kapak", "kare 8 sn", "fotoğraf 2");
+ * sağlayıcıya gitmez.
+ */
+export type ImageInput = ({ url: string } | { bytes: Uint8Array; mimeType: string }) & { label?: string };
 
 export interface ImageModerator {
   readonly name: string;
@@ -26,12 +30,42 @@ export interface TextModerator {
 
 export type ModerationProviders = { image: ImageModerator | null; text: TextModerator | null };
 
-/** Sağlayıcıya ulaşılamadı ya da yanıt beklenen biçimde değil */
+/**
+ * Sağlayıcıya ulaşılamadı ya da yanıt beklenen biçimde değil.
+ * retryable: biraz sonra tekrar denemek işe yarayabilir (5xx, 429, görsel
+ * indirilemedi). Anahtar, istek ya da kota hatası tekrarla düzelmez.
+ */
 export class ModerationProviderError extends Error {
-  constructor(message: string) {
+  readonly retryable: boolean;
+  readonly status: number | null;
+
+  constructor(message: string, { retryable = false, status = null }: { retryable?: boolean; status?: number | null } = {}) {
     super(message);
     this.name = "ModerationProviderError";
+    this.retryable = retryable;
+    this.status = status;
   }
+}
+
+/**
+ * Tekrar denenebilir mi? Sağlayıcının kendi hatası sınıflandırılmıştır; ağ
+ * hatası ve zaman aşımı (TypeError, AbortError/TimeoutError) geçicidir.
+ */
+export function isRetryableProviderError(error: unknown): boolean {
+  return error instanceof ModerationProviderError ? error.retryable : true;
+}
+
+/**
+ * Sightengine hata türleri (https://sightengine.com/docs/api-error-codes-and-responses):
+ * media_error: görsel indirilemedi/açılamadı (ör. kaynak 404; biraz sonra hazır
+ * olabilir), api_error / unknown_error: sağlayıcı tarafı. Diğerleri (argument_error,
+ * credentials_error, usage_limit, plan_error, request_error) tekrarla düzelmez.
+ */
+const RETRYABLE_ERROR_TYPES = new Set(["media_error", "api_error", "unknown_error"]);
+
+function errorType(body: unknown): string | undefined {
+  const type = (body as { error?: { type?: unknown } } | null)?.error?.type;
+  return typeof type === "string" ? type : undefined;
 }
 
 type FetchImpl = typeof fetch;
@@ -53,9 +87,17 @@ function errorMessage(body: unknown): string | undefined {
 async function readJson(response: Response, provider: string): Promise<unknown> {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ModerationProviderError(`${provider} ${response.status}: ${errorMessage(body) ?? response.statusText}`);
+    const type = errorType(body);
+    throw new ModerationProviderError(
+      `${provider} ${response.status}${type ? ` ${type}` : ""}: ${errorMessage(body) ?? response.statusText}`,
+      {
+        status: response.status,
+        retryable: response.status >= 500 || response.status === 429 || (type !== undefined && RETRYABLE_ERROR_TYPES.has(type)),
+      },
+    );
   }
-  if (body === null) throw new ModerationProviderError(`${provider}: yanıt JSON değil`);
+  // JSON olmayan başarılı yanıt: büyük olasılıkla ara katmanın hata sayfası
+  if (body === null) throw new ModerationProviderError(`${provider}: yanıt JSON değil`, { retryable: true, status: response.status });
   return body;
 }
 
@@ -85,7 +127,10 @@ type SightengineResponse = {
 export function parseSightengineResponse(raw: unknown): CategoryScores {
   const body = (raw ?? {}) as SightengineResponse;
   if (body.status !== "success") {
-    throw new ModerationProviderError(`sightengine: ${body.error?.message ?? "başarısız yanıt"}`);
+    const type = errorType(body);
+    throw new ModerationProviderError(`sightengine${type ? ` ${type}` : ""}: ${body.error?.message ?? "başarısız yanıt"}`, {
+      retryable: type !== undefined && RETRYABLE_ERROR_TYPES.has(type),
+    });
   }
   const { nudity, weapon, violence, gore } = body;
   if (!nudity || !weapon || !violence || !gore) {
@@ -227,7 +272,11 @@ export async function fetchImageBytes(
 ): Promise<Uint8Array> {
   if (!url.startsWith("https://")) throw new ModerationProviderError("görsel adresi https değil");
   const response = await fetchImpl(url, { cache: "no-store", signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
-  if (!response.ok) throw new ModerationProviderError(`görsel indirilemedi: ${response.status}`);
+  if (!response.ok) {
+    // 404: kare henüz üretilmemiş olabilir (Cloudflare); 5xx/429 geçici
+    const retryable = response.status === 404 || response.status === 429 || response.status >= 500;
+    throw new ModerationProviderError(`görsel indirilemedi: ${response.status}`, { retryable, status: response.status });
+  }
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (declared > maxBytes) throw new ModerationProviderError("görsel denetim için çok büyük");
   const bytes = new Uint8Array(await response.arrayBuffer());

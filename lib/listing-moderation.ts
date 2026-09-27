@@ -7,11 +7,17 @@ import {
   combineVerdicts,
   moderationReasonCode,
   unavailableVerdict,
-  videoModerationFrames,
+  videoModerationTargets,
   type ModerationDecision,
   type ModerationVerdict,
 } from "./content-moderation";
-import { moderateImages, moderateText, recordModerationEvent, type ModerationEvent } from "./content-moderation-server";
+import {
+  moderateImages,
+  moderateText,
+  recordModerationEvent,
+  type ImageModerationOptions,
+  type ModerationEvent,
+} from "./content-moderation-server";
 import { PHOTO_BUCKET } from "./listing";
 import type { ModerationStatus, VehicleStatus } from "./listing-status";
 import { moderationProvidersFromEnv, type ImageInput, type ModerationProviders } from "./moderation-providers";
@@ -51,7 +57,7 @@ export type ListingSnapshot = {
   city: string | null;
   photoUrls: string[];
   /** İşlenmiş videolar: kareleri bunlardan alınır */
-  readyVideos: { thumbnailUrl: string | null; durationSeconds: number | null }[];
+  readyVideos: { streamUid: string; thumbnailUrl: string | null; durationSeconds: number | null }[];
   /** Bütün videoların Cloudflare uid'leri (ret temizliği için) */
   streamUids: string[];
 };
@@ -78,11 +84,22 @@ export interface ListingModerationStore {
 // Denetim
 // ---------------------------------------------------------------
 
+/**
+ * Görsel denetiminin süre bütçesi: webhook ve yeniden denetim rotaları 60 sn
+ * çalışabilir (maxDuration); karar ve kayıt için pay bırakılır. Süre dolarsa
+ * kalan görseller denetlenemedi sayılır (ilan incelemede kalır).
+ */
+export const LISTING_MODERATION_BUDGET_MS = 40_000;
+
 /** İlanın bütün içeriği: metin, video kareleri (önce: kural dışı içerik en çok videoda) ve fotoğraflar */
 export async function evaluateListing(
   listing: ListingSnapshot,
   providers: ModerationProviders,
+  options: ImageModerationOptions = {},
 ): Promise<ModerationVerdict> {
+  const now = options.now ?? Date.now;
+  const imageOptions = { deadline: now() + LISTING_MODERATION_BUDGET_MS, ...options };
+
   const text = [listing.description, listing.city].filter(Boolean).join("\n");
   const textVerdict = await moderateText(providers.text, text, { onProviderError: "flag" });
   // Metin açıkça kural dışıysa görseller için sağlayıcı kotası harcanmaz
@@ -91,12 +108,12 @@ export async function evaluateListing(
   const verdicts = [textVerdict];
   const images: ImageInput[] = [];
   for (const video of listing.readyVideos) {
-    if (video.thumbnailUrl) images.push(...videoModerationFrames(video.thumbnailUrl, video.durationSeconds).map((url) => ({ url })));
+    if (video.thumbnailUrl) images.push(...videoModerationTargets(video.thumbnailUrl, video.durationSeconds));
     // Karesi alınamayan video denetlenmemiş sayılır
-    else verdicts.push(unavailableVerdict("cloudflare"));
+    else verdicts.push(unavailableVerdict("cloudflare", `video ${video.streamUid}: kapak adresi yok`));
   }
-  images.push(...listing.photoUrls.map((url) => ({ url })));
-  verdicts.push(await moderateImages(providers.image, images));
+  images.push(...listing.photoUrls.map((url, index) => ({ url, label: `fotoğraf ${index + 1}` })));
+  verdicts.push(await moderateImages(providers.image, images, imageOptions));
   return combineVerdicts(verdicts);
 }
 
@@ -136,13 +153,17 @@ async function applyAutomaticDecision(
  */
 export async function moderateListing(
   vehicleId: string,
-  { store, providers }: { store: ListingModerationStore; providers: ModerationProviders },
+  {
+    store,
+    providers,
+    imageOptions,
+  }: { store: ListingModerationStore; providers: ModerationProviders; imageOptions?: ImageModerationOptions },
 ): Promise<ListingModerationResult> {
   const listing = await store.load(vehicleId);
   if (!listing) return { status: "skipped", reason: "not_found" };
   if (listing.moderationStatus !== "pending") return { status: "skipped", reason: "already_decided" };
 
-  const verdict = await evaluateListing(listing, providers);
+  const verdict = await evaluateListing(listing, providers, imageOptions);
   await applyAutomaticDecision(store, listing, verdict);
   await store.record({ subjectType: "listing", subjectId: listing.id, userId: listing.sellerId, verdict });
   return { status: "decided", decision: verdict.decision, reasons: verdict.reasons, published: false };
@@ -150,22 +171,33 @@ export async function moderateListing(
 
 export type ManualDecisionResult =
   | { ok: true; published: boolean }
-  | { ok: false; code: "vehicle_not_found" | "already_decided" };
+  | { ok: false; code: "vehicle_not_found" | "already_decided" | "video_missing" };
 
 /**
  * Yönetim panelinden elle karar: onayla (yayına alan tek yol) ya da reddet
  * (medyayı siler). Otomatik denetim sürerken, şüpheli bulduğunda ya da temiz
  * bulduğunda (onay bekleyen ilan) verilebilir; karar verilmiş ilana verilemez.
+ *
+ * videoAvailable: onaydan önce videonun Cloudflare'de hâlâ durduğu sorulur.
+ * Silinmiş videolu ilan onaylanmaz ("video_missing"): yayına girse akışta
+ * oynamazdı. null (bilinmiyor) onayı engellemez.
  */
 export async function decideListingManually(
   store: ListingModerationStore,
   vehicleId: string,
   decision: "approve" | "reject",
   moderatorId: string,
+  { videoAvailable }: { videoAvailable?: (streamUid: string) => Promise<boolean | null> } = {},
 ): Promise<ManualDecisionResult> {
   const listing = await store.load(vehicleId);
   if (!listing) return { ok: false, code: "vehicle_not_found" };
   if (listing.moderationStatus !== "pending") return { ok: false, code: "already_decided" };
+
+  if (decision === "approve" && videoAvailable) {
+    for (const video of listing.readyVideos) {
+      if ((await videoAvailable(video.streamUid)) === false) return { ok: false, code: "video_missing" };
+    }
+  }
 
   const outcome: ModerationDecision = decision === "approve" ? "safe" : "rejected";
   let published = false;
@@ -212,7 +244,11 @@ export function toListingSnapshot(row: ListingRow): ListingSnapshot {
     photoUrls: (row.images ?? []).flatMap((image) => (image.image_url ? [image.image_url] : [])),
     readyVideos: videos
       .filter((video) => video.status === "ready" && video.hls_url)
-      .map((video) => ({ thumbnailUrl: video.thumbnail_url, durationSeconds: video.duration_seconds })),
+      .map((video) => ({
+        streamUid: video.stream_uid,
+        thumbnailUrl: video.thumbnail_url,
+        durationSeconds: video.duration_seconds,
+      })),
     streamUids: videos.map((video) => video.stream_uid).filter(Boolean),
   };
 }

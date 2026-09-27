@@ -9,6 +9,7 @@ const {
   createRekognitionModerator,
   createSightengineModerator,
   fetchImageBytes,
+  isRetryableProviderError,
   moderationProvidersFromEnv,
   parseOpenAiModeration,
   parseRekognitionResponse,
@@ -101,6 +102,63 @@ describe("Sightengine", () => {
     const moderator = createSightengineModerator({ apiUser: "u", apiSecret: "s", fetchImpl });
     await expect(moderator.moderate({ url: "https://x/y.jpg" })).rejects.toThrow("sightengine 401: invalid api_user");
   });
+
+  // 27 Eylül 2026'da canlıda alınan yanıtın birebiri (Cloudflare kapak adresi 404)
+  const MEDIA_404 = {
+    status: "failure",
+    request: { id: "req_x", timestamp: 1790544000, operations: 0 },
+    error: {
+      type: "media_error",
+      code: 11,
+      message:
+        "Could not download media. The media server returned an HTTP 404 Not Found Error. Please make sure the provided URL is correct.",
+    },
+  };
+
+  it("görsel indirilemedi (media_error): yeniden denenebilir, mesajda tür ve neden", async () => {
+    const moderator = createSightengineModerator({ apiUser: "u", apiSecret: "s", fetchImpl: vi.fn(async () => json(MEDIA_404, 400)) });
+    const error = await moderator.moderate({ url: "https://x/kapak.jpg" }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ModerationProviderError);
+    expect(error).toMatchObject({ retryable: true, status: 400 });
+    expect((error as Error).message).toBe(`sightengine 400 media_error: ${MEDIA_404.error.message}`);
+    expect(isRetryableProviderError(error)).toBe(true);
+  });
+
+  it.each([
+    [401, "credentials_error", false],
+    [400, "argument_error", false],
+    [429, "usage_limit", true],
+    [403, "usage_limit", false],
+    [500, "api_error", true],
+    [503, undefined, true],
+  ] as const)("HTTP %i %s → yeniden denenebilir: %s", async (status, type, retryable) => {
+    const body = { status: "failure", error: { ...(type ? { type } : {}), message: "x" } };
+    const moderator = createSightengineModerator({ apiUser: "u", apiSecret: "s", fetchImpl: vi.fn(async () => json(body, status)) });
+    await expect(moderator.moderate({ url: "https://x/y.jpg" })).rejects.toMatchObject({ retryable, status });
+  });
+
+  it("HTTP 200 ama başarısız yanıt da sınıflandırılır; JSON olmayan yanıt geçici", async () => {
+    expect(() => parseSightengineResponse(MEDIA_404)).toThrow(expect.objectContaining({ retryable: true }));
+    expect(() => parseSightengineResponse({ status: "failure", error: { type: "credentials_error", message: "x" } })).toThrow(
+      expect.objectContaining({ retryable: false }),
+    );
+    const html = vi.fn(async () => new Response("<html>", { status: 200 }));
+    const moderator = createSightengineModerator({ apiUser: "u", apiSecret: "s", fetchImpl: html });
+    await expect(moderator.moderate({ url: "https://x/y.jpg" })).rejects.toMatchObject({ retryable: true });
+  });
+
+  it("ağ hatası ve zaman aşımı geçici sayılır; eksik model yanıtı kalıcı", () => {
+    expect(isRetryableProviderError(new TypeError("fetch failed"))).toBe(true);
+    expect(isRetryableProviderError(new DOMException("The operation was aborted due to timeout", "TimeoutError"))).toBe(true);
+    const missing = (() => {
+      try {
+        parseSightengineResponse({ ...SIGHTENGINE_CLEAN, gore: undefined });
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(isRetryableProviderError(missing)).toBe(false);
+  });
 });
 
 describe("AWS Rekognition", () => {
@@ -172,6 +230,14 @@ describe("fetchImageBytes", () => {
     await expect(fetchImageBytes("https://x/y.jpg", { fetchImpl: big })).rejects.toThrow(/büyük/);
     const missing = vi.fn(async () => new Response("", { status: 404 }));
     await expect(fetchImageBytes("https://x/y.jpg", { fetchImpl: missing })).rejects.toThrow(/404/);
+  });
+
+  it("404 (kare henüz üretilmemiş olabilir) ve 5xx geçici; boyut ve https kalıcı", async () => {
+    const status = (code: number) => vi.fn(async () => new Response("", { status: code }));
+    await expect(fetchImageBytes("https://x/y.jpg", { fetchImpl: status(404) })).rejects.toMatchObject({ retryable: true });
+    await expect(fetchImageBytes("https://x/y.jpg", { fetchImpl: status(502) })).rejects.toMatchObject({ retryable: true });
+    await expect(fetchImageBytes("https://x/y.jpg", { fetchImpl: status(403) })).rejects.toMatchObject({ retryable: false });
+    await expect(fetchImageBytes("http://x/y.jpg")).rejects.toMatchObject({ retryable: false });
   });
 });
 

@@ -1,5 +1,6 @@
 import {
   AI_SAFE_REASON,
+  coverFrameUrl,
   parseReasonCode,
   videoModerationFrames,
   type ModerationDecision,
@@ -126,7 +127,7 @@ async function callModerationApi<T>(
   payload: object | null,
   accessToken: string,
   fetchImpl: typeof fetch,
-  path: "/api/admin/reports" | "/api/admin/listings" = "/api/admin/reports",
+  path: "/api/admin/reports" | "/api/admin/listings" | "/api/admin/status" = "/api/admin/reports",
 ): Promise<{ ok: true; body: T } | ModerationFailure> {
   let response: Response;
   try {
@@ -185,11 +186,19 @@ export type PendingListing = {
   aiClean: boolean;
   /** İnceleme için video kareleri (kapak + ara kareler) ve fotoğraflar */
   media: string[];
+  /** Yalnızca fotoğraflar, sırasıyla */
+  photos: string[];
   /**
    * Videonun tamamı (Cloudflare Stream izleme sayfası). Otomatik denetim yalnızca
    * örnek karelere bakar; yönetici onaylamadan önce videoyu baştan sona izlemeli.
    */
   watchUrl: string | null;
+  /** Videonun HLS adresi: panelde, uygulamadan çıkmadan oynatılır (seri inceleme) */
+  hlsUrl: string | null;
+  /** Kapak karesi, zamanıyla (zamansız kapak ready'den sonra bir süre 404 verir) */
+  posterUrl: string | null;
+  /** Satıcının kullanıcı adı (varsa); yönetici kimin ilanına baktığını görür */
+  sellerUsername: string | null;
 };
 
 /**
@@ -209,6 +218,7 @@ export function streamWatchUrl(hlsUrl: string | null): string | null {
 }
 
 export type PendingListingRow = Omit<MyListingRow, "videos"> & {
+  seller_id?: string | null;
   description: string | null;
   moderation_reason: string | null;
   videos:
@@ -216,7 +226,10 @@ export type PendingListingRow = Omit<MyListingRow, "videos"> & {
     | null;
 };
 
-export function toPendingListing(row: PendingListingRow): PendingListing {
+export function toPendingListing(
+  row: PendingListingRow,
+  { sellerUsername = null }: { sellerUsername?: string | null } = {},
+): PendingListing {
   const readyVideos = (row.videos ?? []).filter((video) => video.status === "ready" && video.hls_url);
   const frames = readyVideos
     .filter((video) => video.thumbnail_url)
@@ -224,6 +237,7 @@ export function toPendingListing(row: PendingListingRow): PendingListing {
   const photos = [...(row.images ?? [])]
     .sort((a, b) => a.display_order - b.display_order)
     .flatMap((image) => (image.image_url ? [image.image_url] : []));
+  const video = readyVideos[0];
   return {
     vehicle: toMyListing(row),
     description: row.description,
@@ -231,7 +245,11 @@ export function toPendingListing(row: PendingListingRow): PendingListing {
     needsReview: row.moderation_reason !== null,
     aiClean: row.moderation_reason === AI_SAFE_REASON,
     media: [...frames, ...photos],
-    watchUrl: streamWatchUrl(readyVideos[0]?.hls_url ?? null),
+    photos,
+    watchUrl: streamWatchUrl(video?.hls_url ?? null),
+    hlsUrl: video?.hls_url ?? null,
+    posterUrl: video?.thumbnail_url ? coverFrameUrl(video.thumbnail_url, video.duration_seconds ?? null, 720) : null,
+    sellerUsername,
   };
 }
 
@@ -273,4 +291,78 @@ export async function submitListingDecision(
   return result.ok
     ? { ok: true, decision: result.body.decision ?? null, published: Boolean(result.body.published) }
     : result;
+}
+
+// ---------------------------------------------------------------
+// Yönetici girişi (/api/admin/status)
+// ---------------------------------------------------------------
+//
+// Vitrinim ve Ayarlar'daki "İlan Onay Paneli" yalnızca yöneticiye görünür.
+// Yönetici listesi (ADMIN_EMAILS) tarayıcıya hiç gelmez; sunucu yalnızca
+// "yönetici mi" ve bekleyen iş sayılarını söyler.
+
+/** admin: false → giriş gösterilmez. Sayı okunamadıysa null. */
+export type AdminStatus =
+  | { admin: false }
+  | { admin: true; pendingListings: number | null; openReports: number | null };
+
+const countOrNull = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null);
+
+/** null: sorulamadı (ağ ya da sunucu hatası); giriş gösterilmez, sonra yeniden sorulur */
+export async function fetchAdminStatus(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<AdminStatus | null> {
+  const result = await callModerationApi<{ admin?: unknown; pendingListings?: unknown; openReports?: unknown }>(
+    null,
+    accessToken,
+    fetchImpl,
+    "/api/admin/status",
+  );
+  if (!result.ok) return null;
+  return result.body.admin === true
+    ? { admin: true, pendingListings: countOrNull(result.body.pendingListings), openReports: countOrNull(result.body.openReports) }
+    : { admin: false };
+}
+
+/** Vitrinim / Ayarlar alt metni: "3 ilan onay bekliyor · 1 bildirim" */
+export function adminQueueSummary(status: { pendingListings: number | null; openReports: number | null }): string {
+  const { pendingListings, openReports } = status;
+  const listings =
+    pendingListings === null
+      ? "İçerik denetimi ve bildirimler"
+      : pendingListings === 0
+        ? "Onay bekleyen ilan yok"
+        : `${pendingListings} ilan onay bekliyor`;
+  return openReports ? `${listings} · ${openReports} bildirim` : listings;
+}
+
+// ---------------------------------------------------------------
+// Seri inceleme (panelde tam ekran video + Onayla / Reddet)
+// ---------------------------------------------------------------
+
+/** "az önce", "12 dk önce", "3 sa önce", "2 gün önce" */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const minutes = Math.floor((now - new Date(iso).getTime()) / 60_000);
+  if (!Number.isFinite(minutes) || minutes < 1) return "az önce";
+  if (minutes < 60) return `${minutes} dk önce`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} sa önce`;
+  return `${Math.floor(hours / 24)} gün önce`;
+}
+
+/**
+ * Otomatik denetim bir kategoride şüphelendiyse (cinsellik, kan, silah…) kapak ve
+ * görseller bulanık gelir, video kendiliğinden oynamaz; yönetici dokununca açılır.
+ * Yalnızca "denetlenemedi" ya da temiz ilanda bulanıklık yok.
+ */
+export function isSensitiveListing(item: Pick<PendingListing, "reasons">): boolean {
+  return item.reasons.some((reason) => reason !== "unavailable");
+}
+
+/** Karar sonrası sıradaki ilan: listede bir sonraki, yoksa bir önceki, liste bittiyse null */
+export function nextReviewId(items: readonly PendingListing[], decidedId: string): string | null {
+  const index = items.findIndex((item) => item.vehicle.id === decidedId);
+  if (index === -1) return items[0]?.vehicle.id ?? null;
+  return items[index + 1]?.vehicle.id ?? items[index - 1]?.vehicle.id ?? null;
 }

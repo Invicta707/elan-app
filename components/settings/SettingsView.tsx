@@ -18,11 +18,13 @@ import {
   type NotificationPrefs,
 } from "../../lib/settings";
 import { supabase } from "../../lib/supabase";
+import { useAdminStatus } from "../../lib/use-admin-status";
 import { resetFollowStore } from "../../lib/use-follow";
 import { useMyProfile } from "../../lib/use-my-profile";
 import { suggestUsername } from "../../lib/username";
 import AuthModal from "../AuthModal";
 import FeedHeader from "../FeedHeader";
+import { ADMIN_PANEL_PATH, ADMIN_REVIEW_PATH } from "../moderation/AdminEntryCard";
 import EditNameSheet from "../profile/EditNameSheet";
 import UsernameSheet from "../profile/UsernameSheet";
 import Avatar from "../ui/Avatar";
@@ -170,6 +172,8 @@ function SignedInSettings({ user, onDeleted }: { user: User; onDeleted: () => vo
         <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-[#8A9099]" />
       </Link>
 
+      <AdminGroup />
+
       <Group title="Hesap">
         <Row label="Görünen ad" value={name ?? "Ekle"} onClick={() => setSheet("name")} />
         <Row label="Kullanıcı adı" value={username ? `@${username}` : "Belirle"} onClick={() => setSheet("username")} />
@@ -282,6 +286,22 @@ function SignedInSettings({ user, onDeleted }: { user: User; onDeleted: () => vo
         />
       )}
     </>
+  );
+}
+
+/** Yalnızca yöneticiye: ilan onay paneli ve bekleyen sayısı (sunucu söyler, bkz. useAdminStatus) */
+function AdminGroup() {
+  const status = useAdminStatus();
+  if (!status?.admin) return null;
+  const pending = status.pendingListings;
+  return (
+    <Group title="Yönetim">
+      <Row
+        label="İlan Onay Paneli"
+        value={pending === null ? undefined : pending > 0 ? `${pending} onay bekliyor` : "Bekleyen yok"}
+        href={pending ? ADMIN_REVIEW_PATH : ADMIN_PANEL_PATH}
+      />
+    </Group>
   );
 }
 

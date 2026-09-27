@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import AuthModal from "../AuthModal";
 import FeedHeader from "../FeedHeader";
+import AdminEntryCard from "../moderation/AdminEntryCard";
 import { useSupabaseSession } from "../../lib/auth";
 import type { VehicleStatus } from "../../lib/listing-status";
 import { fetchMyListings, type MyListing } from "../../lib/my-listings";
@@ -197,6 +198,9 @@ function Showcase({
           </div>
         ))}
       </dl>
+
+      {/* Yalnızca yöneticiye görünür: ilan onay paneli ve bekleyen sayısı */}
+      <AdminEntryCard className="mx-1 mt-4" />
 
       <div className="mt-4 grid grid-cols-2 gap-2 px-1">
         <Link

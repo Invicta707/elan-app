@@ -41,7 +41,17 @@ export type ModerationVerdict = {
   reasons: ModerationReason[];
   scores: CategoryScores;
   provider: string;
+  /**
+   * Denetlenemeyen içerik ve nedeni ("kapak: sightengine 400 media_error: …").
+   * content_moderation_events.failures'a yazılır: Vercel logları kısa süre
+   * tutulduğu için "denetlenemedi"nin nedeni sonradan buradan okunur.
+   */
+  failures?: string[];
 };
+
+/** Bir kayıtta tutulan en fazla hata satırı ve satır uzunluğu */
+export const MAX_FAILURES = 10;
+export const MAX_FAILURE_LENGTH = 240;
 
 /** Cinsel içerik / çıplaklık ve şiddet / kan / silah: bunun üstü otomatik ret */
 export const REJECT_THRESHOLD = 0.6;
@@ -92,8 +102,10 @@ export function decide(scores: CategoryScores, provider: string): ModerationVerd
 }
 
 /** Sağlayıcı yoksa ya da hata verdiyse: kapalı başarısızlık, insan incelemesi */
-export function unavailableVerdict(provider: string): ModerationVerdict {
-  return { decision: "flagged", reasons: ["unavailable"], scores: {}, provider };
+export function unavailableVerdict(provider: string, failure?: string): ModerationVerdict {
+  const verdict: ModerationVerdict = { decision: "flagged", reasons: ["unavailable"], scores: {}, provider };
+  if (failure) verdict.failures = [failure.slice(0, MAX_FAILURE_LENGTH)];
+  return verdict;
 }
 
 /**
@@ -116,7 +128,8 @@ export function combineVerdicts(verdicts: readonly ModerationVerdict[]): Moderat
     }
   }
   const provider = [...new Set(verdicts.map((v) => v.provider))].join("+");
-  return { decision, reasons, scores, provider };
+  const failures = [...new Set(verdicts.flatMap((v) => v.failures ?? []))].slice(0, MAX_FAILURES);
+  return failures.length > 0 ? { decision, reasons, scores, provider, failures } : { decision, reasons, scores, provider };
 }
 
 /** Temel metin filtresinin (lib/text-moderation.ts) sonucu, puan olarak */
@@ -179,6 +192,12 @@ export const REASON_LABELS: Record<ModerationReason, string> = {
 export const VIDEO_SAMPLE_FRAMES = 5;
 /** Denetlenen karelerin yüksekliği: sınıflandırma için yeterli, indirmesi hızlı */
 export const FRAME_HEIGHT = 480;
+/**
+ * Kapak (akıştaki poster) videonun bu oranındaki kare. Yüklemede Cloudflare'e
+ * thumbnailTimestampPct olarak verilir (lib/cloudflare.ts); kapak denetimi aynı
+ * kareyi zamanıyla ister.
+ */
+export const THUMBNAIL_TIMESTAMP_PCT = 0.2;
 
 /**
  * Kare zamanları (tam saniye): süre N eşit parçaya bölünür, her parçanın
@@ -201,11 +220,42 @@ export function videoFrameUrl(thumbnailUrl: string, seconds: number, height: num
   return url.toString();
 }
 
+/**
+ * Kapak karesi, zamanıyla: …/thumbnail.jpg?time=5.6s&height=480.
+ *
+ * Zamansız kapak adresi (thumbnail.jpg, thumbnailTimestampPct'ye göre) Cloudflare
+ * "ready" webhook'unu gönderdikten sonra ~30 sn daha 404 veriyor (27 Eylül 2026,
+ * üç test videosunda ölçüldü: ready + 40–43 sn'de 200). Denetim webhook'un hemen
+ * ardından çalıştığı için kapak indirilemiyor, ilan "Otomatik denetim yapılamadı"
+ * (review:unavailable) ile kuyruğa düşüyordu. Zamanlı kareler ready anında hazır.
+ * Süre bilinmiyorsa zamansız adrese düşülür.
+ */
+export function coverFrameUrl(thumbnailUrl: string, durationSeconds: number | null, height: number = FRAME_HEIGHT): string {
+  const url = new URL(thumbnailUrl);
+  url.searchParams.delete("time");
+  if (durationSeconds && Number.isFinite(durationSeconds) && durationSeconds > 0) {
+    // Tek ondalık (Cloudflare kesirli saniyeyi kabul ediyor: time=0.4s)
+    url.searchParams.set("time", `${Number((durationSeconds * THUMBNAIL_TIMESTAMP_PCT).toFixed(1))}s`);
+  }
+  url.searchParams.set("height", String(height));
+  return url.toString();
+}
+
+/** Denetlenecek bir video karesi; label denetlenemezse kayda yazılır ("kapak", "kare 8 sn") */
+export type VideoFrame = { url: string; label: string };
+
 /** Bir videonun denetlenecek kareleri: kapak (akışta görünen) + örnek kareler */
+export function videoModerationTargets(thumbnailUrl: string, durationSeconds: number | null): VideoFrame[] {
+  const frames: VideoFrame[] = [
+    { url: coverFrameUrl(thumbnailUrl, durationSeconds), label: "kapak" },
+    ...videoFrameTimes(durationSeconds).map((t) => ({ url: videoFrameUrl(thumbnailUrl, t), label: `kare ${t} sn` })),
+  ];
+  const seen = new Set<string>();
+  return frames.filter((frame) => !seen.has(frame.url) && seen.add(frame.url));
+}
+
 export function videoModerationFrames(thumbnailUrl: string, durationSeconds: number | null): string[] {
-  const cover = new URL(thumbnailUrl);
-  cover.searchParams.set("height", String(FRAME_HEIGHT));
-  return [...new Set([cover.toString(), ...videoFrameTimes(durationSeconds).map((t) => videoFrameUrl(thumbnailUrl, t))])];
+  return videoModerationTargets(thumbnailUrl, durationSeconds).map((frame) => frame.url);
 }
 
 // ---------------------------------------------------------------

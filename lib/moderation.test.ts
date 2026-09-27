@@ -4,8 +4,13 @@ vi.mock("./supabase", () => ({ supabase: {} }));
 
 import {
   MAX_DISMISS_REPORTS,
+  adminQueueSummary,
+  fetchAdminStatus,
   fetchModerationQueue,
   fetchPendingListings,
+  formatRelativeTime,
+  isSensitiveListing,
+  nextReviewId,
   parseAdminEmails,
   parseListingDecision,
   parseModerationAction,
@@ -204,8 +209,49 @@ describe("içerik denetimi kuyruğu", () => {
     expect(item.needsReview).toBe(true);
     expect(item.description).toBe("Temiz araç");
     expect(item.media).toHaveLength(8);
-    expect(item.media[0]).toBe(`${THUMB}?height=480`);
+    // Kapak zamanıyla: zamansız adres ready'den sonra bir süre 404 veriyor
+    expect(item.media[0]).toBe(`${THUMB}?time=2s&height=480`);
     expect(item.media.slice(-2)).toEqual(["https://x/0.jpeg", "https://x/2.jpeg"]);
+    expect(item.photos).toEqual(["https://x/0.jpeg", "https://x/2.jpeg"]);
+  });
+
+  it("seri inceleme için: HLS adresi, zamanlı büyük kapak, satıcı adı", () => {
+    const hls = "https://customer-abc.cloudflarestream.com/0123456789abcdef0123456789abcdef/manifest/video.m3u8";
+    const item = toPendingListing(
+      row({ videos: [{ status: "ready", hls_url: hls, thumbnail_url: THUMB, duration_seconds: 28 }] }),
+      { sellerUsername: "gozumkamil" },
+    );
+    expect(item).toMatchObject({ hlsUrl: hls, posterUrl: `${THUMB}?time=5.6s&height=720`, sellerUsername: "gozumkamil" });
+
+    const noVideo = toPendingListing(row({ videos: [{ status: "pending", hls_url: null, thumbnail_url: null }] }));
+    expect(noVideo).toMatchObject({ hlsUrl: null, posterUrl: null, sellerUsername: null, watchUrl: null });
+  });
+
+  it("hassas içerik: şüphe kategorisi varsa bulanık; yalnızca 'denetlenemedi' ya da temizse değil", () => {
+    expect(isSensitiveListing(toPendingListing(row({ moderation_reason: "review:suggestive" })))).toBe(true);
+    expect(isSensitiveListing(toPendingListing(row({ moderation_reason: "review:gore,unavailable" })))).toBe(true);
+    expect(isSensitiveListing(toPendingListing(row({ moderation_reason: "review:unavailable" })))).toBe(false);
+    expect(isSensitiveListing(toPendingListing(row({ moderation_reason: "ai:safe" })))).toBe(false);
+    expect(isSensitiveListing(toPendingListing(row({ moderation_reason: null })))).toBe(false);
+  });
+
+  it("karar sonrası sıradaki ilan: sonraki, yoksa önceki, liste bittiyse null", () => {
+    const ids = [VEHICLE_A, "b", "c"];
+    const list = ids.map((id) => toPendingListing(row({ id })));
+    expect(nextReviewId(list, VEHICLE_A)).toBe("b");
+    expect(nextReviewId(list, "c")).toBe("b");
+    expect(nextReviewId([list[0]], VEHICLE_A)).toBeNull();
+    expect(nextReviewId(list, "yok")).toBe(VEHICLE_A);
+    expect(nextReviewId([], "yok")).toBeNull();
+  });
+
+  it("göreli zaman", () => {
+    const now = Date.parse("2026-09-28T12:00:00Z");
+    expect(formatRelativeTime("2026-09-28T11:59:40Z", now)).toBe("az önce");
+    expect(formatRelativeTime("2026-09-28T11:48:00Z", now)).toBe("12 dk önce");
+    expect(formatRelativeTime("2026-09-28T09:00:00Z", now)).toBe("3 sa önce");
+    expect(formatRelativeTime("2026-09-26T11:00:00Z", now)).toBe("2 gün önce");
+    expect(formatRelativeTime("bozuk", now)).toBe("az önce");
   });
 
   it("otomatik tarama temiz: onay bekliyor; videonun tamamı için izleme adresi", () => {
@@ -270,5 +316,41 @@ describe("içerik denetimi kuyruğu", () => {
     ).toEqual({ ok: true, decision: "safe", published: true });
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual(["/api/admin/listings", "/api/admin/listings"]);
     expect(JSON.parse(fetchImpl.mock.calls[1][1]?.body as string)).toEqual({ action: "approve", vehicleId: VEHICLE_A });
+  });
+});
+
+describe("yönetici girişi (/api/admin/status)", () => {
+  const respond = (body: unknown, status = 200) =>
+    vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+
+  it("yönetici: sayılarla; yönetici değil: yalnızca admin false", async () => {
+    const admin = respond({ admin: true, pendingListings: 3, openReports: 1 });
+    expect(await fetchAdminStatus("tok", admin)).toEqual({ admin: true, pendingListings: 3, openReports: 1 });
+    const [url, init] = vi.mocked(admin).mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/admin/status");
+    expect(init).toMatchObject({ method: "GET", cache: "no-store", headers: { Authorization: "Bearer tok" } });
+
+    expect(await fetchAdminStatus("tok", respond({ admin: false }))).toEqual({ admin: false });
+    // Beklenmeyen alanlar yönetici yapmaz
+    expect(await fetchAdminStatus("tok", respond({ admin: "true" }))).toEqual({ admin: false });
+  });
+
+  it("okunamayan sayı null; istek başarısızsa null (giriş gösterilmez)", async () => {
+    expect(await fetchAdminStatus("tok", respond({ admin: true, pendingListings: null, openReports: -1 }))).toEqual({
+      admin: true,
+      pendingListings: null,
+      openReports: null,
+    });
+    expect(await fetchAdminStatus("tok", respond({ error: { message: "x" } }, 401))).toBeNull();
+    const offline = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    expect(await fetchAdminStatus("tok", offline)).toBeNull();
+  });
+
+  it("alt metin", () => {
+    expect(adminQueueSummary({ pendingListings: 3, openReports: 0 })).toBe("3 ilan onay bekliyor");
+    expect(adminQueueSummary({ pendingListings: 0, openReports: 2 })).toBe("Onay bekleyen ilan yok · 2 bildirim");
+    expect(adminQueueSummary({ pendingListings: null, openReports: null })).toBe("İçerik denetimi ve bildirimler");
   });
 });

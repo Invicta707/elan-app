@@ -1,5 +1,6 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { THUMBNAIL_TIMESTAMP_PCT } from "./content-moderation";
 
 // Cloudflare Stream ile konuşan sunucu tarafı yardımcılar.
 // "server-only": bu dosya yanlışlıkla bir istemci bileşenine import edilirse
@@ -21,9 +22,6 @@ export const MAX_VIDEO_FILE_BYTES = 500 * 1024 * 1024;
 
 /** Tek kullanımlık yükleme bağlantısının geçerlilik süresi. */
 export const UPLOAD_URL_TTL_MINUTES = 30;
-
-/** Kapak görseli videonun %20'sinden alınır (ilk kare çoğu zaman siyah/bulanık). */
-const THUMBNAIL_TIMESTAMP_PCT = 0.2;
 
 /** Bundan eski imza zaman damgası reddedilir (tekrar gönderim / replay koruması). */
 const WEBHOOK_TOLERANCE_SECONDS = 300;
@@ -173,6 +171,8 @@ export async function getDirectUploadUrl(request: DirectUploadRequest): Promise<
       "Upload-Metadata": toTusMetadata({
         maxDurationSeconds: String(maxDurationSeconds),
         expiry: expiresAt,
+        // Kapak videonun %20'sinden alınır (ilk kare çoğu zaman siyah/bulanık);
+        // içerik denetimi aynı kareyi zamanıyla ister (coverFrameUrl)
         thumbnailtimestamppct: String(THUMBNAIL_TIMESTAMP_PCT),
         name: request.fileName?.trim().slice(0, 100) || `ilan-${request.vehicleId}`,
         // Standart dışı anahtarlar videonun meta alanına yazılır
@@ -244,6 +244,22 @@ export async function getStreamVideoDetails(streamUid: string): Promise<StreamVi
         ? Math.round(result.duration)
         : null,
   };
+}
+
+/**
+ * Video Cloudflare'de hâlâ var mı? Yönetici onayından önce sorulur: panelden ya
+ * da API'den silinmiş videolu ilan yayına alınırsa akışta oynamaz.
+ * 404 → false; başka bir hata → null (bilinmiyor, onay engellenmez).
+ */
+export async function streamVideoAvailable(streamUid: string): Promise<boolean | null> {
+  try {
+    await getStreamVideoDetails(streamUid);
+    return true;
+  } catch (error) {
+    if (error instanceof CloudflareStreamError && error.status === 404) return false;
+    console.error("Cloudflare video durumu okunamadı:", streamUid, error);
+    return null;
+  }
 }
 
 /** Videoyu Cloudflare'den siler (kayıt açılamadığında yetim video kalmasın diye). */

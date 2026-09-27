@@ -7,18 +7,22 @@ vi.mock("./supabase", () => ({ supabase: {} }));
 const getUserById = vi.fn();
 vi.mock("./supabase-server", () => ({
   getAuthenticatedUserId: vi.fn(),
+  getAuthenticatedUser: vi.fn(),
   getSupabaseAdmin: () => ({ auth: { admin: { getUserById } } }),
 }));
 
 import {
   PENDING_LISTING_SELECT,
+  PENDING_QUEUE_FILTER,
   authorizeAdmin,
+  checkAdminStatus,
   dismissReports,
+  fetchAdminCounts,
   fetchModerationQueueRows,
   fetchPendingListingRows,
   removeListing,
 } from "./moderation-server";
-import { getAuthenticatedUserId } from "./supabase-server";
+import { getAuthenticatedUser, getAuthenticatedUserId } from "./supabase-server";
 
 const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
 const VEHICLE = "11111111-1111-4111-8111-111111111111";
@@ -32,6 +36,7 @@ const request = new Request("https://gozuyle.com/api/admin/reports", {
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.mocked(getAuthenticatedUserId).mockReset().mockResolvedValue(ADMIN_ID);
+  vi.mocked(getAuthenticatedUser).mockReset().mockResolvedValue({ id: ADMIN_ID, email: "admin@gozuyle.com" });
   getUserById.mockReset().mockResolvedValue({
     data: { user: { id: ADMIN_ID, email: "Admin@Gozuyle.com", email_confirmed_at: "2026-09-01T00:00:00Z" } },
     error: null,
@@ -78,9 +83,41 @@ describe("authorizeAdmin", () => {
   });
 });
 
+describe("checkAdminStatus (yönetim girişi)", () => {
+  it("token'daki e-posta listede değilse yönetici değil; Auth'a hiç sorulmaz (ucuz)", async () => {
+    vi.mocked(getAuthenticatedUser).mockResolvedValue({ id: "u1", email: "satici@ornek.com" });
+    expect(await checkAdminStatus(request, ADMINS)).toEqual({ status: 200, admin: false });
+    vi.mocked(getAuthenticatedUser).mockResolvedValue({ id: "u1", email: null });
+    expect(await checkAdminStatus(request, ADMINS)).toEqual({ status: 200, admin: false });
+    expect(await checkAdminStatus(request, new Set())).toEqual({ status: 200, admin: false });
+    expect(getUserById).not.toHaveBeenCalled();
+  });
+
+  it("listedeyse Auth'taki güncel kayıt denetlenir: onaylı e-posta yönetici", async () => {
+    expect(await checkAdminStatus(request, ADMINS)).toEqual({ status: 200, admin: true, userId: ADMIN_ID });
+    expect(getUserById).toHaveBeenCalledWith(ADMIN_ID);
+  });
+
+  it("token'daki e-posta yetki vermez: Auth'ta başka, onaysız ya da yasaklıysa yönetici değil", async () => {
+    for (const user of [
+      { email: "baska@ornek.com", email_confirmed_at: "2026-09-01T00:00:00Z" },
+      { email: "admin@gozuyle.com", email_confirmed_at: null },
+      { email: "admin@gozuyle.com", email_confirmed_at: "2026-09-01T00:00:00Z", banned_until: "2999-01-01T00:00:00Z" },
+    ]) {
+      getUserById.mockResolvedValueOnce({ data: { user: { id: ADMIN_ID, ...user } }, error: null });
+      expect(await checkAdminStatus(request, ADMINS)).toEqual({ status: 200, admin: false });
+    }
+  });
+
+  it("oturum yoksa 401", async () => {
+    vi.mocked(getAuthenticatedUser).mockResolvedValue(null);
+    expect(await checkAdminStatus(request, ADMINS)).toEqual({ status: 401 });
+  });
+});
+
 // PostgREST sorgu zincirinin taklidi: her tablo çağrısındaki adımlar kaydedilir,
 // sonuç tablo başına sırayla verilir.
-type Result = { data: unknown; error: unknown };
+type Result = { data: unknown; error: unknown; count?: number | null };
 
 function fakeSupabase(results: Record<string, Result[]>) {
   const calls: { table: string; steps: unknown[][] }[] = [];
@@ -196,6 +233,74 @@ describe("fetchPendingListingRows (içerik denetimi kuyruğu)", () => {
   it("okunamazsa ok: false", async () => {
     const { supabase } = fakeSupabase({ vehicles: [{ data: null, error: { message: "boom" } }] });
     expect(await fetchPendingListingRows(supabase)).toEqual({ ok: false });
+  });
+
+  const pendingRow = (id: string, sellerId: string) => ({
+    id,
+    seller_id: sellerId,
+    status: "pending_approval",
+    moderation_status: "pending",
+    moderation_reason: "ai:safe",
+    description: null,
+    year: 2020,
+    price: 100,
+    currency: "TRY",
+    mileage_km: 1,
+    city: "İzmir",
+    created_at: "2026-09-28T09:00:00Z",
+    views_count: 0,
+    brand: { name: "Fiat" },
+    model: { name: "Egea" },
+    images: [],
+    videos: [],
+  });
+
+  it("satıcıların kullanıcı adları tek sorguyla eklenir (yinelenen satıcı bir kez)", async () => {
+    const { supabase, calls } = fakeSupabase({
+      vehicles: [{ data: [pendingRow("v1", "s1"), pendingRow("v2", "s1"), pendingRow("v3", "s2")], error: null }],
+      profiles: [{ data: [{ id: "s1", username: "gozumkamil" }, { id: "s2", username: null }], error: null }],
+    });
+    const result = await fetchPendingListingRows(supabase);
+    expect(result.ok && result.items.map((item) => item.sellerUsername)).toEqual(["gozumkamil", "gozumkamil", null]);
+    expect(calls[1]).toEqual({ table: "profiles", steps: [["select", "id, username"], ["in", "id", ["s1", "s2"]]] });
+  });
+
+  it("satıcı adları okunamazsa kuyruk yine gelir, adlar boş", async () => {
+    const { supabase } = fakeSupabase({
+      vehicles: [{ data: [pendingRow("v1", "s1")], error: null }],
+      profiles: [{ data: null, error: { message: "boom" } }],
+    });
+    const result = await fetchPendingListingRows(supabase);
+    expect(result.ok && result.items[0].sellerUsername).toBeNull();
+  });
+});
+
+describe("fetchAdminCounts (rozet)", () => {
+  it("yalnızca sayım (head): kuyruk süzgeciyle ilanlar ve açık bildirimler", async () => {
+    const { supabase, calls } = fakeSupabase({
+      vehicles: [{ data: null, error: null, count: 3 }],
+      reports: [{ data: null, error: null, count: 1 }],
+    });
+    expect(await fetchAdminCounts(supabase)).toEqual({ pendingListings: 3, openReports: 1 });
+    expect(calls).toEqual([
+      {
+        table: "vehicles",
+        steps: [
+          ["select", "id", { count: "exact", head: true }],
+          ["eq", "moderation_status", "pending"],
+          ["or", PENDING_QUEUE_FILTER],
+        ],
+      },
+      { table: "reports", steps: [["select", "id", { count: "exact", head: true }], ["eq", "status", "open"]] },
+    ]);
+  });
+
+  it("okunamayan sayı null; diğeri etkilenmez", async () => {
+    const { supabase } = fakeSupabase({
+      vehicles: [{ data: null, error: { message: "boom" } }],
+      reports: [{ data: null, error: null, count: 0 }],
+    });
+    expect(await fetchAdminCounts(supabase)).toEqual({ pendingListings: null, openReports: 0 });
   });
 });
 

@@ -9,7 +9,7 @@ import {
   type PendingListing,
   type PendingListingRow,
 } from "./moderation";
-import { getAuthenticatedUserId, getSupabaseAdmin } from "./supabase-server";
+import { getAuthenticatedUser, getAuthenticatedUserId, getSupabaseAdmin } from "./supabase-server";
 
 // Moderasyon paneli: yönetici denetimi ve servis anahtarıyla yapılan işlemler.
 // Sadece app/api/admin/* route'larında kullanılır.
@@ -31,16 +31,37 @@ export async function authorizeAdmin(
   const userId = await getAuthenticatedUserId(request);
   if (!userId) return { ok: false, status: 401 };
   if (adminEmails.size === 0) return { ok: false, status: 403 };
+  return (await isConfirmedAdmin(userId, adminEmails)) ? { ok: true, userId } : { ok: false, status: 403 };
+}
 
+/** Auth'taki güncel kayıt: e-posta listede, onaylı ve hesap yasaklı değil */
+async function isConfirmedAdmin(userId: string, adminEmails: Set<string>): Promise<boolean> {
   const { data, error } = await getSupabaseAdmin().auth.admin.getUserById(userId);
   const user = data?.user;
   const email = user?.email?.trim().toLowerCase();
   const banned = Boolean(user?.banned_until && new Date(user.banned_until).getTime() > Date.now());
+  return Boolean(!error && email && user?.email_confirmed_at && !banned && adminEmails.has(email));
+}
 
-  if (error || !email || !user?.email_confirmed_at || banned || !adminEmails.has(email)) {
-    return { ok: false, status: 403 };
-  }
-  return { ok: true, userId };
+export type AdminStatusCheck = { status: 401 } | { status: 200; admin: false } | { status: 200; admin: true; userId: string };
+
+/**
+ * Yönetim girişini (Vitrinim, Ayarlar) göstermek için: istek yöneticiden mi?
+ * Her giriş yapmış kullanıcının sayfası sorduğu için ucuz olmalı: token'daki
+ * e-posta listede değilse Auth'a hiç gidilmez. Listedeyse authorizeAdmin'in
+ * tam denetimi (Auth'taki güncel, onaylı e-posta; yasak) yapılır. Token'daki
+ * e-posta yalnızca "yönetici değil" demek için kullanılır, yetki vermez.
+ */
+export async function checkAdminStatus(
+  request: Request,
+  adminEmails: Set<string> = parseAdminEmails(process.env.ADMIN_EMAILS),
+): Promise<AdminStatusCheck> {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return { status: 401 };
+  if (!user.email || !adminEmails.has(user.email)) return { status: 200, admin: false };
+  return (await isConfirmedAdmin(user.id, adminEmails))
+    ? { status: 200, admin: true, userId: user.id }
+    : { status: 200, admin: false };
 }
 
 /** Tek istekte okunacak en fazla açık bildirim */
@@ -136,7 +157,7 @@ async function resolveReports(
 // İçerik denetimi kuyruğu
 // ---------------------------------------------------------------
 
-export const PENDING_LISTING_SELECT = `id, status, moderation_status, moderation_reason, description, year, price, currency,
+export const PENDING_LISTING_SELECT = `id, seller_id, status, moderation_status, moderation_reason, description, year, price, currency,
        mileage_km, city, created_at, views_count,
        brand:brands(name),
        model:models(name),
@@ -153,6 +174,9 @@ export const PENDING_LISTINGS_LIMIT = 200;
  * (moderation_reason dolu). Hiçbir ilan yönetici onayı olmadan yayına girmez.
  * Videosu henüz işlenmemiş ilanlar ('pending_video') burada görünmez.
  */
+/** Kuyruk süzgeci: karar bekleyen durumlar ya da arada arşive alınmış (nedeni yazılmış) ilan */
+export const PENDING_QUEUE_FILTER = "status.in.(pending_moderation,pending_approval),moderation_reason.not.is.null";
+
 export async function fetchPendingListingRows(
   supabase: SupabaseClient,
 ): Promise<{ ok: true; items: PendingListing[] } | { ok: false }> {
@@ -160,7 +184,7 @@ export async function fetchPendingListingRows(
     .from("vehicles")
     .select(PENDING_LISTING_SELECT)
     .eq("moderation_status", "pending")
-    .or("status.in.(pending_moderation,pending_approval),moderation_reason.not.is.null")
+    .or(PENDING_QUEUE_FILTER)
     .order("created_at", { ascending: true })
     .limit(PENDING_LISTINGS_LIMIT);
 
@@ -168,5 +192,47 @@ export async function fetchPendingListingRows(
     console.error("Moderasyon: denetim kuyruğu okunamadı:", error);
     return { ok: false };
   }
-  return { ok: true, items: ((data ?? []) as unknown as PendingListingRow[]).map(toPendingListing) };
+  const rows = (data ?? []) as unknown as PendingListingRow[];
+  const usernames = await fetchSellerUsernames(supabase, rows);
+  return {
+    ok: true,
+    items: rows.map((row) => toPendingListing(row, { sellerUsername: usernames.get(row.seller_id ?? "") ?? null })),
+  };
+}
+
+/** Satıcıların kullanıcı adları (servis anahtarı; okunamazsa adlar boş kalır, kuyruk yine gelir) */
+async function fetchSellerUsernames(supabase: SupabaseClient, rows: PendingListingRow[]): Promise<Map<string, string>> {
+  const ids = [...new Set(rows.flatMap((row) => (row.seller_id ? [row.seller_id] : [])))];
+  if (ids.length === 0) return new Map();
+  const { data, error } = await supabase.from("profiles").select("id, username").in("id", ids);
+  if (error) {
+    console.error("Moderasyon: satıcı adları okunamadı:", error);
+    return new Map();
+  }
+  return new Map(
+    ((data ?? []) as { id: string; username: string | null }[]).flatMap((p) => (p.username ? [[p.id, p.username]] : [])),
+  );
+}
+
+/**
+ * Yönetim girişindeki rozet: karar bekleyen ilan ve açık bildirim sayısı
+ * (yalnızca sayım; satır okunmaz). Okunamayan sayı null.
+ */
+export async function fetchAdminCounts(
+  supabase: SupabaseClient,
+): Promise<{ pendingListings: number | null; openReports: number | null }> {
+  const [listings, reports] = await Promise.all([
+    supabase
+      .from("vehicles")
+      .select("id", { count: "exact", head: true })
+      .eq("moderation_status", "pending")
+      .or(PENDING_QUEUE_FILTER),
+    supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+  ]);
+  if (listings.error) console.error("Moderasyon: bekleyen ilanlar sayılamadı:", listings.error);
+  if (reports.error) console.error("Moderasyon: açık bildirimler sayılamadı:", reports.error);
+  return {
+    pendingListings: listings.error ? null : (listings.count ?? 0),
+    openReports: reports.error ? null : (reports.count ?? 0),
+  };
 }

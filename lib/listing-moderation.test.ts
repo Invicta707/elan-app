@@ -14,6 +14,7 @@ const {
   moderateListing,
   toListingSnapshot,
 } = await import("./listing-moderation");
+const { ModerationProviderError } = await import("./moderation-providers");
 type Snapshot = import("./listing-moderation").ListingSnapshot;
 type Store = import("./listing-moderation").ListingModerationStore;
 type ImageModerator = import("./moderation-providers").ImageModerator;
@@ -35,7 +36,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     description: "Bakımlı, sıkıntısız araç",
     city: "İstanbul",
     photoUrls: [PHOTO],
-    readyVideos: [{ thumbnailUrl: THUMB, durationSeconds: 10 }],
+    readyVideos: [{ streamUid: "uid-1", thumbnailUrl: THUMB, durationSeconds: 10 }],
     streamUids: ["uid-1"],
     ...overrides,
   };
@@ -97,15 +98,90 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
+/** Testlerde yeniden deneme beklemesi gerçek zaman harcamaz */
+const noWait = { sleep: async () => {} };
+/** Kapak karesi: 10 sn'lik videonun %20'si */
+const COVER = `${THUMB}?time=2s&height=480`;
+
 describe("evaluateListing", () => {
   it("video kareleri (kapak + 5) önce, sonra fotoğraflar denetlenir", async () => {
     const image = imageModerator();
     const verdict = await evaluateListing(snapshot(), { image, text: null });
     expect(verdict.decision).toBe("safe");
     expect(image.seen).toHaveLength(7);
-    expect(image.seen[0]).toBe(`${THUMB}?height=480`);
+    expect(image.seen[0]).toBe(COVER);
     expect(image.seen).toContain(`${THUMB}?time=5s&height=480`);
     expect(image.seen.at(-1)).toBe(PHOTO);
+  });
+
+  it("zamansız kapak adresi hiç istenmez (Cloudflare onu ready'den ~40 sn sonra veriyor)", async () => {
+    const image = imageModerator();
+    await evaluateListing(snapshot({ readyVideos: [{ streamUid: "uid-1", thumbnailUrl: THUMB, durationSeconds: 28 }] }), {
+      image,
+      text: null,
+    });
+    const frames = image.seen.filter((url) => url.startsWith(THUMB));
+    expect(frames[0]).toBe(`${THUMB}?time=5.6s&height=480`);
+    expect(frames.every((url) => url.includes("time="))).toBe(true);
+  });
+
+  it("27 Eylül olayı: kapak 404 verirse beklenip yeniden denenir, hazır olunca ilan temiz", async () => {
+    // Sightengine'in gerçek yanıtı: HTTP 400 media_error (kaynak 404)
+    let coverCalls = 0;
+    const image = imageModerator((url) =>
+      url === COVER && ++coverCalls <= 2
+        ? new ModerationProviderError(
+            "sightengine 400 media_error: Could not download media. The media server returned an HTTP 404 Not Found Error.",
+            { retryable: true, status: 400 },
+          )
+        : {},
+    );
+    const sleep = vi.fn(async () => {});
+    const verdict = await evaluateListing(snapshot(), { image, text: null }, { sleep });
+    expect(verdict).toMatchObject({ decision: "safe", reasons: [] });
+    expect(coverCalls).toBe(3);
+    expect(sleep.mock.calls).toEqual([[2_000], [5_000]]);
+  });
+
+  it("görsel denetlenemezse neden adıyla karara yazılır (kayda gider)", async () => {
+    const image = imageModerator((url) =>
+      url === COVER ? new ModerationProviderError("sightengine 400 media_error: Could not download media", { retryable: true }) : {},
+    );
+    const verdict = await evaluateListing(snapshot(), { image, text: null }, noWait);
+    expect(verdict).toMatchObject({
+      decision: "flagged",
+      reasons: ["unavailable"],
+      failures: ["kapak: sightengine 400 media_error: Could not download media"],
+    });
+  });
+
+  it("fotoğraflar sırasıyla adlandırılır", async () => {
+    const second = `https://proj.supabase.co/storage/v1/object/public/vehicle-photos/${VEHICLE}/1.webp`;
+    const image = imageModerator((url) => (url === second ? new ModerationProviderError("sightengine 400 media_error: x", { retryable: false }) : {}));
+    const verdict = await evaluateListing(snapshot({ photoUrls: [PHOTO, second] }), { image, text: null }, noWait);
+    expect(verdict.failures).toEqual(["fotoğraf 2: sightengine 400 media_error: x"]);
+  });
+
+  it("anahtar ya da kota hatası tekrar denenmez", async () => {
+    const image = imageModerator(() => new ModerationProviderError("sightengine 401 credentials_error: bad key", { retryable: false }));
+    const sleep = vi.fn(async () => {});
+    const verdict = await evaluateListing(snapshot({ photoUrls: [] }), { image, text: null }, { sleep });
+    expect(verdict).toMatchObject({ decision: "flagged", reasons: ["unavailable"] });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(image.seen).toHaveLength(6);
+  });
+
+  it("süre bütçesi dolunca yeni istek ya da bekleme başlatılmaz; kalanlar denetlenemedi", async () => {
+    let clock = 0;
+    const image = imageModerator(() => {
+      clock += 25_000;
+      return {};
+    });
+    const verdict = await evaluateListing(snapshot(), { image, text: null }, { now: () => clock, ...noWait });
+    // 4 işçi ilk kareleri başlatır; saat 40 sn'yi geçince kalanlar sağlayıcıya gitmez
+    expect(image.seen.length).toBeLessThan(7);
+    expect(verdict).toMatchObject({ decision: "flagged", reasons: ["unavailable"] });
+    expect(verdict.failures?.some((line) => line.endsWith("süre doldu, denetlenmedi"))).toBe(true);
   });
 
   it("açıklama temel filtreye takılırsa görseller için sağlayıcı çağrılmaz", async () => {
@@ -133,7 +209,7 @@ describe("evaluateListing", () => {
   });
 
   it("kapağı olmayan video denetlenemedi sayılır", async () => {
-    const verdict = await evaluateListing(snapshot({ readyVideos: [{ thumbnailUrl: null, durationSeconds: 10 }], photoUrls: [] }), {
+    const verdict = await evaluateListing(snapshot({ readyVideos: [{ streamUid: "uid-1", thumbnailUrl: null, durationSeconds: 10 }], photoUrls: [] }), {
       image: imageModerator(),
       text: null,
     });
@@ -141,23 +217,26 @@ describe("evaluateListing", () => {
   });
 
   it("bir kare reddedilince yeni istek başlatılmaz", async () => {
-    const image = imageModerator((url) => (url.includes("height=480") && !url.includes("time") ? { sexual: 0.97 } : {}));
+    const image = imageModerator((url) => (url === COVER ? { sexual: 0.97 } : {}));
     const verdict = await evaluateListing(snapshot(), { image, text: null });
     expect(verdict).toMatchObject({ decision: "rejected", reasons: ["sexual"] });
     // Aynı anda en fazla 4 istek: ilk kare reddedilince kalanlar başlatılmaz
     expect(image.seen.length).toBeLessThanOrEqual(4);
   });
 
-  it("sağlayıcı hatası bir kez yeniden denenir; yine olmazsa flagged", async () => {
+  it("ağ hatası / zaman aşımı yeniden denenir; hep düşerse 3 denemeden sonra flagged", async () => {
     let calls = 0;
     const flaky = imageModerator(() => (++calls === 1 ? new Error("timeout") : {}));
-    expect((await evaluateListing(snapshot({ photoUrls: [], readyVideos: [{ thumbnailUrl: THUMB, durationSeconds: 1 }] }), { image: flaky, text: null })).decision).toBe("safe");
+    const oneFrame = snapshot({ photoUrls: [], readyVideos: [{ streamUid: "uid-1", thumbnailUrl: THUMB, durationSeconds: 1 }] });
+    expect((await evaluateListing(oneFrame, { image: flaky, text: null }, noWait)).decision).toBe("safe");
 
     const broken = imageModerator(() => new Error("down"));
-    expect(await evaluateListing(snapshot(), { image: broken, text: null })).toMatchObject({
+    expect(await evaluateListing(snapshot(), { image: broken, text: null }, noWait)).toMatchObject({
       decision: "flagged",
       reasons: ["unavailable"],
     });
+    // 7 görsel × 3 deneme
+    expect(broken.seen).toHaveLength(21);
   });
 });
 
@@ -261,6 +340,33 @@ describe("decideListingManually", () => {
     expect(events).toEqual(["reject:manual", "purge"]);
   });
 
+  it("onay: videosu Cloudflare'de silinmiş ilan yayına alınmaz (akışta oynamazdı)", async () => {
+    const { store, events, recorded } = fakeStore(snapshot({ moderationReason: "review:unavailable" }));
+    const videoAvailable = vi.fn(async () => false);
+    expect(await decideListingManually(store, VEHICLE, "approve", ADMIN, { videoAvailable })).toEqual({
+      ok: false,
+      code: "video_missing",
+    });
+    expect(videoAvailable).toHaveBeenCalledWith("uid-1");
+    expect(events).toEqual([]);
+    expect(recorded).toEqual([]);
+  });
+
+  it("onay: video durumu bilinmiyorsa (Cloudflare API hatası) onay engellenmez; ret video sormaz", async () => {
+    const unknown = fakeStore(snapshot({ status: "pending_approval", moderationReason: "ai:safe" }));
+    expect(
+      await decideListingManually(unknown.store, VEHICLE, "approve", ADMIN, { videoAvailable: async () => null }),
+    ).toEqual({ ok: true, published: true });
+
+    const videoAvailable = vi.fn(async () => false);
+    const rejecting = fakeStore(snapshot());
+    expect(await decideListingManually(rejecting.store, VEHICLE, "reject", ADMIN, { videoAvailable })).toEqual({
+      ok: true,
+      published: false,
+    });
+    expect(videoAvailable).not.toHaveBeenCalled();
+  });
+
   it("karar verilmiş ilan ya da olmayan ilan", async () => {
     expect(await decideListingManually(fakeStore(snapshot({ moderationStatus: "rejected" })).store, VEHICLE, "approve", ADMIN)).toEqual({
       ok: false,
@@ -292,7 +398,7 @@ describe("toListingSnapshot", () => {
       }),
     ).toMatchObject({
       photoUrls: [PHOTO],
-      readyVideos: [{ thumbnailUrl: THUMB, durationSeconds: 12 }],
+      readyVideos: [{ streamUid: "a", thumbnailUrl: THUMB, durationSeconds: 12 }],
       streamUids: ["a", "b"],
     });
   });

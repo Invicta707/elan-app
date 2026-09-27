@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { streamVideoAvailable } from "../../../../lib/cloudflare";
 import { createListingModerationStore, decideListingManually, moderateListing } from "../../../../lib/listing-moderation";
 import { parseListingDecision } from "../../../../lib/moderation";
 import { authorizeAdmin, fetchPendingListingRows } from "../../../../lib/moderation-server";
@@ -16,7 +17,8 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-server";
 //        approve: denetim 'approved', ilan yayına girer
 //        reject:  ilan ve denetim 'rejected'; video ve fotoğraflar silinir
 //        recheck: otomatik denetim yeniden çalışır (ör. sağlayıcı anahtarı sonradan eklendi)
-//        → 200 { ok: true, decision, published } | 404 | 409 (karar zaten verilmiş)
+//        → 200 { ok: true, decision, published } | 404 | 409 already_decided (karar zaten
+//          verilmiş) | 409 video_missing (onay: video Cloudflare'de silinmiş, ilan yayına alınamaz)
 
 /** recheck: video kareleri ve fotoğraflar denetlenirken */
 export const maxDuration = 60;
@@ -41,6 +43,12 @@ async function requireAdmin(request: Request): Promise<{ userId: string } | { re
 const NOT_FOUND = () => errorResponse(404, "vehicle_not_found", "İlan bulunamadı; silinmiş olabilir.");
 const ALREADY_DECIDED = () =>
   errorResponse(409, "already_decided", "Bu ilan için karar zaten verilmiş. Listeyi yenile.");
+const VIDEO_MISSING = () =>
+  errorResponse(
+    409,
+    "video_missing",
+    "Bu ilanın videosu Cloudflare'de bulunamadı (silinmiş). Yayına alınamaz; ilanı reddedebilirsin.",
+  );
 
 export async function GET(request: Request) {
   const admin = await requireAdmin(request);
@@ -70,8 +78,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await decideListingManually(store, vehicleId, action, admin.userId);
-    if (!result.ok) return result.code === "vehicle_not_found" ? NOT_FOUND() : ALREADY_DECIDED();
+    const result = await decideListingManually(store, vehicleId, action, admin.userId, {
+      videoAvailable: streamVideoAvailable,
+    });
+    if (!result.ok) {
+      if (result.code === "vehicle_not_found") return NOT_FOUND();
+      return result.code === "video_missing" ? VIDEO_MISSING() : ALREADY_DECIDED();
+    }
     return NextResponse.json(
       { ok: true, decision: action === "approve" ? "safe" : "rejected", published: result.published },
       { headers: NO_STORE },
