@@ -17,7 +17,7 @@ _Son güncelleme: 27 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 55 dosya, **1137 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 55 dosya, **1170 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -27,8 +27,8 @@ _Son güncelleme: 27 Eylül 2026_
   - **`follows`:** `id`, `follower_id`, `following_id` (ikisi de `profiles.id`'ye, CASCADE), `created_at`. `(follower_id, following_id)` benzersiz, kendini takip CHECK ile yasak. Herkes okur; yalnızca kendi adına ekler/siler, güncelleme yok; aralarında engel varsa takip edilemez, engellenince iki yöndeki takip silinir. Takip edenin saatte 100, toplamda 5000 sınırı var. Profil satırı olmayan kullanıcı takip ederse satır tetikleyiciyle açılır.
   - **Mesajlaşma:** `conversations` (ilanlı: ilan + alıcı tekil; doğrudan: `listing_id` boş, iki kişi arasında tek konuşma, `conversations_direct_pair_key`), `messages`, `user_blocks`, `user_reports`. RLS: yalnızca iki taraf okuyor/yazıyor, engel varsa gönderilemiyor. `is_read` ve `created_at` istemciden yazılamıyor. Gönderen başına dakikada 30 mesaj. `messages` Realtime yayınında.
   - **Storage `avatars`:** herkese açık okunuyor, 1 MB, webp/jpeg/png (png 27 Eylül 2026'da eklendi). Yazma yalnızca sunucudan (`/api/profile/avatar`, servis anahtarı).
-  - **İlan durumu:** `draft`, `pending_video`, `pending_moderation` (içerik denetiminde, akışta görünmez), `active`, `sold`, `archived`, `rejected` (moderasyonla kaldırıldı ya da içerik denetiminden geçmedi). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor. Satıcı `pending_moderation`'a ne girebilir ne çıkabilir.
-  - **Yayın şartı:** ilan yalnızca işlenmiş bir videosu varsa (`videos.status = 'ready'` ve `hls_url` dolu) **ve içerik denetimi onaylıysa** (`moderation_status = 'approved'`) `active` olabilir. Kural isteği kim yaparsa yapsın geçerli; fotoğraf tek başına yetmez.
+  - **İlan durumu:** `draft`, `pending_video`, `pending_moderation` (içerik denetiminde ya da şüpheli, akışta görünmez), `pending_approval` (otomatik tarama temiz, **yönetici onayı bekliyor**, akışta görünmez), `active`, `sold`, `archived`, `rejected` (moderasyonla kaldırıldı ya da içerik denetiminden geçmedi). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor. Satıcı `pending_moderation` ve `pending_approval` durumlarına ne girebilir ne çıkabilir.
+  - **Yayın şartı:** ilan yalnızca işlenmiş bir videosu varsa (`videos.status = 'ready'` ve `hls_url` dolu) **ve içerik denetimi onaylıysa** (`moderation_status = 'approved'`) `active` olabilir. Kural isteği kim yaparsa yapsın geçerli; fotoğraf tek başına yetmez. **`approved`'ı yalnızca yöneticinin /admin/reports'taki "Onayla" kararı yazar**; otomatik denetim hiçbir ilanı yayına almaz.
   - **İçerik denetimi alanları:** `vehicles.moderation_status` (`pending` | `approved` | `rejected`), `moderation_reason` (ör. `sexual`, `review:gore,unavailable`, `manual`), `moderated_at`. Yalnızca sunucu yazar (`trg_vehicles_guard_content`). İlan denetime girdikten sonra satıcı açıklamayı değiştiremez, fotoğraf ya da video ekleyemez. Kararlar `content_moderation_events`'e yazılıyor (yalnızca servis anahtarı; metnin ya da görselin kendisi saklanmıyor).
   - **Fotoğraf adresi:** `vehicle_images.image_url` yalnızca `https://<proje>.supabase.co/storage/v1/object/public/vehicle-photos/<ilan>/<sıra>.<uzantı>` olabilir (`fn_is_vehicle_photo_url`). Proje adresi migration'a sabit yazıldı.
   - Katalog: 36 marka, 300 model (kürate edilmiş, `is_user_created = false`).
@@ -64,7 +64,7 @@ _Son güncelleme: 27 Eylül 2026_
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | Marka | [lib/brand-mark.ts](lib/brand-mark.ts) (göz hattı + oynat üçgeni, tek kaynak), [components/brand/EyePlayMark.tsx](components/brand/EyePlayMark.tsx), [components/Logo.tsx](components/Logo.tsx); duraklatma simgesi [components/VideoCard.tsx](components/VideoCard.tsx) |
 | PWA / TWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#121212`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu `lib/brand-mark.ts`'ten üretir: `node scripts/generate-icons.mjs`), [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json) (Android paketi `com.gozuyle.twa`) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 20 migration, sonuncusu `20260928110000_avatars_allow_png.sql`; hepsi uzak veritabanında uygulanmış (son üçü 27 Eylül 2026'da `db push --linked` ile, her biri kod push'undan hemen önce) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 21 migration, sonuncusu `20260928120000_vehicle_status_pending_approval.sql`; hepsi uzak veritabanında uygulanmış (son dördü 27 Eylül 2026'da `db push --linked` ile, her biri kod push'undan hemen önce) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `PHOTO_SIZE_ERROR`, `photoUpload`), seçim denetimi [lib/image-decode.ts](lib/image-decode.ts) `inspectImageFile` ve [lib/image-file.ts](lib/image-file.ts), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite), [lib/avatar-bucket.test.ts](lib/avatar-bucket.test.ts) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
@@ -340,14 +340,44 @@ _Son güncelleme: 27 Eylül 2026_
     - **`/sell`:** tek seçimde 10 dosyadan 8'i kabul edildi, `.png` adlı GIF ve bozuk PNG reddedildi. Yollar ve gövde türleri gerçek türden geldi. Eski tarayıcı taklidi çalıştı; 11 fotoğrafta sayı 10'da durup uyarı çıktı.
     - Konsol temiz.
 
+- **Zorunlu yönetici onayı (`59e7c86`, migration `20260928120000_vehicle_status_pending_approval.sql`, 27 Eylül 2026):**
+  - **Olay:** kullanıcının uygunsuz içerikli test videosu (`c2113680…`, @amil_abiyev, 15 sn) Sightengine'den geçip yayına girdi. Kapak ve 1., 4., 7., 10., 13. saniyelerdeki beş kategorinin hepsi 0,001 çıktı; sahne örnek kareler arasındaydı. Kullanıcı videoyu Cloudflare'den sildi.
+    - İlan aynı gün servis anahtarıyla `rejected` / `moderation_status = 'rejected'` / `moderation_reason = 'manual'` yapıldı. Denetim kaydına `provider = 'manual'` satırı yazıldı; hiçbir şey silinmedi.
+    - Doğrulama: misafir API'si ilanı dönmüyor, ilan sayfası 404. Satıcı Vitrinim'de "yayınlanmadı" uyarısını görür.
+  - **Yeni kural:** yapay zekâ ilanı hiçbir zaman yayına almaz.
+    - Otomatik tarama temizse ilan `pending_approval`'a geçer (`moderation_reason = 'ai:safe'`, `moderation_status` `pending` kalır).
+    - Şüpheli ya da denetlenemeyen ilan `pending_moderation`'da kalır. Açık ihlal yine otomatik reddedilir ve medyası silinir.
+    - Yayına **yalnızca** /admin/reports → "İçerik denetimi"ndeki **Onayla** alır (`decideListingManually` → `approve`: `moderation_status = 'approved'` ve `status = 'active'` tek güncellemede).
+    - Yayın şartı (`fn_check_vehicle_publishable`) `approved`'ı her rol için istediğinden sunucu da onaysız yayına alamaz. "Tekrar denetle" de yayına almaz.
+  - **Yönetim paneli:** kuyruk artık `status in (pending_moderation, pending_approval)` ya da `moderation_reason` dolu ilanları getiriyor.
+    - Onay bekleyen kartta yeşil "Otomatik tarama temiz · videoyu izleyip onayla" etiketi var.
+    - Her kartta **"Videonun tamamını izle ↗"** bağlantısı var (Cloudflare Stream izleme sayfası `…/<uid>/watch`, yalnızca `*.cloudflarestream.com` HLS adresinden üretiliyor). Örnek kareler onay için yeterli değil; yönetici videoyu baştan sona izlemeli.
+  - **Satıcı tarafı:**
+    - Karede "Onay bekliyor" etiketi.
+    - Vitrinim'in üstünde ve yönetim menüsünde "İlanınız onay bekliyor, yönetici incelemesinden sonra yayına alınacaktır." metni.
+    - Açıklama, fotoğraf ve video kilitli. Satıcı ilanı bu durumdan çıkaramıyor, geri de çekemiyor.
+    - `/sell` başarı ekranı: "içerik denetiminden ve yönetici onayından geçip yayına alınacak".
+  - **Testler (+33):**
+    - hiçbir otomatik sonuç ilanı onaylamıyor ya da yayına almıyor (temiz, şüpheli, ihlal, müstehcen, sağlayıcı yok);
+    - yönetici onayı yayına alan tek yol;
+    - depo sorguları (`awaitApproval` `approved` / `active` yazmıyor);
+    - PGlite'ta `pending_approval` kuralları: herkese görünmez, satıcı çıkaramaz, sunucu `approved` olmadan yayına alamaz, metin ve fotoğraf kilitli;
+    - kuyruk süzgeci, izleme adresi ve arayüz metinleri.
+  - **Tarayıcıda doğrulama** (üretim derlemesi, geçici önizleme; commit'lenmedi): kare, panel kartı (etiket, izleme bağlantısı, "Onayla ve yayınla") ve yönetim menüsü metni doğru; "Yayına al" ve "İlanı geri çek" yok. Konsol temiz.
+  - **Açık:** bugünkü iki ilan (`b2f00ade…`, `f753934d…`, @gozumkamil) `review:unavailable` ile panelde bekliyor. Sightengine bu ilanların en az bir karesini denetleyemedi; nedeni henüz araştırılmadı (5. bölüm).
+
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`e11af9d`** ("fix(sell): robust photo type checks shared with avatar upload"); ondan önce `47a384a` (avatar tür düzeltmesi) ve `2938b50` (içerik denetimi). Production deploy'u **`elan-j8byphjew`** (27 Eylül 2026 20:18 TSİ), `gozuyle.com`'a bağlı.
+- Son kod commit'i **`59e7c86`** ("feat(moderation): mandatory admin approval before any listing goes live"); ondan önce `e11af9d` (`/sell` fotoğraf türleri), `47a384a` (avatar tür düzeltmesi) ve `2938b50` (içerik denetimi). Production deploy'u **`elan-g25du1gbz`** (27 Eylül 2026 20:59 TSİ), `gozuyle.com`'a bağlı.
 - İçerik denetimi (`2938b50`) ilk olarak `elan-hur1fzyh5` ile yayına girdi. Sightengine anahtarları eklenince kullanıcı yeniden deploy etti: `elan-3ajm0ibrc` (27 Eylül 2026 19:38 TSİ); sağlayıcı doğrulaması bununla yapıldı. Bu dosya ondan sonra ayrı dokümantasyon commit'leriyle güncellendi; her push aynı ortam değişkenleriyle yeniden deploy eder. Güncel `HEAD` için `git log -1`, güncel deploy için `npx vercel inspect gozuyle.com` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: 20 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir). **Sıra önemli:**
+- Veritabanı kodla uyumlu: 21 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir). **Sıra önemli:**
   - İçerik denetimi migration'ı koddan önce uygulanmalıydı (yeni kod `moderation_status` sütununu okuyor); uygulandı, hemen ardından push edildi. Geçiş anında video bekleyen ilan yoktu.
   - `20260928110000_avatars_allow_png.sql` da `47a384a`'nın push'undan önce uygulandı. Canlıda `avatars` → 1 MB, `{image/webp,image/jpeg,image/png}`.
+- **Canlı doğrulama (27 Eylül 2026, `elan-g25du1gbz`, zorunlu yönetici onayı):**
+  - `20260928120000_vehicle_status_pending_approval.sql` push'tan önce uygulandı. Canlı enum: `{draft,pending_video,active,sold,archived,rejected,pending_moderation,pending_approval}`.
+  - `/`, `/my-listings`, `/admin/reports`, `/sell` → 200; oturumsuz `/api/admin/listings` → 401. Yayındaki pakette yeni satıcı metni, "Videonun tamamını izle" ve "Otomatik tarama temiz" var.
+  - Yönetim kuyruğu sorgusu (`or(status.in.(pending_moderation,pending_approval),moderation_reason.not.is.null)`) canlı PostgREST'te birebir çalıştırıldı: hatasız, 2 ilan döndü (`b2f00ade…`, `f753934d…`).
 - **Canlı doğrulama (27 Eylül 2026, `elan-j8byphjew`, görsel tür düzeltmeleri):**
   - `/`, `/sell`, `/my-listings` → 200; oturumsuz `/api/profile/avatar` → 401.
   - Canlıdaki `/sell` paketinde yeni denetim ("Fotoğraflar kontrol ediliyor…") ve yeni hata metni var, eski "Fotoğraflar JPEG, PNG ya da WebP biçiminde olmalı" metni yok.
@@ -399,7 +429,8 @@ _Son güncelleme: 27 Eylül 2026_
      - **Uçtan uca deneme** (Claude giriş yapamadığı için denenmedi):
        - ✅ avatar değiştirme: 27 Eylül 2026'da denendi; Sightengine `safe`, kaydedildi (3. bölüm);
        - görsel tür düzeltmesinden sonra (`47a384a`, `e11af9d`): telefondan **PNG** profil fotoğrafı yüklenmeli (şikayet edilen durum). `/sell`'de PNG, JPEG ve WebP fotoğraflar eklenmeli; ilan yayınlandıktan sonra fotoğraflar ilanda görünmeli. GIF ya da 10 MB üstü dosyada "Yalnızca JPG, PNG veya WebP yükleyebilirsiniz." / boyut hatası çıkmalı;
-       - temiz video ile ilan: "Video işleniyor" → kısa süre "İnceleniyor" → birkaç dakikada "Yayında";
+       - temiz video ile ilan: "Video işleniyor" → kısa süre "İnceleniyor" → "Onay bekliyor" (Vitrinim'de onay metni). Panelde "Videonun tamamını izle" ile izleyip **Onayla** → ilan "Yayında" ve akışta. Reddet → Vitrinim'de "Yayınlanmadı";
+       - panelde bekleyen `b2f00ade…` ve `f753934d…` için karar verilmeli (videoları izlenerek);
        - /admin/reports: başlık "Moderasyon", "İçerik denetimi" bölümü boş;
        - iki hesapla sohbet: küfürlü mesaj gitmemeli ve metin kutuda kalmalı, normal mesaj anında gitmeli;
        - `/sell` açıklamasında küfür: alanın altında hata çıkmalı;
@@ -452,6 +483,8 @@ _Son güncelleme: 27 Eylül 2026_
   - **Video örnekleme:** videonun 6 karesine bakılıyor (kapak + 5 ara kare). Kareler arasına sıkıştırılmış kısa bir sahne kaçabilir. Sıklaştırmak `VIDEO_SAMPLE_FRAMES`'le mümkün; sağlayıcı maliyeti artar.
   - **Doğrudan yazım:** `messages_insert_participant` kullanıcının tabloya doğrudan yazmasına hâlâ izin veriyor. Uygulamayı atlayıp API'ye doğrudan yazan biri OpenAI denetimini atlar ama veritabanındaki kelime filtresine takılır. Tamamen kapatmak için INSERT yetkisi alınıp mesaj yalnızca sunucudan yazılmalı (hız sınırı ve engel kuralları taşınmalı).
   - **Yarım kalan denetim:** `after()` yarıda kalırsa ilan `pending_moderation`'da kalır ve panelde "Otomatik denetim sürüyor ya da yarıda kaldı" olarak görünür. Otomatik yeniden deneme (cron) yok; Hobby planda cron günde bir.
+  - **"Otomatik denetim yapılamadı" (27 Eylül 2026):** üç ilan (`b2f00ade…`, `f753934d…` ve satıcının sonradan sildiği `85f59778…`) `review:unavailable` aldı. Sightengine en az bir kareyi denetleyemedi (olası nedenler: kare adresi, eşzamanlı istek sınırı, kota). Nedeni araştırılmadı; zorunlu onay sayesinde yayına sızma riski yok ama kuyruğu şişirir.
+  - **Kare örnekleme:** kapak + 5 kare, 15 sn'lik videodaki sahneyi kaçırdı. Artık yayın yönetici onayına bağlı; otomatik ret isabetini artırmak için saniyede bir kare ya da Sightengine video (tam tarama) API'si düşünülebilir (maliyet artar).
   - **Rekognition:** 5 MB'tan büyük fotoğrafı denetleyemez; ilan incelemeye düşer.
   - **Yasal:** reddedilen medya hemen siliniyor. Reşit olmayanlarla ilgili içerikte yasal saklama ve bildirim yükümlülükleri olabilir; hukuki görüş alınmalı.
   - **Denetlenmeyen metinler:** görünen ad ve kullanıcı adı filtreden geçmiyor (yalnızca rezerve liste var). Onaylanmış ilanın şehir ve rengi değiştirilebiliyor ama kelime filtresine takılıyor.
