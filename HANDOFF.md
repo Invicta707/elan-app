@@ -294,13 +294,28 @@ _Son güncelleme: 27 Eylül 2026_
     - `lib/messages-route.test.ts`.
     - Ayrıca güncellenenler: `video-activation`, `listing`, `listing-status`, `moderation`, `showcase` ve bileşen testleri.
   - **Görsel doğrulama:** Vitrinim kareleri ("İnceleniyor", "Yayınlanmadı", uyarı şeridi), yönetim menüsü uyarıları ve panel kuyruğu (bulanık görseller, ret onayı, kartın kalkması) üretim derlemesinde geçici önizleme sayfasında 375 px'te kontrol edildi (commit'lenmedi). Konsol temiz.
+  - **Sağlayıcı canlıda: Sightengine (27 Eylül 2026).** Kullanıcı `SIGHTENGINE_API_USER` ve `SIGHTENGINE_API_SECRET`'i Vercel'e ekleyip yeniden deploy etti (`elan-3ajm0ibrc`). `OPENAI_API_KEY` tanımlı değil: metin tarafında yalnızca kelime filtresi çalışıyor.
+    - **Canlı sağlayıcı testleri (hepsi geçti):** Vercel'deki anahtar değerleriyle, üretimdeki kodun kendisi (`moderationProvidersFromEnv`, `evaluateListing`, `moderateAvatarUpload`, `moderateText`) gerçek Sightengine'e karşı çalıştırıldı. Karar hesaplandı, veritabanına hiçbir şey yazılmadı.
+      - Anahtar geçerli; ham yanıt HTTP 200 `success`.
+      - Canlıdaki yayında ilan (37 sn video → kapak + 5 kare, 2 fotoğraf): **safe**. En yüksek puan cinsel içerik 0,08, diğerleri 0,001; toplam 2,5 sn.
+      - Açık kaynaklı tabanca fotoğrafı (Wikimedia Commons, "Glock 17"): **rejected**, silah 0,99.
+      - Avatar yolu (bayt, multipart): JPEG ve WebP ikisi de **kabul** (safe).
+      - Metin: "s1kt1r git" → küfür, "seni öldürürüm" → tehdit, "Satılık tabanca var" → yasa dışı, üçü de **rejected**; "Araç hâlâ satılık mı? Sıkıntısız mı?" → **safe**.
+      - Müstehcen örnekle bilerek denenmedi; o yol, Sightengine'in belgelenmiş yanıt biçimiyle birim testlerinde.
+    - **Yöntem:** `vercel env pull --environment=development` proje dışına (scratchpad) çekildi, geçici `lib/zz-*.test.ts` ile çalıştırıldı; ikisi de silindi, hiçbir değer yazdırılmadı.
+    - Kontrol sırasında `content_moderation_events` boştu (deploy'dan sonra yükleme yoktu). Canlı sunucunun kendi çağrısı, ilk gerçek yüklemede bu tabloda `provider = 'sightengine'` / `'local+sightengine'` satırıyla görünür.
 
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`2938b50`** ("feat(moderation): automated content moderation with quarantine, vision/text providers and admin review"); ondan önce `a70d80e`. Production deploy'u `elan-hur1fzyh5`, `gozuyle.com`'a bağlı. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`2938b50`** ("feat(moderation): automated content moderation with quarantine, vision/text providers and admin review"); ondan önce `a70d80e`. Kod ilk olarak `elan-hur1fzyh5` ile yayına girdi. Sightengine anahtarları eklenince kullanıcı yeniden deploy etti: **`elan-3ajm0ibrc`** (27 Eylül 2026 19:38 TSİ) `gozuyle.com`'a bağlı ve doğrulama bununla yapıldı. Bu dosya ondan sonra ayrı dokümantasyon commit'leriyle güncellendi; her push aynı kodu ve aynı ortam değişkenlerini yeniden deploy eder. Güncel `HEAD` için `git log -1`, güncel deploy için `npx vercel inspect gozuyle.com` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
 - Veritabanı kodla uyumlu: 19 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir). **Sıra önemli:** içerik denetimi migration'ı koddan önce uygulanmalıydı (yeni kod `moderation_status` sütununu okuyor); uygulandı, hemen ardından push edildi. Geçiş anında video bekleyen ilan yoktu.
-- **Canlı doğrulama (27 Eylül 2026, `elan-hur1fzyh5`):**
+- **Canlı doğrulama (27 Eylül 2026, `elan-3ajm0ibrc`, Sightengine anahtarlarıyla):**
+  - `npx vercel inspect gozuyle.com` → `elan-3ajm0ibrc`. `vercel env ls`: `SIGHTENGINE_API_USER` ve `SIGHTENGINE_API_SECRET` Production, Preview ve Development'ta tanımlı.
+  - `/`, `/my-listings`, `/admin/reports`, `/@nihad`, `/sell` → 200. Oturumsuz `/api/admin/listings`, `/api/messages`, `/api/profile/avatar` → 401.
+  - Sağlayıcı testleri geçti; ayrıntılar 3. bölümde ("Sağlayıcı canlıda").
+  - Veritabanı: denetimi bekleyen ilan yok, 3 ilan `approved`.
+- **Canlı doğrulama (27 Eylül 2026, `elan-hur1fzyh5`, sağlayıcı anahtarı yokken):**
   - `/`, `/my-listings`, `/admin/reports`, `/@nihad`, `/search`, `/sell` → 200. Oturumsuz `/api/admin/listings` (GET/POST), `/api/messages`, `/api/profile/avatar` → 401; webhook yanlış imzada 401.
   - Uzak veritabanı: 3 mevcut ilan `approved`, enum'da `pending_moderation`, dört yeni tetikleyici, `vehicle_images` yazma politikalarında durum şartı. `content_moderation_events`'te RLS açık; anon/authenticated erişemiyor.
   - Canlı PostgREST'te yeni sorgular birebir çalıştırıldı: misafir vitrin sorgusu (`moderation_status` dahil) 200, misafir `pending_moderation` ilan göremiyor, yönetim kuyruğu sorgusu (`or(... not.is.null)`) ve denetim deposunun okuma sorgusu hatasız.
@@ -322,8 +337,8 @@ _Son güncelleme: 27 Eylül 2026_
 - **Vercel env (Production + Preview):**
   - Config: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL=https://gozuyle.com`.
   - Sensitive: `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_STREAM_WEBHOOK_SECRET`.
-  - Secret: `ADMIN_EMAILS` (moderasyon paneli, yalnızca sunucuda okunur; 26 Eylül 2026'da eklendi).
-  - Tanımlı değil: `NEXT_PUBLIC_SUPPORT_EMAIL`; içerik denetimi sağlayıcıları (`SIGHTENGINE_*`, `REKOGNITION_*`, `OPENAI_API_KEY`, `MODERATION_*`; bkz. 5. bölüm, madde 0).
+  - Secret: `ADMIN_EMAILS` (moderasyon paneli, yalnızca sunucuda okunur; 26 Eylül 2026'da eklendi); `SIGHTENGINE_API_USER`, `SIGHTENGINE_API_SECRET` (içerik denetimi; Production, Preview ve Development; 27 Eylül 2026'da eklendi).
+  - Tanımlı değil: `NEXT_PUBLIC_SUPPORT_EMAIL`; `OPENAI_API_KEY` (metin denetimi yalnızca kelime filtresiyle), `REKOGNITION_*`, `MODERATION_IMAGE_PROVIDER` (boş: anahtarı tanımlı ilk sağlayıcı, yani Sightengine seçiliyor).
   - `NEXT_PUBLIC_*` değerleri build sırasında pakete gömülür; değiştirince yeniden deploy gerekir.
 - **Supabase CLI** global kurulu değil. Kullanılan yol: `~/AppData/Local/npm-cache/_npx/aa8e5c70f9d8d161/node_modules/.bin/supabase` (`db query/push --linked`). Docker olmadığı için `db dump` çalışmıyor.
 
@@ -331,21 +346,20 @@ _Son güncelleme: 27 Eylül 2026_
 
 **Kullanıcı tarafında:**
 
-0. **ÖNCELİKLİ: içerik denetimi sağlayıcısı tanımlı değil (27 Eylül 2026).**
-   - Vercel'de henüz hiçbir sağlayıcı anahtarı yok. Bu yüzden şu an:
-     - her yeni ilan video işlendikten sonra yayına girmiyor, /admin/reports → "İçerik denetimi"nde elle onay bekliyor ("Otomatik denetim yapılamadı");
-     - profil fotoğrafı yüklemesi 503 ("Fotoğraf şu an denetlenemiyor") dönüyor.
-   - Bu bilinçli kapalı başarısızlık: denetlenmemiş içerik yayına girmez.
-   - **Yapılacak:** Vercel → Environment Variables (Production + Preview, Sensitive) içine ya `SIGHTENGINE_API_USER` + `SIGHTENGINE_API_SECRET` (önerilen: silah dahil 4 model) ya da `OPENAI_API_KEY` (ücretsiz, silah yok; metin denetimini de açar) ya da `REKOGNITION_*` eklenmeli, sonra yeniden deploy edilmeli.
-   - Anahtarlar eklenince bekleyen ilanlar panelde "Tekrar denetle" ile otomatik denetlenebilir.
-   - Maliyet: Sightengine'de her görsel 4 işlem; bir ilan (6 kare + en fazla 10 fotoğraf) 24–64 işlem.
-   - **Gizlilik:** anahtarlar eklenince ilan görselleri ve metinleri, `OPENAI_API_KEY` ile ayrıca **özel mesajlar** yurt dışındaki bir hizmet sağlayıcıya gönderilir. Gizlilik politikasında (KVKK aydınlatma, yurt dışına aktarım) bu işleyiciler belirtilmeli; hukuki inceleme maddesiyle birlikte ele alınmalı.
-   - **Uçtan uca deneme** (Claude giriş yapamadığı için denenmedi):
-     - temiz video ile ilan → birkaç dakikada yayında;
-     - panelde bekleyen ilanı onayla / reddet;
-     - reddedilen ilanın Vitrinim'de "Yayınlanmadı" uyarısı ve Cloudflare'de videonun silindiği;
-     - sohbette küfürlü mesajın gitmediği ve metnin kutuda kaldığı;
-     - avatar yükleme.
+0. ✅ **İçerik denetimi sağlayıcısı: Sightengine tanımlandı ve canlıda doğrulandı (27 Eylül 2026, `elan-3ajm0ibrc`).**
+   - Anahtar geçerli; gerçek ilan safe, tabanca fotoğrafı rejected (silah 0,99), JPEG/WebP avatar kabul (ayrıntılar 3. bölümde). Yeni ilanlar artık denetimden geçince otomatik yayına giriyor; avatar yüklemesi açık.
+   - Maliyet: Sightengine'de her görsel 4 işlem (nudity, weapon, violence, gore); bir ilan (6 kare + en fazla 10 fotoğraf) 24–64 işlem. Kota Sightengine panelinden izlenmeli; kota biterse ilanlar "Otomatik denetim yapılamadı" ile panelde elle onay bekler, avatar yüklemesi 503 döner.
+   - **Kalan (kullanıcı):**
+     - **Gizlilik:** ilan görselleri ve profil fotoğrafları artık Sightengine'e (Fransa) gönderiliyor. Gizlilik politikasında (KVKK aydınlatma, yurt dışına aktarım) bu işleyici belirtilmeli; `OPENAI_API_KEY` eklenirse ilan metinleri ve **özel mesajlar** OpenAI'ye (ABD) de gider. Hukuki inceleme maddesiyle birlikte ele alınmalı.
+     - **İsteğe bağlı:** `OPENAI_API_KEY` eklenirse metin denetimi anlama göre de yapılır (taciz, tehdit, nefret); şu an yalnızca kelime filtresi var.
+     - **Uçtan uca deneme** (Claude giriş yapamadığı için denenmedi):
+       - avatar değiştir: kaydedilmeli; bu, canlı sunucunun ilk denetim kaydını (`content_moderation_events`) oluşturur;
+       - temiz video ile ilan: "Video işleniyor" → kısa süre "İnceleniyor" → birkaç dakikada "Yayında";
+       - /admin/reports: başlık "Moderasyon", "İçerik denetimi" bölümü boş;
+       - iki hesapla sohbet: küfürlü mesaj gitmemeli ve metin kutuda kalmalı, normal mesaj anında gitmeli;
+       - `/sell` açıklamasında küfür: alanın altında hata çıkmalı;
+       - isteğe bağlı ret yolu: silah içeren görselle ilan → "Yayınlanmadı" ve medya silinir. Müstehcen içerikle deneme yapılmamalı.
+   - **Yan bulgu:** satılmış (`d7a6d72c…`) ve arşivdeki (`b8a5ebe3…`) ilanın Cloudflare videoları artık yok (kapak 404). Arşivdeki ilan "Yayına al" ile açılırsa akışta videosu oynamaz; eski test verisi, gerekirse silinebilir.
 1. ✅ **Supabase → URL Configuration: tamamlandı (26 Eylül 2026).** Kullanıcı panelden kontrol etti: Site URL `https://gozuyle.com`, Redirect URLs `https://gozuyle.com/**` (`/auth/callback`'i kapsar).
 2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli, fotoğraflı ve videolu gerçek bir ilan (yeni üç adımlı akış). Kontrol edilecekler:
    - JPEG, PNG ve WebP yüklenmeli; GIF ya da 10 MB üstü dosyada Türkçe hata çıkmalı.
