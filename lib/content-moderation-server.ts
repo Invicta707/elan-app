@@ -161,7 +161,7 @@ export async function moderateAvatarUpload(
 }
 
 export type ModerationEvent = {
-  subjectType: "listing" | "avatar" | "message";
+  subjectType: "listing" | "avatar" | "message" | "comment";
   subjectId: string | null;
   /** İçeriğin sahibi */
   userId: string | null;

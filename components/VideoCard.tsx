@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type Hls from "hls.js";
+import CommentButton from "./comments/CommentButton";
 import FavoriteButton from "./FavoriteButton";
 import ReportButton from "./ReportButton";
 import ShareButton from "./vehicle/ShareButton";
@@ -79,6 +80,8 @@ export default function VideoCard({
   const { contact: handleContact, isContacting, notice } = useSellerContact(vehicle);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
   const [isReportOpen, setReportOpen] = useState(false);
+  // Yorum penceresi açıkken video durmaz; sayaç pencereyle birlikte değişir
+  const [commentsCount, setCommentsCount] = useState(vehicle.commentsCount);
 
   const hasVideoError = failedUrl === vehicle.hlsUrl;
 
@@ -368,8 +371,11 @@ export default function VideoCard({
             </button>
           </div>
 
-          <div className="flex shrink-0 flex-col items-center gap-4">
+          {/* 6 düğme: kısa ekranda (320×568) aralık daralır, sütun başlığa değmez */}
+          <div className="flex shrink-0 flex-col items-center gap-4 [@media(max-height:620px)]:gap-2">
             <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
+
+            <CommentButton vehicleId={vehicle.id} count={commentsCount} onCountChange={setCommentsCount} />
 
             <ShareButton
               vehicleId={vehicle.id}

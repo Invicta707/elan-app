@@ -189,3 +189,11 @@ export const CITY_POLICY_ERROR = "Bu şehir adı kullanılamaz.";
 export function messagePolicyError(text: string): string | null {
   return textModerationCategory(text) ? MESSAGE_POLICY_ERROR : null;
 }
+
+/** Veritabanının yorum reddinde verdiği metin (fn_vehicle_comments_text_filter ile birebir aynı) */
+export const COMMENT_POLICY_ERROR = "Yorumunuz topluluk kurallarına uymayan ifadeler içeriyor.";
+
+/** Yorum gönderilmeden önce: kurala takılıyorsa kullanıcıya gösterilecek metin */
+export function commentPolicyError(text: string): string | null {
+  return textModerationCategory(text) ? COMMENT_POLICY_ERROR : null;
+}

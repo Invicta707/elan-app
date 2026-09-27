@@ -75,13 +75,25 @@ export function bearerToken(request: Request): string | null {
  * getAuthenticatedUserId ile doğrulanmalı.
  */
 export function getSupabaseForUser(accessToken: string): SupabaseClient {
+  return createPublishableClient(accessToken);
+}
+
+/**
+ * Misafir istemcisi (yayımlanabilir anahtar, oturumsuz): herkese açık okumalar
+ * RLS'e tabi, tarayıcıdaki misafirle aynı kurallarla yapılır.
+ */
+export function getSupabasePublic(): SupabaseClient {
+  return createPublishableClient(null);
+}
+
+function createPublishableClient(accessToken: string | null): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
     throw new Error("Sunucu ortam değişkenleri eksik: NEXT_PUBLIC_SUPABASE_URL ve yayımlanabilir (anon) anahtar.");
   }
   return createClient(url, key, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    ...(accessToken ? { global: { headers: { Authorization: `Bearer ${accessToken}` } } } : {}),
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }

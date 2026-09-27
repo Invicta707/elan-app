@@ -27,6 +27,8 @@ export type FeedVehicle = {
   changedPartsCount: number;
   hlsUrl: string;
   thumbnailUrl: string | null;
+  /** vehicles.comments_count (tetikleyiciyle tutulur) */
+  commentsCount: number;
 };
 
 export type FeedCursor = { createdAt: string; id: string };
@@ -53,6 +55,7 @@ type FeedRow = {
   has_heavy_damage: boolean;
   painted_parts_count: number;
   changed_parts_count: number;
+  comments_count?: number | null;
   brand: { name: string } | null;
   model: { name: string } | null;
   videos: { hls_url: string | null; thumbnail_url: string | null; order_index: number }[];
@@ -63,7 +66,7 @@ type FeedRow = {
 // videosuz bir ilan feed'e sızmaz.
 const FEED_COLUMNS = `
   id, seller_id, created_at, year, price, currency, mileage_km, fuel_type, transmission, city,
-  tramer_amount, has_heavy_damage, painted_parts_count, changed_parts_count,
+  tramer_amount, has_heavy_damage, painted_parts_count, changed_parts_count, comments_count,
   brand:brands(name),
   model:models(name),
   videos!inner(hls_url, thumbnail_url, order_index)
@@ -169,6 +172,7 @@ function toFeedVehicle(row: FeedRow): FeedVehicle | null {
     changedPartsCount: row.changed_parts_count,
     hlsUrl: video.hls_url,
     thumbnailUrl: video.thumbnail_url,
+    commentsCount: Math.max(0, Number(row.comments_count ?? 0)),
   };
 }
 

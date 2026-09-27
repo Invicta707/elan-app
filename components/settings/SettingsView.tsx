@@ -241,7 +241,7 @@ function SignedInSettings({ user, onDeleted }: { user: User; onDeleted: () => vo
           Hesabı sil
         </h2>
         <p className="mt-1 text-[14px] leading-relaxed text-[#4A5058]">
-          Hesabın; tüm ilanların (videoları ve fotoğraflarıyla), favorilerin, mesajların, takiplerin ve iletişim
+          Hesabın; tüm ilanların (videoları ve fotoğraflarıyla), favorilerin, mesajların, yorumların, takiplerin ve iletişim
           bilgilerinle birlikte kalıcı olarak silinir. Bu işlem geri alınamaz.
         </p>
         <button

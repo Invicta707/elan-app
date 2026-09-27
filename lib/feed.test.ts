@@ -24,6 +24,7 @@ const vehicle: FeedVehicle = {
   changedPartsCount: 0,
   hlsUrl: "https://video/veh-1.m3u8",
   thumbnailUrl: null,
+  commentsCount: 0,
 };
 
 const rpc = vi.mocked(supabase.rpc);
@@ -94,6 +95,7 @@ const feedRow = {
   has_heavy_damage: false,
   painted_parts_count: 1,
   changed_parts_count: 0,
+  comments_count: 12,
   brand: { name: "Fiat" },
   model: { name: "Egea" },
   videos: [{ hls_url: "https://video/9.m3u8", thumbnail_url: null, order_index: 0 }],
@@ -114,7 +116,14 @@ describe("fetchFeedPage", () => {
     expect(rpc).not.toHaveBeenCalled();
     expect(String(calls.find(([name]) => name === "select")?.[1])).toContain("seller_id");
     expect(calls).toContainEqual(["not", "videos.hls_url", "is", null]);
-    expect(page.items[0]).toMatchObject({ id: "veh-9", sellerId: "seller-9", price: 990000 });
+    expect(page.items[0]).toMatchObject({ id: "veh-9", sellerId: "seller-9", price: 990000, commentsCount: 12 });
+    expect(String(calls.find(([name]) => name === "select")?.[1])).toContain("comments_count");
+  });
+
+  it("yorum sayısı yoksa (eski satır) 0", async () => {
+    const { proxy } = queryChain({ data: [{ ...feedRow, comments_count: undefined }], error: null });
+    vi.mocked(supabase.from).mockReturnValue(proxy as never);
+    expect((await fetchFeedPage(null, 8)).items[0].commentsCount).toBe(0);
   });
 
   it("Takip Edilenler: following_feed RPC'si üstüne aynı süzgeç, sıralama ve sayfalama", async () => {
