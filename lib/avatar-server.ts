@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AVATAR_BUCKET, AVATAR_TYPE_ERROR, MAX_AVATAR_BYTES, avatarPath, detectAvatarType } from "./avatar";
+import { AVATAR_BUCKET, MAX_AVATAR_BYTES, avatarPath } from "./avatar";
+import { IMAGE_TYPE_ERROR, detectImageType } from "./image-file";
 
 // Profil fotoğrafını kaydeder/siler (servis anahtarıyla). avatars bucket'ına
 // kullanıcı doğrudan yazamaz; profiles.avatar_url'i de yalnızca burası yazar.
@@ -40,8 +41,8 @@ export async function saveAvatar(
   }
   // Tür yalnızca ilk baytlardan (PNG, JPEG, WebP): istemcinin gönderdiği Content-Type
   // ya da dosya adına güvenilmez; kayıttaki contentType da buradan gelir.
-  const type = detectAvatarType(bytes);
-  if (!type) return { ok: false, status: 400, message: AVATAR_TYPE_ERROR };
+  const type = detectImageType(bytes);
+  if (!type) return { ok: false, status: 400, message: IMAGE_TYPE_ERROR };
 
   const path = avatarPath(userId, type, now);
   const { error: uploadError } = await supabase.storage

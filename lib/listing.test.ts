@@ -3,6 +3,8 @@ import {
   EMPTY_LISTING_DRAFT,
   LISTING_STEPS,
   MAX_PHOTO_BYTES,
+  PHOTO_MIME_TYPES,
+  PHOTO_SIZE_ERROR,
   buildListingRecords,
   buildVehicleImageRow,
   caretAfterDigits,
@@ -10,8 +12,8 @@ import {
   catalogRpcArgs,
   groupThousands,
   listingFieldErrors,
-  photoRejection,
   photoStoragePath,
+  photoUpload,
   stepFieldErrors,
   validateListingDraft,
   type ListingDraft,
@@ -157,22 +159,35 @@ describe("buildListingRecords", () => {
   });
 });
 
-describe("photoRejection", () => {
-  it.each(["image/jpeg", "image/png", "image/webp", "IMAGE/JPEG"])("%s kabul edilir", (type) => {
-    expect(photoRejection({ type, size: MAX_PHOTO_BYTES })).toBeNull();
+describe("fotoğraf yükleme (tür denetimi: lib/image-decode.test.ts inspectImageFile)", () => {
+  it("boyut sınırı ve metni", () => {
+    expect(MAX_PHOTO_BYTES).toBe(10 * 1024 * 1024);
+    expect(PHOTO_SIZE_ERROR).toBe("Fotoğraflar en fazla 10 MB olabilir.");
   });
 
-  it.each(["image/heic", "image/heif", "image/gif", "image/svg+xml", "image/avif", "text/html", ""])(
-    "%s reddedilir",
-    (type) => {
-      expect(photoRejection({ type, size: 1000 })).toBe("Fotoğraflar JPEG, PNG ya da WebP biçiminde olmalı.");
-    },
-  );
+  it("yol ve gövde, tarayıcının bildirdiği türden değil gerçek türden", () => {
+    // image/x-png bildiren PNG: bucket "image/x-png"yi, yol kuralı ".x-png"yi reddederdi
+    const xpng = new File([new Uint8Array([0x89, 0x50])], "foto.png", { type: "image/x-png" });
+    const upload = photoUpload("veh-1", 0, xpng, "image/png");
+    expect(upload.path).toBe("veh-1/0.png");
+    expect(upload.body.type).toBe("image/png");
+    expect(upload.body.size).toBe(xpng.size);
 
-  it("10 MB'ın üstü reddedilir", () => {
-    expect(photoRejection({ type: "image/jpeg", size: MAX_PHOTO_BYTES + 1 })).toBe(
-      "Fotoğraflar en fazla 10 MB olabilir.",
-    );
+    // image/jpg ya da boş tür bildiren JPEG: yol kuralı yalnızca .jpeg kabul eder
+    expect(photoUpload("veh-1", 2, new File(["x"], "a.jpg", { type: "image/jpg" }), "image/jpeg")).toMatchObject({
+      path: "veh-1/2.jpeg",
+      body: { type: "image/jpeg" },
+    });
+    expect(photoUpload("veh-1", 3, new File(["x"], "IMG_3", { type: "" }), "image/webp").path).toBe("veh-1/3.webp");
+  });
+
+  it("tür zaten doğruysa dosyanın kendisi yüklenir", () => {
+    const file = new File(["x"], "a.webp", { type: "image/webp" });
+    expect(photoUpload("veh-1", 1, file, "image/webp").body).toBe(file);
+  });
+
+  it("yükleme türleri bucket'ın izin verdiği türlerle aynı", () => {
+    expect([...PHOTO_MIME_TYPES].sort()).toEqual(["image/jpeg", "image/png", "image/webp"]);
   });
 });
 

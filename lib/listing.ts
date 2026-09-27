@@ -1,6 +1,7 @@
 import { MAX_BRAND_NAME, MAX_MODEL_NAME, catalogNameError, cleanCatalogName } from "./catalog-search";
 import type { FuelType, TransmissionType } from "./feed";
 import { normalizeTurkishPhone } from "./phone";
+import type { ImageType } from "./image-file";
 import type { BodyType } from "./search";
 import {
   CATALOG_NAME_POLICY_ERROR,
@@ -271,30 +272,43 @@ export const PHOTO_BUCKET = "vehicle-photos";
 export const MAX_PHOTOS = 10;
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 /**
- * HEIC yok: tarayıcıların çoğu gösteremez. iPhone'da Safari, galeriden seçilen
- * HEIC fotoğrafı yüklemeden önce JPEG'e çevirir.
+ * Bucket'ın kabul ettiği (ve yüklemede kullanılan) gerçek türler. HEIC yok:
+ * tarayıcıların çoğu gösteremez; iPhone'da Safari galeriden seçilen HEIC
+ * fotoğrafı JPEG'e çevirir.
+ *
+ * Seçim anındaki denetim profil fotoğrafıyla ortak (app/sell handlePhotosPick →
+ * lib/image-decode.ts inspectImageFile): tarayıcının bildirdiği tür esnek
+ * (image/x-png, image/pjpeg, image/jpg, büyük harf; tür boşsa uzantı), gerçek
+ * tür ilk baytlardan okunur ve dosyanın tarayıcıda açılabildiği denenir.
  */
 export const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
-/** Fotoğraf yüklenemeyecekse kullanıcıya gösterilecek neden, uygunsa null. */
-export function photoRejection(file: { type: string; size: number }): string | null {
-  if (!(PHOTO_MIME_TYPES as readonly string[]).includes(file.type.toLowerCase())) {
-    return "Fotoğraflar JPEG, PNG ya da WebP biçiminde olmalı.";
-  }
-  if (file.size > MAX_PHOTO_BYTES) {
-    return `Fotoğraflar en fazla ${MAX_PHOTO_BYTES / (1024 * 1024)} MB olabilir.`;
-  }
-  return null;
-}
+export const PHOTO_SIZE_ERROR = `Fotoğraflar en fazla ${MAX_PHOTO_BYTES / (1024 * 1024)} MB olabilir.`;
 
 /**
  * Depolama anahtarı: <ilan>/<sıra>.<uzantı>. Dosya adı kullanılmaz; Supabase
  * Storage ASCII dışı karakterli (ş, ğ, ı…) anahtarları "Invalid key" hatasıyla
- * reddeder. Uzantı MIME türünden gelir (dosya adında uzantı olmayabilir).
+ * reddeder. Uzantı MIME türünden gelir (dosya adında uzantı olmayabilir);
+ * uygulama buraya yalnızca ilk baytlardan okunan gerçek türü verir (photoUpload):
+ * tarayıcının bildirdiği "image/jpg" ya da "image/x-png" yol kuralına
+ * (jpeg|png|webp, fn_can_upload_vehicle_photo) uymazdı.
  */
 export function photoStoragePath(vehicleId: string, index: number, mimeType: string): string {
   const extension = mimeType.split("/")[1]?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
   return `${vehicleId}/${index}.${extension}`;
+}
+
+/**
+ * Yüklenecek fotoğrafın yolu ve gövdesi. Supabase Storage multipart yüklemede
+ * türü dosyanın kendi type'ından alır ve bucket onu denetler; tarayıcı
+ * "image/x-png" ya da boş tür bildirmişse dosya, ilk baytlardan okunan gerçek
+ * türle yeniden sarılır.
+ */
+export function photoUpload(vehicleId: string, index: number, file: Blob, type: ImageType): { path: string; body: Blob } {
+  return {
+    path: photoStoragePath(vehicleId, index, type),
+    body: file.type === type ? file : new Blob([file], { type }),
+  };
 }
 
 export type VehicleImageRow = {

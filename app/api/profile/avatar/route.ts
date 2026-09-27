@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { MAX_AVATAR_BYTES, detectAvatarType } from "../../../../lib/avatar";
+import { MAX_AVATAR_BYTES } from "../../../../lib/avatar";
 import { deleteAvatar, saveAvatar } from "../../../../lib/avatar-server";
 import { moderateAvatarUpload, recordModerationEvent } from "../../../../lib/content-moderation-server";
+import { detectImageType } from "../../../../lib/image-file";
 import { moderationProvidersFromEnv } from "../../../../lib/moderation-providers";
 import { clientIp, rateLimitSubject } from "../../../../lib/rate-limit";
 import { consumeRateLimit, rateLimitSecret } from "../../../../lib/rate-limit-server";
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
 
   const bytes = new Uint8Array(await request.arrayBuffer());
   // Tür geçersizse denetime gerek yok; saveAvatar 400 döner
-  const type = detectAvatarType(bytes);
+  const type = detectImageType(bytes);
   if (type && bytes.length <= MAX_AVATAR_BYTES) {
     const moderation = await moderateAvatarUpload(moderationProvidersFromEnv().image, bytes, type);
     await recordModerationEvent(auth.supabase, {

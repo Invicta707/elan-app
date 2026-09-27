@@ -31,7 +31,9 @@ import {
   EMPTY_LISTING_DRAFT,
   LISTING_STEPS,
   MAX_PHOTOS,
+  MAX_PHOTO_BYTES,
   PHOTO_BUCKET,
+  PHOTO_SIZE_ERROR,
   buildListingRecords,
   buildVehicleImageRow,
   catalogIds,
@@ -39,8 +41,7 @@ import {
   groupThousands,
   listingFieldErrors,
   onlyDigits,
-  photoRejection,
-  photoStoragePath,
+  photoUpload,
   stepFieldErrors,
   validateListingDraft,
   type CatalogSelection,
@@ -49,6 +50,7 @@ import {
   type ListingField,
   type VehicleImageRow,
 } from "../../lib/listing";
+import { inspectImageFile } from "../../lib/image-decode";
 import { fetchCatalogCached, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
 import {
   overallSubmitPercent,
@@ -109,6 +111,8 @@ export default function SellPage() {
   const [video, setVideo] = useState<PickedVideo | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  // Seçilen fotoğraflar denetlenirken (tür, imza, açılabilirlik) seçici kapalı
+  const [checkingPhotos, setCheckingPhotos] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Adımlar: hatalar, alan terk edilince ya da o adımda "Devam et"e basılınca görünür
@@ -276,21 +280,34 @@ export default function SellPage() {
     setVideoError(null);
   }
 
-  function handlePhotosPick(incoming: File[]) {
+  async function handlePhotosPick(incoming: File[]) {
     setPhotoError(null);
     if (incoming.length === 0) return;
 
-    // Sunucu (Storage) aynı kuralları uygular; burada seçim anında açıkça söylenir
-    const rejection = incoming.map(photoRejection).find(Boolean);
-    if (rejection) setPhotoError(rejection);
+    // Profil fotoğrafıyla aynı denetim (lib/image-decode.ts inspectImageFile): esnek
+    // tür beyanı, ilk bayt imzası (PNG/JPEG/WebP), boyut ve tarayıcıda açılabilirlik.
+    // Storage aynı tür ve boyut sınırlarını ayrıca uygular. Sırayla denetlenir:
+    // büyük telefon fotoğrafları aynı anda açılıp belleği doldurmasın.
+    const room = MAX_PHOTOS - photos.length;
+    const accepted: PickedPhoto[] = [];
+    let error: string | null = null;
+    setCheckingPhotos(true);
+    try {
+      for (const file of incoming) {
+        if (accepted.length >= room) {
+          error ??= `En fazla ${MAX_PHOTOS} fotoğraf seçebilirsin.`;
+          break;
+        }
+        const result = await inspectImageFile(file, { maxBytes: MAX_PHOTO_BYTES, sizeError: PHOTO_SIZE_ERROR });
+        if (result.ok) accepted.push({ file, type: result.type, previewUrl: URL.createObjectURL(file) });
+        else error ??= result.message;
+      }
+    } finally {
+      setCheckingPhotos(false);
+    }
 
-    setPhotos((current) => {
-      const valid = incoming.filter((f) => photoRejection(f) === null);
-      const room = MAX_PHOTOS - current.length;
-      if (valid.length > room) setPhotoError(`En fazla ${MAX_PHOTOS} fotoğraf seçebilirsin.`);
-      const accepted = valid.slice(0, Math.max(0, room));
-      return [...current, ...accepted.map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))];
-    });
+    if (error) setPhotoError(error);
+    if (accepted.length > 0) setPhotos((current) => [...current, ...accepted].slice(0, MAX_PHOTOS));
   }
 
   function removePhoto(index: number) {
@@ -702,8 +719,9 @@ export default function SellPage() {
                 id={PHOTOS_INPUT_ID}
                 photos={photos}
                 error={photoError}
-                disabled={false}
-                onPick={handlePhotosPick}
+                disabled={checkingPhotos}
+                checking={checkingPhotos}
+                onPick={(files) => void handlePhotosPick(files)}
                 onRemove={removePhoto}
               />
             </FormCard>
@@ -877,10 +895,11 @@ async function uploadPhotos(vehicleId: string, photos: PickedPhoto[]): Promise<v
   const rows: VehicleImageRow[] = [];
 
   for (let i = 0; i < photos.length; i += 1) {
-    const path = photoStoragePath(vehicleId, i, photos[i].file.type);
+    // Yol ve tür, ilk baytlardan okunan gerçek türden (tarayıcının bildirdiği tür değil)
+    const { path, body } = photoUpload(vehicleId, i, photos[i].file, photos[i].type);
     const { error: uploadError } = await supabase.storage
       .from(PHOTO_BUCKET)
-      .upload(path, photos[i].file, { upsert: true });
+      .upload(path, body, { upsert: true, contentType: photos[i].type });
     if (uploadError) throw uploadError;
 
     const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);

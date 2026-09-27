@@ -2,17 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./supabase", () => ({ supabase: {} }));
 
-import {
-  AVATAR_TYPE_ERROR,
-  AVATAR_SIGNATURE_BYTES,
-  avatarPath,
-  avatarSourceError,
-  centerSquare,
-  declaredAvatarSource,
-  detectAvatarType,
-  fileExtension,
-  normalizeMimeType,
-} from "./avatar";
+import { avatarPath, avatarSourceError, centerSquare } from "./avatar";
+import { IMAGE_TYPE_ERROR as AVATAR_TYPE_ERROR } from "./image-file";
 import { displayNameError, initialOf, suggestedDisplayName } from "./profile";
 
 const bytes = (...values: (number | string)[]) =>
@@ -25,86 +16,6 @@ const WEBP = bytes("RIFF", 0, 0, 0, 0, "WEBP", "VP8 ");
 const GIF = bytes("GIF89a", 0, 0, 0, 0, 0, 0);
 const HEIC = bytes(0, 0, 0, 0x18, "ftypheic");
 const PDF = bytes("%PDF-1.7", 0, 0, 0, 0);
-
-describe("detectAvatarType", () => {
-  it("türü ilk baytlardan tanır (uzantıya güvenmez): PNG, JPEG, WebP", () => {
-    expect(detectAvatarType(WEBP)).toBe("image/webp");
-    expect(detectAvatarType(JPEG)).toBe("image/jpeg");
-    expect(detectAvatarType(PNG)).toBe("image/png");
-  });
-
-  it("başka her şey null", () => {
-    expect(detectAvatarType(bytes(0x89, "PNG", 0x0d, 0x0a))).toBeNull(); // yarım PNG imzası
-    expect(detectAvatarType(bytes(0x89, "PNX", 0x0d, 0x0a, 0x1a, 0x0a))).toBeNull();
-    expect(detectAvatarType(GIF)).toBeNull();
-    expect(detectAvatarType(HEIC)).toBeNull();
-    expect(detectAvatarType(PDF)).toBeNull();
-    expect(detectAvatarType(bytes("<svg xmlns"))).toBeNull();
-    expect(detectAvatarType(bytes("RIFF", 0, 0, 0, 0, "WAVE"))).toBeNull();
-    expect(detectAvatarType(new Uint8Array())).toBeNull();
-  });
-
-  it("imza okumak için yeterli bayt sayısı", () => {
-    for (const head of [PNG, JPEG, WEBP]) expect(detectAvatarType(head.subarray(0, AVATAR_SIGNATURE_BYTES))).not.toBeNull();
-  });
-});
-
-describe("seçilen dosyanın beyan edilen türü", () => {
-  it("MIME türü büyük/küçük harf ve parametreden bağımsız", () => {
-    expect(normalizeMimeType("IMAGE/PNG")).toBe("image/png");
-    expect(normalizeMimeType(" image/png; charset=binary ")).toBe("image/png");
-    expect(normalizeMimeType(undefined)).toBe("");
-  });
-
-  it("uzantı küçük harfe çevrilir; yoksa boş", () => {
-    expect(fileExtension("Foto.JPEG")).toBe("jpeg");
-    expect(fileExtension("arsiv.tar.png")).toBe("png");
-    expect(fileExtension("IMG_1234")).toBe("");
-    expect(fileExtension(null)).toBe("");
-  });
-
-  it.each([
-    ["image/png", "a.png"],
-    ["image/x-png", "a.png"],
-    ["IMAGE/PNG", "a.png"],
-    ["Image/Png", "a"],
-    ["image/jpeg", "a.jpg"],
-    ["image/jpg", "a.jpg"],
-    ["image/pjpeg", "a.jpg"],
-    ["image/webp", "a.webp"],
-    ["IMAGE/WEBP", "a.WEBP"],
-  ])("%s kabul edilir (%s)", (type, name) => {
-    expect(declaredAvatarSource({ type, name })).toBe("allowed");
-  });
-
-  it.each([
-    ["", "IMG_1.png"],
-    ["", "IMG_1.JPG"],
-    ["", "foto.jpeg"],
-    ["application/octet-stream", "foto.webp"],
-    ["application/octet-stream", "FOTO.PNG"],
-    ["binary/octet-stream", "foto.jpg"],
-  ])("tür bildirilmezse (%j) uzantıya bakılır: %s", (type, name) => {
-    expect(declaredAvatarSource({ type, name })).toBe("allowed");
-  });
-
-  it("tür de uzantı da yoksa karar ilk baytlara kalır", () => {
-    expect(declaredAvatarSource({ type: "", name: "IMG_1234" })).toBe("unknown");
-    expect(declaredAvatarSource({ type: "application/octet-stream", name: "" })).toBe("unknown");
-  });
-
-  it.each([
-    ["image/gif", "a.gif"],
-    ["image/heic", "a.heic"],
-    ["video/mp4", "a.mp4"],
-    ["application/pdf", "a.pdf"],
-    ["image/svg+xml", "a.svg"],
-    ["", "a.gif"],
-    ["application/octet-stream", "a.heic"],
-  ])("başka tür reddedilir: %s (%s)", (type, name) => {
-    expect(declaredAvatarSource({ type, name })).toBe("rejected");
-  });
-});
 
 describe("avatarSourceError", () => {
   const file = (type: string, name: string, size = 500_000) => ({ type, name, size });

@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, FileImage, Film, HardDrive, ImagePlus, Images, Smartphone, Star, Video, X } from "lucide-react";
+import { Clock, FileImage, Film, HardDrive, ImagePlus, Images, LoaderCircle, Smartphone, Star, Video, X } from "lucide-react";
 import { useState, type DragEvent, type ReactNode } from "react";
 import { MAX_PHOTOS, MAX_PHOTO_BYTES } from "../../lib/listing";
 import { FieldError } from "./FormControls";
@@ -186,6 +186,7 @@ export function PhotoDropzone({
   photos,
   error,
   disabled,
+  checking = false,
   onPick,
   onRemove,
 }: {
@@ -193,6 +194,8 @@ export function PhotoDropzone({
   photos: PickedPhoto[];
   error: string | null;
   disabled: boolean;
+  /** Seçilen fotoğraflar denetleniyor (tür, imza, açılabilirlik) */
+  checking?: boolean;
   onPick: (files: File[]) => void;
   onRemove: (index: number) => void;
 }) {
@@ -209,7 +212,7 @@ export function PhotoDropzone({
       id={id}
       type="file"
       // HEIC seçilebilsin diye image/*: iPhone Safari JPEG'e çevirir; diğerleri
-      // seçimde açık bir mesajla reddedilir (lib/listing.ts photoRejection)
+      // seçimde açık bir mesajla reddedilir (lib/image-decode.ts inspectImageFile)
       accept="image/*"
       multiple
       disabled={disabled}
@@ -287,6 +290,12 @@ export function PhotoDropzone({
             {photos.length}/{MAX_PHOTOS} fotoğraf · ilk fotoğraf aramalarda kapak olarak görünür
           </p>
         </div>
+      )}
+      {checking && (
+        <p role="status" className="mt-1.5 flex items-center gap-1.5 text-[13px] text-[#5B616B]">
+          <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
+          Fotoğraflar kontrol ediliyor…
+        </p>
       )}
       <FieldError id={id} message={error} />
       <LimitList id={limitsId} items={limits} />
