@@ -17,7 +17,7 @@ _Son güncelleme: 27 Eylül 2026_
   - Servis istemcisi [lib/supabase-server.ts](lib/supabase-server.ts): yalnızca API route'larında kullanılıyor.
 - **Cloudflare Stream:** tus ile doğrudan yükleme ([lib/tus-upload.ts](lib/tus-upload.ts)), HLS oynatma (hls.js), imzalı webhook.
 - **Vercel:** team ve proje `elan-app`, Node 24. GitHub `Invicta707/elan-app` reposunun `main` dalı otomatik olarak production'a deploy ediliyor; ayrıca `npx vercel --prod` (CLI 60.x) kullanılıyor.
-- **Testler:** Vitest; 43 dosya, **817 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
+- **Testler:** Vitest; 51 dosya, **1057 test**, hepsi `lib/*.test.ts(x)` altında. Bileşen testleri `lib/ui-components.test.tsx`'te: dosyanın başındaki `// @vitest-environment happy-dom` yorumu happy-dom'u açıyor (devDependency'ler: `happy-dom`, `@testing-library/react`, `@testing-library/dom`); `next/image` ve `next/link` sade HTML öğeleriyle taklit ediliyor. Uç nokta testleri de burada (örnek: `lib/reports-route.test.ts`, route'u `vi.resetModules` ile her testte yeniden yükler).
   - **Veritabanı güvenlik testleri** ([lib/listing-rls.test.ts](lib/listing-rls.test.ts)): migration dosyalarını gerçek bir Postgres'te (PGlite, WASM; devDependency `@electric-sql/pglite`) çalıştırır. Satıcı, anonim kullanıcı, servis anahtarı ve yönetici istekleri `set local role` ile `request.jwt.claims` üzerinden taklit edilir. Başlangıç şeması, uzak veritabanından okunmuş tanımların asgari kopyasıdır; RLS/tetikleyici değişince oradaki `BASE_SCHEMA` da güncellenmeli.
 - **Veri modeli:**
   - Favoriler ayrı tabloda değil; `interactions` tablosunda `type='save'` satırı olarak tutuluyor (RLS, tekil indeks, `saves_count` tetikleyicisi).
@@ -27,8 +27,9 @@ _Son güncelleme: 27 Eylül 2026_
   - **`follows`:** `id`, `follower_id`, `following_id` (ikisi de `profiles.id`'ye, CASCADE), `created_at`. `(follower_id, following_id)` benzersiz, kendini takip CHECK ile yasak. Herkes okur; yalnızca kendi adına ekler/siler, güncelleme yok; aralarında engel varsa takip edilemez, engellenince iki yöndeki takip silinir. Takip edenin saatte 100, toplamda 5000 sınırı var. Profil satırı olmayan kullanıcı takip ederse satır tetikleyiciyle açılır.
   - **Mesajlaşma:** `conversations` (ilanlı: ilan + alıcı tekil; doğrudan: `listing_id` boş, iki kişi arasında tek konuşma, `conversations_direct_pair_key`), `messages`, `user_blocks`, `user_reports`. RLS: yalnızca iki taraf okuyor/yazıyor, engel varsa gönderilemiyor. `is_read` ve `created_at` istemciden yazılamıyor. Gönderen başına dakikada 30 mesaj. `messages` Realtime yayınında.
   - **Storage `avatars`:** herkese açık okunuyor, 1 MB, webp/jpeg. Yazma yalnızca sunucudan (`/api/profile/avatar`, servis anahtarı).
-  - **İlan durumu:** `draft`, `pending_video`, `active`, `sold`, `archived`, `rejected` (moderasyon). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor.
-  - **Yayın şartı:** ilan yalnızca işlenmiş bir videosu varsa (`videos.status = 'ready'` ve `hls_url` dolu) `active` olabilir. Kural isteği kim yaparsa yapsın geçerli; fotoğraf tek başına yetmez.
+  - **İlan durumu:** `draft`, `pending_video`, `pending_moderation` (içerik denetiminde, akışta görünmez), `active`, `sold`, `archived`, `rejected` (moderasyonla kaldırıldı ya da içerik denetiminden geçmedi). Satıcının geçişleri tek tabloda: `set_vehicle_status` RPC'si, `trg_vehicles_guard_owner_status` tetikleyicisi ve [lib/listing-status.ts](lib/listing-status.ts) `OWNER_TRANSITIONS`. Testler üçünün aynı kaldığını denetliyor. Satıcı `pending_moderation`'a ne girebilir ne çıkabilir.
+  - **Yayın şartı:** ilan yalnızca işlenmiş bir videosu varsa (`videos.status = 'ready'` ve `hls_url` dolu) **ve içerik denetimi onaylıysa** (`moderation_status = 'approved'`) `active` olabilir. Kural isteği kim yaparsa yapsın geçerli; fotoğraf tek başına yetmez.
+  - **İçerik denetimi alanları:** `vehicles.moderation_status` (`pending` | `approved` | `rejected`), `moderation_reason` (ör. `sexual`, `review:gore,unavailable`, `manual`), `moderated_at`. Yalnızca sunucu yazar (`trg_vehicles_guard_content`). İlan denetime girdikten sonra satıcı açıklamayı değiştiremez, fotoğraf ya da video ekleyemez. Kararlar `content_moderation_events`'e yazılıyor (yalnızca servis anahtarı; metnin ya da görselin kendisi saklanmıyor).
   - **Fotoğraf adresi:** `vehicle_images.image_url` yalnızca `https://<proje>.supabase.co/storage/v1/object/public/vehicle-photos/<ilan>/<sıra>.<uzantı>` olabilir (`fn_is_vehicle_photo_url`). Proje adresi migration'a sabit yazıldı.
   - Katalog: 36 marka, 300 model (kürate edilmiş, `is_user_created = false`).
   - **Kullanıcının yazdığı marka/model:** kataloğa `is_user_created = true` ve `created_by` ile eklenir.
@@ -49,6 +50,7 @@ _Son güncelleme: 27 Eylül 2026_
 | Ayarlar / hesap silme | [app/settings/page.tsx](app/settings/page.tsx), [lib/app-cache.ts](lib/app-cache.ts) (önbelleği temizle), [components/settings/SettingsView.tsx](components/settings/SettingsView.tsx), [components/settings/DeleteAccountDialog.tsx](components/settings/DeleteAccountDialog.tsx), [components/settings/BlockedUsersSheet.tsx](components/settings/BlockedUsersSheet.tsx), [components/ui/Switch.tsx](components/ui/Switch.tsx), [lib/settings.ts](lib/settings.ts) (bildirim tercihleri, engellenenler), [app/account/page.tsx](app/account/page.tsx) (308 → `/settings`), [app/api/user/delete/route.ts](app/api/user/delete/route.ts), [lib/account-deletion.ts](lib/account-deletion.ts) |
 | Bildirim | [components/ReportButton.tsx](components/ReportButton.tsx), [app/api/reports/route.ts](app/api/reports/route.ts), [lib/reports.ts](lib/reports.ts) (`REPORT_RATE_RULES`, `REPORT_BURST_LIMIT`), [lib/rate-limit.ts](lib/rate-limit.ts) (bellek içi, `rateLimitSubject`), [lib/rate-limit-server.ts](lib/rate-limit-server.ts) (kalıcı sayaç, HMAC anahtarı), [lib/rate-limit-db.test.ts](lib/rate-limit-db.test.ts) (PGlite) |
 | Moderasyon | [app/admin/reports/page.tsx](app/admin/reports/page.tsx), [components/ModerationView.tsx](components/ModerationView.tsx), [app/api/admin/reports/route.ts](app/api/admin/reports/route.ts), [lib/moderation.ts](lib/moderation.ts), [lib/moderation-server.ts](lib/moderation-server.ts) (`authorizeAdmin`: `ADMIN_EMAILS`, onaylı e-posta) |
+| İçerik denetimi | [lib/content-moderation.ts](lib/content-moderation.ts) (kategoriler, %60 / %40 eşikleri, karar, video kareleri, kullanıcı metinleri), [lib/moderation-providers.ts](lib/moderation-providers.ts) (Sightengine, Rekognition, OpenAI; ortam değişkeniyle seçim), [lib/aws-sigv4.ts](lib/aws-sigv4.ts), [lib/content-moderation-server.ts](lib/content-moderation-server.ts) (görsel/metin denetimi, avatar kararı, kayıt), [lib/listing-moderation.ts](lib/listing-moderation.ts) (ilan hattı, Supabase deposu, elle karar), [lib/text-moderation.ts](lib/text-moderation.ts) (Türkçe kelime filtresi; SQL aynası migration'da), [lib/video-activation.ts](lib/video-activation.ts) (karantina), [app/api/admin/listings/route.ts](app/api/admin/listings/route.ts), [components/moderation/PendingListingsSection.tsx](components/moderation/PendingListingsSection.tsx), [app/api/messages/route.ts](app/api/messages/route.ts), [lib/content-moderation-rls.test.ts](lib/content-moderation-rls.test.ts) (PGlite) |
 | Vitrinim / durum | [components/showcase/ShowcaseView.tsx](components/showcase/ShowcaseView.tsx) (profil başlığı + 3 sütunlu dikey ızgara), [components/showcase/ShowcaseTile.tsx](components/showcase/ShowcaseTile.tsx), [components/showcase/ListingManageSheet.tsx](components/showcase/ListingManageSheet.tsx) (durum değiştirme), [lib/my-listings.ts](lib/my-listings.ts), [lib/showcase.ts](lib/showcase.ts), [lib/listing-status.ts](lib/listing-status.ts), [lib/listing-rls.test.ts](lib/listing-rls.test.ts) |
 | Profil | [components/profile/AvatarPicker.tsx](components/profile/AvatarPicker.tsx), [components/profile/EditNameSheet.tsx](components/profile/EditNameSheet.tsx), [lib/profile.ts](lib/profile.ts), [lib/use-my-profile.ts](lib/use-my-profile.ts) (paylaşılan profil deposu), [lib/avatar.ts](lib/avatar.ts), [lib/avatar-image.ts](lib/avatar-image.ts) (tarayıcıda kare kırpma ve WebP), [lib/avatar-server.ts](lib/avatar-server.ts), [app/api/profile/avatar/route.ts](app/api/profile/avatar/route.ts) |
 | Mesajlaşma | [app/messages/page.tsx](app/messages/page.tsx), [app/messages/[id]/page.tsx](app/messages/[id]/page.tsx), [components/messages/InboxView.tsx](components/messages/InboxView.tsx), [components/messages/ChatView.tsx](components/messages/ChatView.tsx) (Realtime, klavye), [components/messages/ChatParts.tsx](components/messages/ChatParts.tsx), [components/messages/ReportUserSheet.tsx](components/messages/ReportUserSheet.tsx), [components/vehicle/MessageSellerButton.tsx](components/vehicle/MessageSellerButton.tsx), [components/social/MessageUserButton.tsx](components/social/MessageUserButton.tsx) (profilden doğrudan mesaj), [lib/messages.ts](lib/messages.ts) (`startConversation`, `startDirectConversation`), [lib/use-unread-count.ts](lib/use-unread-count.ts), [lib/messaging-rls.test.ts](lib/messaging-rls.test.ts) (PGlite) |
@@ -62,7 +64,7 @@ _Son güncelleme: 27 Eylül 2026_
 | Site / yasal | [lib/site-url.ts](lib/site-url.ts), [lib/legal.ts](lib/legal.ts) (`NEXT_PUBLIC_SUPPORT_EMAIL`, yoksa `destek@gozuyle.com`), [app/privacy](app/privacy/page.tsx), [app/terms](app/terms/page.tsx) |
 | Marka | [lib/brand-mark.ts](lib/brand-mark.ts) (göz hattı + oynat üçgeni, tek kaynak), [components/brand/EyePlayMark.tsx](components/brand/EyePlayMark.tsx), [components/Logo.tsx](components/Logo.tsx); duraklatma simgesi [components/VideoCard.tsx](components/VideoCard.tsx) |
 | PWA / TWA | [public/manifest.json](public/manifest.json) (`gözüyle`, `#121212`), [scripts/generate-icons.mjs](scripts/generate-icons.mjs) (ikonları ve `app/favicon.ico`'yu `lib/brand-mark.ts`'ten üretir: `node scripts/generate-icons.mjs`), [public/.well-known/assetlinks.json](public/.well-known/assetlinks.json) (Android paketi `com.gozuyle.twa`) |
-| Veritabanı | [supabase/migrations/](supabase/migrations/): 17 migration, sonuncusu `20260927200000_direct_dm_requires_username.sql`; hepsi uzak veritabanında uygulanmış (son dördü 27 Eylül 2026'da `db push --linked` ile, kod push'undan önce) |
+| Veritabanı | [supabase/migrations/](supabase/migrations/): 19 migration, sonuncusu `20260928100100_content_moderation.sql`; hepsi uzak veritabanında uygulanmış (son ikisi 27 Eylül 2026'da `db push --linked` ile, kod push'undan hemen önce) |
 | Storage | [lib/listing.ts](lib/listing.ts) (`PHOTO_MIME_TYPES`, `MAX_PHOTO_BYTES`, `MAX_PHOTOS`, `photoRejection`), [lib/storage-rls.test.ts](lib/storage-rls.test.ts) (bucket sınırları ve `fn_can_upload_vehicle_photo`, PGlite) |
 | Ortam değişkenleri | [.env.example](.env.example); yerelde `.env.local` ve `.env.vercel` (ikisi de git dışında) |
 
@@ -239,12 +241,71 @@ _Son güncelleme: 27 Eylül 2026_
   - **Ayarlar → Önbelleği temizle:** Cache Storage, service worker kayıtları, sessionStorage ve bellek içi önbellekler (katalog, takip ve satıcı profilleri) siliniyor, sayfa yeniden yükleniyor. Oturum ve favoriler (localStorage) korunuyor. Satırda tarayıcının depolama tahmini gösteriliyor (0 ise gizli). Üretim derlemesinde denendi: Cache Storage ve sessionStorage boşaldı, favoriler kaldı, sayfa yeniden yüklendi.
   - **Testler (+9):** marka işareti (tek renk, gradyan ve filtre yok), ad kuralları, sohbet başlığı (`@ad` başlık, tekrar yok, rol yedeği), önbellek temizleme, PGlite'ta kullanıcı adı şartı (`DIRECT_USERNAME_REQUIRED` veritabanı mesajıyla birebir aynı).
 
+- **Otomatik içerik denetimi: karantina, görsel/metin filtresi ve inceleme kuyruğu (`2938b50`, migration'lar `20260928100000_vehicle_status_pending_moderation.sql` + `20260928100100_content_moderation.sql`, 27 Eylül 2026):**
+  - **Neden:** testlerde cinsel içerikli ve şiddet içeren video/görseller yüklenebildi. Bu, Google Play / App Store kullanıcı içeriği (UGC) politikası için sıfır toleranslı bir risk. Kod dondurması bunun için kaldırıldı.
+  - **Karantina:** Cloudflare videoyu işleyince ilan artık doğrudan `active` olmuyor, önce `pending_moderation`'a geçiyor ([lib/video-activation.ts](lib/video-activation.ts)). Bu durumdaki ilan akışta, aramada, herkese açık profilde ve ilan sayfasında görünmüyor (hepsi `status = 'active'` arıyor, RLS de öyle).
+  - **Denetim hattı** ([lib/listing-moderation.ts](lib/listing-moderation.ts)): webhook yanıtı gönderildikten sonra `after()` ile çalışıyor (`maxDuration = 60`). Denetlenenler:
+    - açıklama ve şehir: temel filtre, ardından varsa OpenAI;
+    - video kareleri: kapak + videonun 5 eşit parçasının ortası, Cloudflare `thumbnail.jpg?time=Ns&height=480`;
+    - fotoğraflar.
+    - Aynı anda en fazla 4 istek. Bir görsel reddedilince yenisi başlatılmıyor; sağlayıcı hatası bir kez yeniden deneniyor.
+  - **Kararlar:**
+    - **Ret** (cinsel içerik / çıplaklık ya da şiddet / kan / silah **> %60**): ilan ve denetim `rejected` oluyor. Cloudflare videoları, `vehicle-photos/<ilan>/` klasöründeki bütün dosyalar ve video/fotoğraf kayıtları siliniyor. Vitrinim'de "Yüklenen içerik topluluk kurallarına uymadığı için yayınlanmadı" uyarısı çıkıyor (üstte kırmızı şerit, karede "Yayınlanmadı", yönetim menüsünde açıklama).
+    - **İnceleme** (%40–60, "müstehcen" > %60, ya da sağlayıcı yok / hata verdi): ilan beklemede kalıyor. `moderation_reason = 'review:…'` yazılıyor; ilan /admin/reports → "İçerik denetimi"nde bir insanın kararını bekliyor. Kapalı başarısızlık: denetlenmemiş içerik yayına girmez.
+    - **Temiz:** ilan onaylanıp aynı güncellemede yayına alınıyor.
+    - Reşit olmayanlarla ilgili cinsel içerikte (OpenAI) ret eşiği %20.
+  - **Sağlayıcılar** ([lib/moderation-providers.ts](lib/moderation-providers.ts)), ortam değişkeniyle seçiliyor (bkz. `.env.example`): `MODERATION_IMAGE_PROVIDER` = `sightengine` | `rekognition` | `openai` | `none`; boşsa anahtarı tanımlı ilk sağlayıcı kullanılıyor.
+    - **Sightengine:** `nudity-2.1`, `weapon`, `violence`, `gore-2.0` modelleri; adres modu (GET) ve bayt modu (multipart).
+    - **AWS Rekognition:** `DetectModerationLabels`, SDK'sız SigV4 ([lib/aws-sigv4.ts](lib/aws-sigv4.ts); AWS dokümanındaki örnek imzayı birebir üretiyor). Değişkenler `REKOGNITION_*`, çünkü `AWS_*` Vercel'de ayrılmış. Görsel en fazla 5 MB. "Crashes" (kaza) etiketi sayılmıyor: hasarlı araç ilanı bu platformun olağan içeriği.
+    - **OpenAI Moderation** (`omni-moderation-latest`, ücretsiz): metin ve görsel; silah kategorisi yok.
+    - İstenen modellerden biri yanıtta yoksa ya da yanıt başarısızsa hata sayılıyor; eksik yanıt "temiz" sayılmıyor.
+  - **Avatar:** `/api/profile/avatar` fotoğrafı kaydetmeden önce denetliyor. Yalnızca temiz fotoğraf kabul ediliyor; ret ve şüphe 422, denetlenemezse 503 (inceleme kuyruğu yok).
+  - **Metin filtresi** ([lib/text-moderation.ts](lib/text-moderation.ts)): küfür, taciz/tehdit, nefret söylemi ve yasa dışı teklif (uyuşturucu, silah satışı, sahte plaka/belge, yasa dışı bahis) için 90 terimlik liste.
+    - Sadeleştirme: Türkçe harfler, leetspeak (`s1kt1r`), ayrı yazılmış harfler (`a.m.k`, `s i k t i r`) ve tekrar eden harfler (`siiiktir`) yakalanıyor.
+    - Kısa kökler yalnızca tam sözcük olarak aranıyor; böylece "sık sık", "sıkıntısız", "canımı sıktı", "Golf Mk 7", "Ford Escort", "esrarengiz", "öldürecek fiyat" takılmıyor.
+    - Olumsuzlamaya açık ifadeler ("çalıntı değildir", "change değil") bilerek listede yok; onları OpenAI yakalar.
+    - **SQL aynası** (`fn_moderation_normalize`, `fn_moderation_terms`, `fn_moderation_text_category`) tetikleyicilerle uygulanıyor:
+      - `messages` (`trg_messages_text_filter`);
+      - ilan açıklaması, şehir ve renk (`trg_vehicles_guard_content`);
+      - kullanıcının yazdığı marka/model adları (`trg_brands_name_filter`, `trg_models_name_filter`).
+    - TS ve SQL'in 600 rastgele metinde aynı sonucu verdiği PGlite'ta sınanıyor. **Listeyi değiştiren migration'daki listeyi de değiştirmeli.**
+    - `/sell` açıklama, şehir ve yazılan marka/model adında hatayı anında gösteriyor.
+  - **DM:** mesajlar artık `/api/messages` üzerinden gidiyor: temel filtre, ardından varsa OpenAI (taciz, tehdit, nefret, cinsel içerik).
+    - OpenAI'ye ulaşılamazsa mesaj geçiyor; taban kural veritabanında da var.
+    - Mesaj kullanıcının kendi oturumuyla yazılıyor (`getSupabaseForUser`), yani RLS, engel, 30 mesaj/dk sınırı ve Realtime aynen geçerli.
+    - Sohbette filtreye takılan mesaj balon olarak eklenmiyor, metin kutuda kalıyor.
+    - Reddedilen mesajın metni saklanmıyor; yalnızca karar kaydediliyor.
+  - **Satıcının atlatma yolları kapatıldı:**
+    - denetim alanlarına yazamıyor (42501);
+    - arşivden "Yayına al" ile denetimsiz yayınlayamıyor (yayın şartı);
+    - denetime girmiş ilanın açıklamasını değiştiremiyor;
+    - yeni fotoğraf ekleyemiyor ya da adresini değiştiremiyor (`vehicle_images` politikaları `draft` / `pending_video` şartı);
+    - yeni video yükleyemiyor (`/api/upload/video` yalnızca `draft` / `pending_video`).
+    - Onaydan sonra bir video yine de hazır olursa karar sıfırlanıyor ve ilan yeniden denetime giriyor.
+  - **Yönetim paneli:** /admin/reports'un başlığı "Moderasyon" oldu; en üstte "İçerik denetimi" kuyruğu var ([components/moderation/PendingListingsSection.tsx](components/moderation/PendingListingsSection.tsx), [app/api/admin/listings/route.ts](app/api/admin/listings/route.ts)).
+    - Her kartta nedenler, açıklama, video kareleri ve fotoğraflar var. Görseller varsayılan olarak bulanık; "Görselleri göster" açıyor.
+    - Aksiyonlar: **Onayla ve yayınla**, **Reddet ve sil** (onaylı), **Tekrar denetle** (ör. sağlayıcı anahtarı sonradan eklendiyse). Elle kararlar yöneticiyle birlikte `content_moderation_events`'e yazılıyor.
+  - **Geriye dönük uyum:** mevcut ilanlar (yayında, arşivde, satılmış, kaldırılmış) `approved` sayıldı. Migration önce uzak veritabanında geri alınan bir transaction'da denendi.
+  - **Testler (+240):** yeni dosyalar:
+    - [lib/content-moderation-rls.test.ts](lib/content-moderation-rls.test.ts): 43 test, PGlite, gerçek migration'lar; kontrol çalıştırmalı gevşek politika dahil;
+    - `lib/text-moderation.test.ts`, `lib/content-moderation.test.ts`, `lib/moderation-providers.test.ts` (sağlayıcı yanıt biçimleri ve istekler);
+    - `lib/aws-sigv4.test.ts`, `lib/content-moderation-server.test.ts`;
+    - `lib/listing-moderation.test.ts` (safe / flagged / rejected, temizlik, elle karar, Supabase deposu sorguları);
+    - `lib/messages-route.test.ts`.
+    - Ayrıca güncellenenler: `video-activation`, `listing`, `listing-status`, `moderation`, `showcase` ve bileşen testleri.
+  - **Görsel doğrulama:** Vitrinim kareleri ("İnceleniyor", "Yayınlanmadı", uyarı şeridi), yönetim menüsü uyarıları ve panel kuyruğu (bulanık görseller, ret onayı, kartın kalkması) üretim derlemesinde geçici önizleme sayfasında 375 px'te kontrol edildi (commit'lenmedi). Konsol temiz.
+
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`a70d80e`** ("feat(core-refine): clean UI aesthetic, custom eye-play pause icon, profile dm, and critical bugfixes"); ondan önce `e09a119`, `ec770f6` ve `6a9767a`. Production deploy'u `elan-41lzfqr7q`, `gozuyle.com`'a bağlı. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
+- Son kod commit'i **`2938b50`** ("feat(moderation): automated content moderation with quarantine, vision/text providers and admin review"); ondan önce `a70d80e`. Production deploy'u `elan-hur1fzyh5`, `gozuyle.com`'a bağlı. Bu dosya ondan sonra ayrı bir dokümantasyon commit'iyle güncellendi; güncel `HEAD` için `git log -1` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
-- Veritabanı kodla uyumlu: 17 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir).
-- **Canlı doğrulama (27 Eylül 2026, `elan-41lzfqr7q`):**
+- Veritabanı kodla uyumlu: 19 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir). **Sıra önemli:** içerik denetimi migration'ı koddan önce uygulanmalıydı (yeni kod `moderation_status` sütununu okuyor); uygulandı, hemen ardından push edildi. Geçiş anında video bekleyen ilan yoktu.
+- **Canlı doğrulama (27 Eylül 2026, `elan-hur1fzyh5`):**
+  - `/`, `/my-listings`, `/admin/reports`, `/@nihad`, `/search`, `/sell` → 200. Oturumsuz `/api/admin/listings` (GET/POST), `/api/messages`, `/api/profile/avatar` → 401; webhook yanlış imzada 401.
+  - Uzak veritabanı: 3 mevcut ilan `approved`, enum'da `pending_moderation`, dört yeni tetikleyici, `vehicle_images` yazma politikalarında durum şartı. `content_moderation_events`'te RLS açık; anon/authenticated erişemiyor.
+  - Canlı PostgREST'te yeni sorgular birebir çalıştırıldı: misafir vitrin sorgusu (`moderation_status` dahil) 200, misafir `pending_moderation` ilan göremiyor, yönetim kuyruğu sorgusu (`or(... not.is.null)`) ve denetim deposunun okuma sorgusu hatasız.
+  - `/@nihad` tarayıcıda ızgarasıyla çiziliyor, konsol temiz.
+- **Önceki canlı doğrulama (`elan-41lzfqr7q`):**
   - `/`, `/settings`, `/search`, `/@nihad`, `/manifest.json`, `/icons/icon-512.png` → 200. Canlıdaki ikon repodakiyle bayt bayt aynı; manifest `theme_color` `#121212`.
   - Ana sayfada yeni logo var (göz hattı 4.5), alt menü mat `#121212`, video durdurulunca göz-oynat simgesi beliriyor, taşma yok. Ayarlar'da "Uygulama → Önbelleği temizle" var.
   - Konsolda yalnızca `ERR_NETWORK_IO_SUSPENDED` göründü: gizli tarayıcı panelinin askıya aldığı isteklerden (büyük olasılıkla video parçaları); sayfanın kendi istekleri 200.
@@ -262,7 +323,7 @@ _Son güncelleme: 27 Eylül 2026_
   - Config: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL=https://gozuyle.com`.
   - Sensitive: `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_STREAM_WEBHOOK_SECRET`.
   - Secret: `ADMIN_EMAILS` (moderasyon paneli, yalnızca sunucuda okunur; 26 Eylül 2026'da eklendi).
-  - Tanımlı değil: `NEXT_PUBLIC_SUPPORT_EMAIL`.
+  - Tanımlı değil: `NEXT_PUBLIC_SUPPORT_EMAIL`; içerik denetimi sağlayıcıları (`SIGHTENGINE_*`, `REKOGNITION_*`, `OPENAI_API_KEY`, `MODERATION_*`; bkz. 5. bölüm, madde 0).
   - `NEXT_PUBLIC_*` değerleri build sırasında pakete gömülür; değiştirince yeniden deploy gerekir.
 - **Supabase CLI** global kurulu değil. Kullanılan yol: `~/AppData/Local/npm-cache/_npx/aa8e5c70f9d8d161/node_modules/.bin/supabase` (`db query/push --linked`). Docker olmadığı için `db dump` çalışmıyor.
 
@@ -270,6 +331,21 @@ _Son güncelleme: 27 Eylül 2026_
 
 **Kullanıcı tarafında:**
 
+0. **ÖNCELİKLİ: içerik denetimi sağlayıcısı tanımlı değil (27 Eylül 2026).**
+   - Vercel'de henüz hiçbir sağlayıcı anahtarı yok. Bu yüzden şu an:
+     - her yeni ilan video işlendikten sonra yayına girmiyor, /admin/reports → "İçerik denetimi"nde elle onay bekliyor ("Otomatik denetim yapılamadı");
+     - profil fotoğrafı yüklemesi 503 ("Fotoğraf şu an denetlenemiyor") dönüyor.
+   - Bu bilinçli kapalı başarısızlık: denetlenmemiş içerik yayına girmez.
+   - **Yapılacak:** Vercel → Environment Variables (Production + Preview, Sensitive) içine ya `SIGHTENGINE_API_USER` + `SIGHTENGINE_API_SECRET` (önerilen: silah dahil 4 model) ya da `OPENAI_API_KEY` (ücretsiz, silah yok; metin denetimini de açar) ya da `REKOGNITION_*` eklenmeli, sonra yeniden deploy edilmeli.
+   - Anahtarlar eklenince bekleyen ilanlar panelde "Tekrar denetle" ile otomatik denetlenebilir.
+   - Maliyet: Sightengine'de her görsel 4 işlem; bir ilan (6 kare + en fazla 10 fotoğraf) 24–64 işlem.
+   - **Gizlilik:** anahtarlar eklenince ilan görselleri ve metinleri, `OPENAI_API_KEY` ile ayrıca **özel mesajlar** yurt dışındaki bir hizmet sağlayıcıya gönderilir. Gizlilik politikasında (KVKK aydınlatma, yurt dışına aktarım) bu işleyiciler belirtilmeli; hukuki inceleme maddesiyle birlikte ele alınmalı.
+   - **Uçtan uca deneme** (Claude giriş yapamadığı için denenmedi):
+     - temiz video ile ilan → birkaç dakikada yayında;
+     - panelde bekleyen ilanı onayla / reddet;
+     - reddedilen ilanın Vitrinim'de "Yayınlanmadı" uyarısı ve Cloudflare'de videonun silindiği;
+     - sohbette küfürlü mesajın gitmediği ve metnin kutuda kaldığı;
+     - avatar yükleme.
 1. ✅ **Supabase → URL Configuration: tamamlandı (26 Eylül 2026).** Kullanıcı panelden kontrol etti: Site URL `https://gozuyle.com`, Redirect URLs `https://gozuyle.com/**` (`/auth/callback`'i kapsar).
 2. **Uçtan uca testler** (Claude giriş yapamadığı için denenmedi): Google girişi, oturum açıkken avatar, hesap silme (DB + `vehicle-photos` + Cloudflare temizliği), moderasyon paneli, fotoğraflı ve videolu gerçek bir ilan (yeni üç adımlı akış). Kontrol edilecekler:
    - JPEG, PNG ve WebP yüklenmeli; GIF ya da 10 MB üstü dosyada Türkçe hata çıkmalı.
@@ -313,6 +389,13 @@ _Son güncelleme: 27 Eylül 2026_
 
 **Teknik ve ürün:**
 
+- **İçerik denetiminin bilinen sınırları:**
+  - **Video örnekleme:** videonun 6 karesine bakılıyor (kapak + 5 ara kare). Kareler arasına sıkıştırılmış kısa bir sahne kaçabilir. Sıklaştırmak `VIDEO_SAMPLE_FRAMES`'le mümkün; sağlayıcı maliyeti artar.
+  - **Doğrudan yazım:** `messages_insert_participant` kullanıcının tabloya doğrudan yazmasına hâlâ izin veriyor. Uygulamayı atlayıp API'ye doğrudan yazan biri OpenAI denetimini atlar ama veritabanındaki kelime filtresine takılır. Tamamen kapatmak için INSERT yetkisi alınıp mesaj yalnızca sunucudan yazılmalı (hız sınırı ve engel kuralları taşınmalı).
+  - **Yarım kalan denetim:** `after()` yarıda kalırsa ilan `pending_moderation`'da kalır ve panelde "Otomatik denetim sürüyor ya da yarıda kaldı" olarak görünür. Otomatik yeniden deneme (cron) yok; Hobby planda cron günde bir.
+  - **Rekognition:** 5 MB'tan büyük fotoğrafı denetleyemez; ilan incelemeye düşer.
+  - **Yasal:** reddedilen medya hemen siliniyor. Reşit olmayanlarla ilgili içerikte yasal saklama ve bildirim yükümlülükleri olabilir; hukuki görüş alınmalı.
+  - **Denetlenmeyen metinler:** görünen ad ve kullanıcı adı filtreden geçmiyor (yalnızca rezerve liste var). Onaylanmış ilanın şehir ve rengi değiştirilebiliyor ama kelime filtresine takılıyor.
 - ✅ `/api/reports` için kalıcı istek sınırı: tamamlandı (26 Eylül 2026). Veritabanı sayacı ve kullanıcı bazlı kurallar kuruldu; ayrıntılar 3. bölümde. Hobby planda Vercel Firewall kuralı eklenemiyor.
   - Kalan küçük not: anonim istekler hâlâ IP'ye göre sayılıyor. CGNAT arkasındaki çok sayıda anonim bildiren aynı IP'nin dakikada 5 hakkını paylaşır. Trafik artarsa anonim sınır gözden geçirilmeli.
   - Gizlilik politikasına "kötüye kullanımı önlemek için IP adresinin anahtarlı özeti en fazla 24 saat saklanır" benzeri bir cümle eklenmesi düşünülebilir (hukuki inceleme maddesiyle birlikte).
