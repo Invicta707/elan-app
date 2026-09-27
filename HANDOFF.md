@@ -303,7 +303,10 @@ _Son güncelleme: 27 Eylül 2026_
       - Metin: "s1kt1r git" → küfür, "seni öldürürüm" → tehdit, "Satılık tabanca var" → yasa dışı, üçü de **rejected**; "Araç hâlâ satılık mı? Sıkıntısız mı?" → **safe**.
       - Müstehcen örnekle bilerek denenmedi; o yol, Sightengine'in belgelenmiş yanıt biçimiyle birim testlerinde.
     - **Yöntem:** `vercel env pull --environment=development` proje dışına (scratchpad) çekildi, geçici `lib/zz-*.test.ts` ile çalıştırıldı; ikisi de silindi, hiçbir değer yazdırılmadı.
-    - Kontrol sırasında `content_moderation_events` boştu (deploy'dan sonra yükleme yoktu). Canlı sunucunun kendi çağrısı, ilk gerçek yüklemede bu tabloda `provider = 'sightengine'` / `'local+sightengine'` satırıyla görünür.
+    - **Uçtan uca canlı doğrulama (avatar, 27 Eylül 2026 19:50 TSİ, deploy `elan-dr3462ykz`):** kullanıcı (@kamil_jafarov) profil fotoğrafını değiştirdi. Canlı sunucunun kendisi Sightengine'i çağırdı; zincirin tamamı çalışıyor: tarayıcı → `/api/profile/avatar` → Sightengine → karar → kayıt → Storage.
+      - `content_moderation_events`'e ilk satır yazıldı: `subject_type = 'avatar'`, `provider = 'sightengine'`, `decision = 'safe'`, otomatik karar (`moderator_id` boş). Puanlar: cinsel içerik, müstehcen görünüm, şiddet, kan, silah; hepsi 0,001.
+      - Sıra doğru: kayıt 16:50:22.19Z'de, profil güncellemesi 0,4 sn sonra (16:50:22.59Z). Yani fotoğraf kaydedilmeden önce denetlendi.
+      - Yeni avatar Storage'da (`avatars/<kullanıcı>/…webp`, 38 KB, `image/webp`), adresi 200 dönüyor. Klasörde yalnızca bu dosya var, eski avatar silinmiş.
 
 ## 4. Git ve dağıtım durumu
 
@@ -314,6 +317,7 @@ _Son güncelleme: 27 Eylül 2026_
   - `npx vercel inspect gozuyle.com` → `elan-3ajm0ibrc`. `vercel env ls`: `SIGHTENGINE_API_USER` ve `SIGHTENGINE_API_SECRET` Production, Preview ve Development'ta tanımlı.
   - `/`, `/my-listings`, `/admin/reports`, `/@nihad`, `/sell` → 200. Oturumsuz `/api/admin/listings`, `/api/messages`, `/api/profile/avatar` → 401.
   - Sağlayıcı testleri geçti; ayrıntılar 3. bölümde ("Sağlayıcı canlıda").
+  - Docs push'uyla gelen `elan-dr3462ykz` (aynı kod ve ortam değişkenleri) üzerinde gerçek avatar yüklemesi Sightengine'den `safe` aldı ve kaydedildi (3. bölüm).
   - Veritabanı: denetimi bekleyen ilan yok, 3 ilan `approved`.
 - **Canlı doğrulama (27 Eylül 2026, `elan-hur1fzyh5`, sağlayıcı anahtarı yokken):**
   - `/`, `/my-listings`, `/admin/reports`, `/@nihad`, `/search`, `/sell` → 200. Oturumsuz `/api/admin/listings` (GET/POST), `/api/messages`, `/api/profile/avatar` → 401; webhook yanlış imzada 401.
@@ -353,7 +357,7 @@ _Son güncelleme: 27 Eylül 2026_
      - **Gizlilik:** ilan görselleri ve profil fotoğrafları artık Sightengine'e (Fransa) gönderiliyor. Gizlilik politikasında (KVKK aydınlatma, yurt dışına aktarım) bu işleyici belirtilmeli; `OPENAI_API_KEY` eklenirse ilan metinleri ve **özel mesajlar** OpenAI'ye (ABD) de gider. Hukuki inceleme maddesiyle birlikte ele alınmalı.
      - **İsteğe bağlı:** `OPENAI_API_KEY` eklenirse metin denetimi anlama göre de yapılır (taciz, tehdit, nefret); şu an yalnızca kelime filtresi var.
      - **Uçtan uca deneme** (Claude giriş yapamadığı için denenmedi):
-       - avatar değiştir: kaydedilmeli; bu, canlı sunucunun ilk denetim kaydını (`content_moderation_events`) oluşturur;
+       - ✅ avatar değiştirme: 27 Eylül 2026'da denendi; Sightengine `safe`, kaydedildi (3. bölüm);
        - temiz video ile ilan: "Video işleniyor" → kısa süre "İnceleniyor" → birkaç dakikada "Yayında";
        - /admin/reports: başlık "Moderasyon", "İçerik denetimi" bölümü boş;
        - iki hesapla sohbet: küfürlü mesaj gitmemeli ve metin kutuda kalmalı, normal mesaj anında gitmeli;
