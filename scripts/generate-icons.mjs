@@ -3,26 +3,29 @@
 //   → public/icons/*.png, app/favicon.ico
 //
 // sharp, Next.js'in görsel optimizasyonu için zaten kurulu (node_modules/sharp).
-// Tasarım: gözüyle logosu (components/Logo.tsx) — #0A0A0A zemin üzerinde beyaz
-// göz ve oynat simgesi. İçerik merkezdeki %80'lik daireye sığar: Android'in
-// maskable ikon kırpmasında hiçbir parçası kesilmez.
+// Tasarım: gözüyle işareti (lib/brand-mark.ts; üst çubuktaki logo ve video
+// duraklatma simgesiyle aynı çizim): mat #121212 zemin üzerinde beyaz ince göz
+// hattı ve oynat üçgeni. İçerik merkezdeki %80'lik daireye sığar: Android'in
+// maskable ikon kırpmasında hiçbir parçası kesilmez. Node 22.6+ TypeScript'i
+// tip silmeyle çalıştırır; brand-mark.ts yalnızca sabit içerir.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import sharp from "sharp";
+import { EYE_PATH, EYE_STROKE, PLAY_POINTS, PLAY_ROUNDING } from "../lib/brand-mark.ts";
 
 const OUT = "public/icons";
-const BACKGROUND = "#0A0A0A";
+const BACKGROUND = "#121212";
 
 /**
  * cornerRadius: 0 = tam kare (maskable/Apple, köşeyi platform keser)
  * scale: logonun 100 birimlik çizimini 512'lik tuvale büyütme oranı
  */
-function iconSvg({ cornerRadius, scale }) {
+function iconSvg({ cornerRadius, scale, stroke }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="${cornerRadius}" fill="${BACKGROUND}"/>
   <g transform="translate(256 256) scale(${scale}) translate(-50 -50)" fill="none">
-    <path d="M 12 50 C 26 28, 74 28, 88 50 C 74 72, 26 72, 12 50 Z" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
-    <polygon points="45,39 65,50 45,61" fill="#FFFFFF"/>
+    <path d="${EYE_PATH}" stroke="#FFFFFF" stroke-width="${stroke}" stroke-linejoin="round"/>
+    <polygon points="${PLAY_POINTS}" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="${PLAY_ROUNDING}" stroke-linejoin="round"/>
   </g>
 </svg>`;
 }
@@ -31,10 +34,11 @@ function render(svg, size) {
   return sharp(Buffer.from(svg), { density: 300 }).resize(size, size).png({ compressionLevel: 9 }).toBuffer();
 }
 
-const APP_ICON = { cornerRadius: 112, scale: 4 };
-const FULL_BLEED = { cornerRadius: 0, scale: 4 };
-// Sekme ikonu 16 piksele kadar küçülür: simge alanı daha çok doldurur
-const FAVICON = { cornerRadius: 96, scale: 5 };
+const APP_ICON = { cornerRadius: 112, scale: 3.9, stroke: EYE_STROKE };
+const FULL_BLEED = { cornerRadius: 0, scale: 3.9, stroke: EYE_STROKE };
+// Sekme ikonu 16 piksele kadar küçülür: simge alanı daha çok doldurur, çizgi
+// bu boyutta kaybolmasın diye biraz kalın
+const FAVICON = { cornerRadius: 96, scale: 4.9, stroke: EYE_STROKE * 1.5 };
 
 const ICONS = [
   // purpose "any": tarayıcıda yükleme, sekme vb. (köşeleri yuvarlak)

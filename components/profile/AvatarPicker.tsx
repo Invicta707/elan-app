@@ -86,12 +86,12 @@ export default function AvatarPicker({
         aria-label={avatarUrl ? "Profil fotoğrafını değiştir" : "Profil fotoğrafı ekle"}
         className="group relative rounded-full transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#003399]/30"
       >
-        <span className="block rounded-full bg-gradient-to-tr from-[#003399] via-[#3A6BFF] to-[#8BB2FF] p-[3px]">
+        <span className="block rounded-full bg-[#E4E4E7] p-px">
           <span className="block rounded-full bg-white p-[3px]">
             <Avatar url={avatarUrl} name={name} size={size} />
           </span>
         </span>
-        <span className="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-[3px] border-white bg-[#003399] text-white shadow-md">
+        <span className="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-[3px] border-white bg-[#18181B] text-white">
           {busy ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" /> : <Camera aria-hidden="true" className="h-4 w-4" />}
         </span>
       </button>

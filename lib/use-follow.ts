@@ -47,6 +47,11 @@ function writeFollow(targetId: string, entry: FollowEntry) {
   commit({ follows: new Map(store.follows).set(targetId, entry) });
 }
 
+/** Önbelleği temizle: takip durumu ve satıcı profilleri sunucudan yeniden okunur */
+export function resetFollowStore() {
+  commit({ follows: new Map(), sellers: new Map(), version: store.version + 1 });
+}
+
 /** Deponun o anki takip kaydı (testler ve hata ayıklama için) */
 export function getFollowEntry(viewerId: string | null, targetId: string): Readonly<FollowEntry> | undefined {
   return store.viewerId === viewerId ? store.follows.get(targetId) : undefined;

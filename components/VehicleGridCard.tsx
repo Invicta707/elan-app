@@ -75,7 +75,7 @@ export default function VehicleGridCard({
 
 function VideoBadge() {
   return (
-    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#E5484D] py-0.5 pl-1.5 pr-2 text-[12px] font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_14px_rgba(229,72,77,0.95)]">
+    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 py-0.5 pl-1.5 pr-2 text-[12px] font-semibold text-white ring-1 ring-inset ring-white/15 backdrop-blur-[6px]">
       <PlayIcon className="h-3 w-3" />
       Video
     </span>

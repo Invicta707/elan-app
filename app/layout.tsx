@@ -37,7 +37,7 @@ export const metadata: Metadata = {
 
 // Tarayıcı çubuğu / uygulama başlığı rengi: manifest'teki theme_color ile aynı
 export const viewport: Viewport = {
-  themeColor: "#0A0A0A",
+  themeColor: "#121212",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

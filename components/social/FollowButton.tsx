@@ -124,7 +124,7 @@ export function FollowButtonView({
   const size = variant === "profile" ? "h-12 min-w-0 px-4 text-[15px]" : "h-9 px-4 text-[14px]";
   const tone = following
     ? "bg-[#E9ECEF] text-[#15181C] hover:bg-[#DDE1E6]"
-    : "bg-[#003399] text-white shadow-[0_2px_8px_rgba(0,51,153,0.28)] hover:bg-[#002B80]";
+    : "bg-[#003399] text-white hover:bg-[#002B80]";
 
   return (
     <button

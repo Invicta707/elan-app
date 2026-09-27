@@ -226,7 +226,7 @@ export default function ChatView({ conversationId }: { conversationId: string })
           <>
             {messages.length === 0 && (
               <p className="mx-auto mt-10 max-w-xs text-center text-[14px] text-[#5B616B]">
-                {partnerName(load.detail.partner)} ile {load.detail.kind === "direct" ? "" : "bu ilan hakkında "}ilk mesajı
+                {partnerName(load.detail.partner, load.detail.kind === "direct" ? undefined : load.detail.role)} ile {load.detail.kind === "direct" ? "" : "bu ilan hakkında "}ilk mesajı
                 sen gönder. Kişisel bilgilerini ve ödeme bilgilerini paylaşmamaya dikkat et.
               </p>
             )}
@@ -281,7 +281,7 @@ export default function ChatView({ conversationId }: { conversationId: string })
 
       {load.status === "ready" && menu === "menu" && (
         <BottomSheet
-          title={partnerName(load.detail.partner)}
+          title={partnerName(load.detail.partner, load.detail.role)}
           onClose={() => setMenu(null)}
           actions={[
             ...(load.detail.listing
@@ -305,7 +305,7 @@ export default function ChatView({ conversationId }: { conversationId: string })
         />
       )}
       {load.status === "ready" && menu === "block" && (
-        <BottomSheet title={`${partnerName(load.detail.partner)} engellensin mi?`} onClose={() => setMenu(null)}>
+        <BottomSheet title={`${partnerName(load.detail.partner, load.detail.role)} engellensin mi?`} onClose={() => setMenu(null)}>
           <div className="px-5 pb-2">
             <p className="text-center text-[15px] text-[#15181C]">
               Birbirinize mesaj gönderemezsiniz; bu kişi yeni bir sohbet de başlatamaz. Engeli istediğin zaman kaldırabilirsin.

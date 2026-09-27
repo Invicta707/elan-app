@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useSupabaseSession } from "../../lib/auth";
 import type { SellerProfile } from "../../lib/follows";
-import { DEFAULT_MEMBER_NAME } from "../../lib/messages";
+import { partnerName } from "../../lib/messages";
 import { primeSellerProfiles } from "../../lib/use-follow";
 import { profilePath } from "../../lib/username";
 import Avatar from "../ui/Avatar";
@@ -21,7 +21,8 @@ export default function SellerCard({ seller }: { seller: SellerProfile }) {
     if (viewerId) void primeSellerProfiles([seller.id]);
   }, [viewerId, seller.id]);
 
-  const name = seller.displayName ?? (seller.username ? `@${seller.username}` : DEFAULT_MEMBER_NAME);
+  // Görünen ad, yoksa @kullanıcı_adı, ikisi de yoksa "Satıcı"
+  const name = partnerName(seller, "buyer");
   const identity = (
     <>
       <Avatar url={seller.avatarUrl} name={seller.displayName ?? seller.username} size={48} />

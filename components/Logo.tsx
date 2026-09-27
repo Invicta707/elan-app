@@ -1,6 +1,8 @@
-// gözüyle logosu: göz + oynat simgesi ve yazı. Renk dışarıdan gelir
-// (currentColor): video akışında beyaz, açık zeminli sayfalarda başlığın metin
-// rengi. className'de renk verilmezse varsayılan beyaz.
+import EyePlayMark from "./brand/EyePlayMark";
+
+// gözüyle logosu: ince göz hattı + oynat üçgeni (components/brand/EyePlayMark)
+// ve yazı. Renk dışarıdan gelir (currentColor): video akışında beyaz, açık
+// zeminli sayfalarda başlığın metin rengi. className'de renk verilmezse beyaz.
 export default function Logo({
   className = "h-7 text-white",
   showText = true,
@@ -13,23 +15,9 @@ export default function Logo({
   showText?: boolean;
 }) {
   return (
-    <div className={`flex items-center gap-2.5 font-bold tracking-tight select-none ${className}`}>
-      <svg
-        viewBox="0 0 100 100"
-        className={`${iconClassName} flex-shrink-0`}
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <path
-          d="M 12 50 C 26 28, 74 28, 88 50 C 74 72, 26 72, 12 50 Z"
-          stroke="currentColor"
-          strokeWidth="8"
-          strokeLinejoin="round"
-        />
-        <polygon points="45,39 65,50 45,61" fill="currentColor" />
-      </svg>
-      {showText && <span className="text-xl font-bold tracking-tight lowercase">gözüyle</span>}
+    <div className={`flex items-center gap-2 select-none ${className}`}>
+      <EyePlayMark className={iconClassName} />
+      {showText && <span className="text-[19px] font-semibold tracking-[-0.01em] lowercase">gözüyle</span>}
     </div>
   );
 }

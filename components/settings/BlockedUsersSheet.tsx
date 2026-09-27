@@ -2,7 +2,7 @@
 
 import { Ban } from "lucide-react";
 import { useState } from "react";
-import { DEFAULT_MEMBER_NAME, unblockUser } from "../../lib/messages";
+import { partnerHandle, partnerName, unblockUser } from "../../lib/messages";
 import type { BlockedUser } from "../../lib/settings";
 import Avatar from "../ui/Avatar";
 import BottomSheet from "../ui/BottomSheet";
@@ -75,15 +75,14 @@ export default function BlockedUsersSheet({
         ) : (
           <ul aria-label="Engellenen kullanıcılar">
             {users.map((user) => {
-              const name = user.displayName ?? (user.username ? `@${user.username}` : DEFAULT_MEMBER_NAME);
+              const name = partnerName(user);
+              const handle = partnerHandle(user);
               return (
                 <li key={user.id} className="flex items-center gap-3 rounded-2xl px-3 py-2.5">
                   <Avatar url={user.avatarUrl} name={user.displayName ?? user.username} size={44} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15.5px] font-semibold">{name}</span>
-                    {user.displayName && user.username && (
-                      <span className="block truncate text-[13px] text-[#5B616B]">@{user.username}</span>
-                    )}
+                    {handle && <span className="block truncate text-[13px] text-[#71717A]">{handle}</span>}
                   </span>
                   <button
                     type="button"

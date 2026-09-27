@@ -30,6 +30,8 @@ vi.mock("./supabase", () => ({ supabase: {} }));
 // next/font yalnızca Next derlemesinde çalışır (pencere ve düğmeler app/fonts'u içe aktarır)
 vi.mock("../app/fonts", () => ({ displayFont: { variable: "" }, bodyFont: { variable: "" } }));
 
+import EyePlayMark from "../components/brand/EyePlayMark";
+import Logo from "../components/Logo";
 import { ChatHeader, Composer, MessageBubble } from "../components/messages/ChatParts";
 import UsernameField, { describeUsernameCheck } from "../components/profile/UsernameField";
 import { canPromptOn } from "../components/profile/UsernameOnboarding";
@@ -43,6 +45,7 @@ import Switch from "../components/ui/Switch";
 import ShowcaseTile from "../components/showcase/ShowcaseTile";
 import UnreadBadge from "../components/ui/UnreadBadge";
 import type { MyListing } from "./my-listings";
+import { EYE_PATH, PLAY_POINTS } from "./brand-mark";
 import type { ChatMessage, ConversationDetail } from "./messages";
 import { USERNAME_CHECK_DELAY_MS, useUsernameCheck } from "./use-username-check";
 
@@ -374,12 +377,13 @@ describe("BlockedUsersSheet", () => {
     { id: "u2", username: null, displayName: null, avatarUrl: null, blockedAt: "2026-09-26T10:00:00Z" },
   ];
 
-  it("engellenenleri adla listeler; adı olmayan 'gözüyle üyesi' görünür", () => {
+  it("engellenenleri adla listeler; adı ve kullanıcı adı olmayan için jenerik sistem adı yok", () => {
     render(<BlockedUsersSheet myId="me" users={blocked} onUnblocked={vi.fn()} onClose={vi.fn()} />);
     const list = screen.getByRole("list", { name: "Engellenen kullanıcılar" });
     expect(list.textContent).toContain("Kamil");
     expect(list.textContent).toContain("@kamil");
-    expect(list.textContent).toContain("gözüyle üyesi");
+    expect(list.textContent).toContain("Kullanıcı");
+    expect(list.textContent).not.toContain("gözüyle üyesi");
     expect(screen.getAllByRole("button", { name: /engelini kaldır/ })).toHaveLength(2);
   });
 
@@ -408,10 +412,11 @@ describe("ChatHeader", () => {
     blockedMe: false,
   };
 
-  it("ilandan başlatılan sohbet: ilan kartı ve rol (Satıcı) görünür", () => {
+  it("ilandan başlatılan sohbet: ilan kartı; adın altında @kullanıcı_adı ve rol", () => {
     render(<ChatHeader detail={listingDetail} onBack={vi.fn()} onMenu={vi.fn()} />);
     expect(screen.getByText("BMW 320i 2019")).toBeTruthy();
-    expect(screen.getByText("Satıcı")).toBeTruthy();
+    expect(screen.getByText("Kamil")).toBeTruthy();
+    expect(screen.getByText("@kamil · Satıcı")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Kamil vitrini" }).getAttribute("href")).toBe("/@kamil");
   });
 
@@ -425,16 +430,28 @@ describe("ChatHeader", () => {
     expect(screen.getByRole("link", { name: "Kamil vitrini" }).getAttribute("href")).toBe("/@kamil");
   });
 
-  it("kullanıcı adı yoksa bağlantı yok, 'Doğrudan mesaj' yazar", () => {
-    render(
+  it("görünen ad yoksa başlık @kullanıcı_adı; alt satırda tekrar edilmez", () => {
+    const { container } = render(
       <ChatHeader
-        detail={{ ...listingDetail, kind: "direct", listing: null, partner: { id: "u2", displayName: "Ali", avatarUrl: null, username: null } }}
+        detail={{ ...listingDetail, kind: "direct", listing: null, partner: { id: "u2", displayName: null, avatarUrl: null, username: "kamil" } }}
         onBack={vi.fn()}
         onMenu={vi.fn()}
       />,
     );
-    expect(screen.getByText("Doğrudan mesaj")).toBeTruthy();
-    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getAllByText("@kamil")).toHaveLength(1);
+    expect(container.textContent).not.toContain("gözüyle üyesi");
+  });
+
+  it("ilanlı sohbette ne ad ne kullanıcı adı varsa rol başlık olur (jenerik ad yok)", () => {
+    render(
+      <ChatHeader
+        detail={{ ...listingDetail, role: "seller", partner: { id: "u2", displayName: null, avatarUrl: null, username: null } }}
+        onBack={vi.fn()}
+        onMenu={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Alıcı")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /vitrini/ })).toBeNull();
   });
 });
 
@@ -448,5 +465,25 @@ describe("MessageUserButtonView", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
     rerender(<MessageUserButtonView name="Kamil" busy onClick={onClick} />);
     expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("marka işareti", () => {
+  it("tek renk SVG: ince göz hattı ve göz bebeğinde oynat üçgeni (currentColor, parlama yok)", () => {
+    const { container } = render(<EyePlayMark className="h-9 w-9" />);
+    const svg = container.querySelector("svg")!;
+    expect(svg.getAttribute("viewBox")).toBe("0 0 100 100");
+    expect(svg.getAttribute("aria-hidden")).toBe("true");
+    expect(svg.querySelector("path")?.getAttribute("d")).toBe(EYE_PATH);
+    expect(svg.querySelector("path")?.getAttribute("stroke")).toBe("currentColor");
+    expect(svg.querySelector("polygon")?.getAttribute("points")).toBe(PLAY_POINTS);
+    expect(svg.querySelector("filter, linearGradient, radialGradient")).toBeNull();
+  });
+
+  it("başlık verilince erişilebilir görsel; logo yazıyla birlikte", () => {
+    render(<EyePlayMark title="gözüyle" />);
+    expect(screen.getByRole("img", { name: "gözüyle" })).toBeTruthy();
+    const { container } = render(<Logo />);
+    expect(container.textContent).toBe("gözüyle");
   });
 });

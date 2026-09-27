@@ -34,7 +34,7 @@ export default function BottomNav() {
     <nav
       aria-label="Alt gezinme"
       className={`${bodyFont.variable} fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] [font-family:var(--font-body)] md:hidden ${
-        dark ? "border-white/10 bg-black" : "border-[#E3E6EA] bg-white/95 backdrop-blur-[6px]"
+        dark ? "border-[#27272A] bg-[#121212]" : "border-[#E3E6EA] bg-white/95 backdrop-blur-[6px]"
       }`}
     >
       {/* 1px üst kenarlıkla birlikte tam 4rem: --bottom-nav-height ile aynı */}
@@ -51,9 +51,9 @@ export default function BottomNav() {
               <li key={item.key} className="flex">
                 <AuthGatedLink href={item.href} aria-current={active ? "page" : undefined} className={className}>
                   <span
-                    className={`flex h-9 w-11 items-center justify-center rounded-xl bg-[#003399] text-white shadow-[0_2px_8px_rgba(0,51,153,0.35)] ${
+                    className={`flex h-9 w-11 items-center justify-center rounded-xl bg-[#003399] text-white ${
                       active
-                        ? `ring-2 ring-offset-2 ${dark ? "ring-white ring-offset-black" : "ring-[#003399] ring-offset-white"}`
+                        ? `ring-2 ring-offset-2 ${dark ? "ring-white ring-offset-[#121212]" : "ring-[#003399] ring-offset-white"}`
                         : ""
                     }`}
                   >

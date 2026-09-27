@@ -14,7 +14,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#000000",
+  themeColor: "#121212",
 };
 
 type HomePageProps = {
@@ -32,7 +32,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     <main
       // Mobilde akış alt gezinme çubuğunun üstünde biter: videonun alt kısmındaki
       // butonlar (WhatsApp, ses, Detaylar) çubuğun altında kalmaz
-      className={`${displayFont.variable} ${bodyFont.variable} relative h-[calc(100dvh-var(--bottom-nav-height))] w-full overflow-hidden bg-black text-white [font-family:var(--font-body)]`}
+      className={`${displayFont.variable} ${bodyFont.variable} relative h-[calc(100dvh-var(--bottom-nav-height))] w-full overflow-hidden bg-[#121212] text-white [font-family:var(--font-body)]`}
     >
       {/* key: başka bir ilanla gelindiğinde akış sıfırdan kurulur */}
       <HomeFeed key={initialVehicleId ?? "feed"} initialVehicleId={initialVehicleId} initialTab={initialTab} />

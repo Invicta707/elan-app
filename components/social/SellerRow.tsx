@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { DEFAULT_MEMBER_NAME } from "../../lib/messages";
 import { useSellerProfile } from "../../lib/use-follow";
 import { profilePath } from "../../lib/username";
 import Avatar from "../ui/Avatar";
@@ -14,7 +13,8 @@ export default function SellerRow({ sellerId }: { sellerId: string | null }) {
   const seller = useSellerProfile(sellerId);
   if (!seller) return null;
 
-  const label = seller.username ? `@${seller.username}` : (seller.displayName ?? DEFAULT_MEMBER_NAME);
+  // Akışta TikTok gibi @kullanıcı_adı; yoksa görünen ad, o da yoksa "Satıcı"
+  const label = seller.username ? `@${seller.username}` : (seller.displayName ?? "Satıcı");
   const identity = (
     <>
       <Avatar url={seller.avatarUrl} name={seller.displayName ?? seller.username} size={32} className="ring-2 ring-white/85" />

@@ -2,20 +2,22 @@
 // görünen ad, engellenenler listesi ve profilden doğrudan mesaj.
 //
 // 20260926210000_profiles_and_messaging.sql, 20260927120000_usernames_and_follows.sql,
-// 20260927150000_profile_name_and_blocked_list.sql ve 20260927180000_direct_conversations.sql
-// gerçek bir Postgres'te (PGlite) çalıştırılır; istekler Supabase'deki gibi rol
+// 20260927150000_profile_name_and_blocked_list.sql, 20260927180000_direct_conversations.sql
+// ve 20260927200000_direct_dm_requires_username.sql gerçek bir Postgres'te (PGlite) çalıştırılır; istekler Supabase'deki gibi rol
 // (set role) ve JWT claim'leriyle taklit edilir. BASE_SCHEMA, uzak veritabanındaki
 // ilgili tanımların (2026-09-27) asgari kopyasıdır.
 
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DIRECT_USERNAME_REQUIRED } from "./messages";
 import { RESERVED_USERNAMES, localUsernameStatus } from "./username";
 
 const MESSAGING = readFileSync("supabase/migrations/20260926210000_profiles_and_messaging.sql", "utf8");
 const SOCIAL = readFileSync("supabase/migrations/20260927120000_usernames_and_follows.sql", "utf8");
 const PROFILE_NAME = readFileSync("supabase/migrations/20260927150000_profile_name_and_blocked_list.sql", "utf8");
 const DIRECT = readFileSync("supabase/migrations/20260927180000_direct_conversations.sql", "utf8");
+const DIRECT_USERNAME = readFileSync("supabase/migrations/20260927200000_direct_dm_requires_username.sql", "utf8");
 
 const SELLER = "11111111-1111-4111-8111-111111111111";
 const BUYER = "22222222-2222-4222-8222-222222222222";
@@ -107,6 +109,7 @@ beforeAll(async () => {
   await db.exec(SOCIAL);
   await db.exec(PROFILE_NAME);
   await db.exec(DIRECT);
+  await db.exec(DIRECT_USERNAME);
 }, 60_000);
 
 afterAll(async () => {
@@ -613,6 +616,24 @@ describe("profilden doğrudan mesaj (start_direct_conversation)", () => {
     if (!result.ok) throw new Error(result.message);
     return result.rows[0].v;
   }
+
+  // Doğrudan mesajı başlatanın da kullanıcı adı olmalı (20260927200000)
+  beforeEach(async () => {
+    await setUsername(BUYER, "alici");
+  });
+
+  it("başlatanın kullanıcı adı yoksa açılmaz (önce kullanıcı adı belirlenmeli)", async () => {
+    await setUsername(SELLER, "kamil");
+    expect(await startDirect(OTHER, SELLER)).toMatchObject({
+      ok: false,
+      code: "23514",
+      // Arayüz bu metni tanıyıp kullanıcı adı penceresini açar (lib/messages.ts ile aynı)
+      message: DIRECT_USERNAME_REQUIRED,
+    });
+    expect((await db.query("select id from public.conversations")).rows).toEqual([]);
+    await setUsername(OTHER, "diger");
+    expect(await startDirect(OTHER, SELLER)).toMatchObject({ ok: true });
+  });
 
   it("ilan olmadan konuşma açar: listing_id boş, başlatan buyer, profil sahibi seller", async () => {
     await setUsername(SELLER, "kamil");

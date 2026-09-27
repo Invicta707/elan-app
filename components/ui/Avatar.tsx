@@ -16,7 +16,7 @@ export default function Avatar({
 }) {
   return (
     <span
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#2B4FB5] to-[#0A1F66] font-bold text-white [font-family:var(--font-display)] ${className}`}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#3F3F46] font-semibold text-white/95 [font-family:var(--font-display)] ${className}`}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
     >
       {url ? (

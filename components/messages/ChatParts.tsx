@@ -7,6 +7,8 @@ import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent }
 import {
   MAX_MESSAGE_LENGTH,
   cleanMessage,
+  counterpartRole,
+  partnerHandle,
   partnerName,
   timeLabel,
   type ChatMessage,
@@ -50,7 +52,7 @@ export function MessageBubble({
     ? `rounded-[20px] rounded-br-[6px] ${groupStart ? "" : "rounded-tr-[6px]"}`
     : `rounded-[20px] rounded-bl-[6px] ${groupStart ? "" : "rounded-tl-[6px]"}`;
   const tone = mine
-    ? "bg-gradient-to-br from-[#2A5BEA] to-[#003399] text-white"
+    ? "bg-[#003399] text-white"
     : "bg-[#EEF0F3] text-[#15181C]";
 
   return (
@@ -110,18 +112,22 @@ export function ChatHeader({
   onBack: () => void;
   onMenu: () => void;
 }) {
-  const name = partnerName(detail.partner);
+  const direct = detail.kind === "direct";
+  // Başlık: görünen ad, yoksa @kullanıcı_adı (ilanlı sohbette o da yoksa rol)
+  const name = partnerName(detail.partner, direct ? undefined : detail.role);
   const username = detail.partner.username ?? null;
   // Profilden başlatılan (doğrudan) sohbette ilan kartı ve Alıcı/Satıcı rolü yok
-  const listing = detail.kind === "direct" ? null : detail.listing;
+  const listing = direct ? null : detail.listing;
   const live = listing?.status === "active";
-  const subtitle = detail.kind === "direct" ? (username ? `@${username}` : "Doğrudan mesaj") : detail.role === "buyer" ? "Satıcı" : "Alıcı";
+  // Alt satır: ad varsa küçük gri @kullanıcı_adı; ilanlı sohbette rol (başlıkta yoksa)
+  const role = direct ? null : counterpartRole(detail.role);
+  const subtitle = [partnerHandle(detail.partner), role !== name ? role : null].filter(Boolean).join(" · ");
   const identity = (
     <>
       <Avatar url={detail.partner.avatarUrl} name={name} size={38} />
       <span className="ml-2 min-w-0 flex-1">
         <span className="block truncate text-[16px] font-semibold leading-tight">{name}</span>
-        <span className="block truncate text-[12.5px] text-[#5B616B]">{subtitle}</span>
+        {subtitle && <span className="block truncate text-[12.5px] text-[#71717A]">{subtitle}</span>}
       </span>
     </>
   );

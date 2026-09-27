@@ -1,12 +1,14 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { ChevronLeft, ChevronRight, ExternalLink, LogOut, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, LogOut, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
+import { clearAppCache, estimateStorageUsage, formatBytes } from "../../lib/app-cache";
 import { useSupabaseSession } from "../../lib/auth";
 import { LEGAL_CONTACT_EMAIL } from "../../lib/legal";
 import { suggestedDisplayName } from "../../lib/profile";
+import { clearCatalogCache } from "../../lib/search";
 import {
   fetchBlockedUsers,
   readNotificationPrefs,
@@ -16,6 +18,7 @@ import {
   type NotificationPrefs,
 } from "../../lib/settings";
 import { supabase } from "../../lib/supabase";
+import { resetFollowStore } from "../../lib/use-follow";
 import { useMyProfile } from "../../lib/use-my-profile";
 import { suggestUsername } from "../../lib/username";
 import AuthModal from "../AuthModal";
@@ -23,12 +26,13 @@ import FeedHeader from "../FeedHeader";
 import EditNameSheet from "../profile/EditNameSheet";
 import UsernameSheet from "../profile/UsernameSheet";
 import Avatar from "../ui/Avatar";
+import BottomSheet from "../ui/BottomSheet";
 import Switch from "../ui/Switch";
 import BlockedUsersSheet from "./BlockedUsersSheet";
 import DeleteAccountDialog from "./DeleteAccountDialog";
 
 // /settings: hesap bilgileri, bildirim tercihleri, engellenen kullanıcılar,
-// yasal metinler, çıkış ve hesap silme (Google Play zorunluluğu).
+// önbelleği temizleme, yasal metinler, çıkış ve hesap silme (Google Play zorunluluğu).
 export default function SettingsView() {
   const { session, isLoading } = useSupabaseSession();
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -87,6 +91,7 @@ export default function SettingsView() {
                 adresinden talep edebilirsin.
               </p>
             </div>
+            <AppGroup />
             <LegalGroup />
           </>
         )}
@@ -212,6 +217,7 @@ function SignedInSettings({ user, onDeleted }: { user: User; onDeleted: () => vo
         />
       </Group>
 
+      <AppGroup />
       <LegalGroup />
 
       <Group>
@@ -273,6 +279,64 @@ function SignedInSettings({ user, onDeleted }: { user: User; onDeleted: () => vo
             setSheet(null);
             onDeleted();
           }}
+        />
+      )}
+    </>
+  );
+}
+
+/** Önbelleği temizle: geçici verileri siler, sayfayı yeniden yükler (oturum ve favoriler korunur) */
+function AppGroup() {
+  const [usage, setUsage] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void estimateStorageUsage(navigator.storage).then((bytes) => active && setUsage(bytes));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function clear() {
+    setClearing(true);
+    await clearAppCache({
+      caches: "caches" in window ? window.caches : undefined,
+      serviceWorker: navigator.serviceWorker,
+      sessionStorage: window.sessionStorage,
+      clearMemory: () => {
+        clearCatalogCache();
+        resetFollowStore();
+      },
+    }).catch((error) => console.error("Önbellek temizlenemedi:", error));
+    window.location.reload();
+  }
+
+  return (
+    <>
+      <Group title="Uygulama" footer="Geçici verileri siler ve uygulamayı en güncel sürümle yeniden yükler. Oturumun ve favorilerin korunur.">
+        <Row
+          label="Önbelleği temizle"
+          value={clearing ? "Temizleniyor…" : usage ? formatBytes(usage) : undefined}
+          onClick={() => setConfirming(true)}
+        />
+      </Group>
+      {confirming && (
+        <BottomSheet
+          title="Önbellek temizlensin mi?"
+          onClose={() => setConfirming(false)}
+          actions={[
+            {
+              label: "Önbelleği temizle",
+              description: "Oturumun ve favorilerin korunur; uygulama yeniden yüklenir.",
+              icon: <RotateCcw className="h-5 w-5" />,
+              onSelect: () => {
+                setConfirming(false);
+                void clear();
+              },
+            },
+          ]}
         />
       )}
     </>

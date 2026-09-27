@@ -6,6 +6,7 @@ import FavoriteButton from "./FavoriteButton";
 import ReportButton from "./ReportButton";
 import ShareButton from "./vehicle/ShareButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
+import EyePlayMark from "./brand/EyePlayMark";
 import SellerRow from "./social/SellerRow";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
@@ -240,7 +241,7 @@ export default function VideoCard({
   return (
     <article
       aria-label={`${vehicle.year} ${title}`}
-      className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden bg-black text-white"
+      className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden bg-[#121212] text-white"
     >
       <video
         ref={videoRef}
@@ -263,16 +264,19 @@ export default function VideoCard({
         className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
       />
 
-      {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür.
-          Kısa gecikme, normal oynatma başlarken simgenin yanıp sönmesini önler. */}
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-150 ${
-          showPlayHint ? "opacity-100 delay-200" : "opacity-0"
-        }`}
-      >
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45">
-          <PlayIcon className="ml-1 h-7 w-7" />
+      {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür: marka
+          işareti (göz hattı, göz bebeğinde oynat üçgeni), yarı saydam koyu buzlu
+          zeminde ince beyaz çizgi; parlama yok. Solarak ve hafifçe büyüyerek
+          belirir, oynatınca solarak kaybolur. Kısa gecikme, normal oynatma
+          başlarken simgenin yanıp sönmesini önler. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+        <span
+          data-paused-mark={showPlayHint ? "visible" : "hidden"}
+          className={`flex h-[84px] w-[84px] items-center justify-center rounded-full bg-black/35 ring-1 ring-inset ring-white/15 backdrop-blur-[6px] transition-[opacity,transform] ease-out motion-reduce:scale-100 ${
+            showPlayHint ? "scale-100 opacity-100 delay-150 duration-200" : "scale-90 opacity-0 duration-150"
+          }`}
+        >
+          <EyePlayMark className="h-12 w-12 text-white" strokeWidth={4} />
         </span>
       </div>
 
@@ -446,17 +450,6 @@ function PricePlate({ price, symbol, spoken }: { price: number; symbol: string; 
 }
 
 type IconProps = { className?: string };
-
-function PlayIcon({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path
-        d="M8 5.14v13.72a1 1 0 0 0 1.52.85l10.9-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
 
 function SpeakerOnIcon({ className }: IconProps) {
   return (

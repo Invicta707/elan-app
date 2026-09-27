@@ -179,7 +179,7 @@ export default function VideoFeed({
     <div className="relative h-full w-full">
       <div
         ref={containerRef}
-        className="h-full w-full snap-y snap-mandatory overflow-y-scroll overscroll-y-contain bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-full w-full snap-y snap-mandatory overflow-y-scroll overscroll-y-contain bg-[#121212] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {vehicles.map((vehicle, index) => {
           const distance = Math.abs(index - activeIndex);

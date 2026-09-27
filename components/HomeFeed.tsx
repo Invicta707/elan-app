@@ -63,7 +63,7 @@ export default function HomeFeed({
         role="tabpanel"
         aria-labelledby="feed-tab-following"
         inert={!followingVisible}
-        className={`absolute inset-0 bg-black ${followingVisible ? "" : "invisible"}`}
+        className={`absolute inset-0 bg-[#121212] ${followingVisible ? "" : "invisible"}`}
       >
         {isLoading ? null : !session ? (
           followingVisible && (

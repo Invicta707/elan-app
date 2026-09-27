@@ -10,6 +10,7 @@ import { useSupabaseSession } from "../../lib/auth";
 import {
   inboxTimeLabel,
   listConversations,
+  partnerHandle,
   partnerName,
   type ConversationSummary,
 } from "../../lib/messages";
@@ -107,7 +108,8 @@ function Inbox({ myId }: { myId: string }) {
   return (
     <ul className="mt-2">
       {items.map((item) => {
-        const name = partnerName(item.partner);
+        const name = partnerName(item.partner, item.kind === "direct" ? undefined : item.role);
+        const handle = partnerHandle(item.partner);
         const unread = item.unread > 0;
         const last = item.lastMessage;
         const preview = last ? `${last.senderId === myId ? "Sen: " : ""}${last.text}` : "Sohbeti başlat";
@@ -134,8 +136,8 @@ function Inbox({ myId }: { myId: string }) {
                 </span>
                 <span className="mt-0.5 block truncate text-[13px] text-[#5B616B]">
                   {item.kind === "direct"
-                    ? item.partner.username
-                      ? `@${item.partner.username} · Doğrudan mesaj`
+                    ? handle
+                      ? `${handle} · Doğrudan mesaj`
                       : "Doğrudan mesaj"
                     : (item.listing?.title ?? "İlan kaldırıldı")}
                 </span>

@@ -66,7 +66,7 @@ export default function ProfileHeader({ initial }: { initial: ProfilePageData })
         ) : (
           <>
             <FollowButton userId={profile.id} variant="profile" name={name} className="flex-1" />
-            <MessageUserButton userId={profile.id} name={name} />
+            <MessageUserButton userId={profile.id} name={name} className="flex-1" />
           </>
         )}
         <ShareButton

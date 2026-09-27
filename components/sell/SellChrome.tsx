@@ -262,7 +262,7 @@ export function SellActionBar({
           type="submit"
           disabled={disabled || submitting}
           aria-busy={submitting}
-          className="inline-flex h-12 items-center justify-center gap-1.5 rounded-xl bg-[#003399] px-5 text-[15px] font-semibold text-white shadow-[0_1px_2px_rgba(0,51,153,0.25)] transition-colors hover:bg-[#002B82] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#003399]/30"
+          className="inline-flex h-12 items-center justify-center gap-1.5 rounded-xl bg-[#003399] px-5 text-[15px] font-semibold text-white transition-colors hover:bg-[#002B82] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#003399]/30"
         >
           {submitting ? (
             <>

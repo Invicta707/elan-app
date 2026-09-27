@@ -6,7 +6,6 @@ import { supabase } from "./supabase";
 // bağımsız. Yetkiler veritabanında: supabase/migrations/*_profiles_and_messaging.sql
 
 export const MAX_MESSAGE_LENGTH = 2000;
-export const DEFAULT_MEMBER_NAME = "gözüyle üyesi";
 
 export type ListingSummary = {
   id: string;
@@ -160,8 +159,29 @@ export function toChatMessage(row: MessageRow): ChatMessage {
 // Saf yardımcılar
 // ---------------------------------------------------------------
 
-export function partnerName(partner: Pick<PublicProfile, "displayName">): string {
-  return partner.displayName?.trim() || DEFAULT_MEMBER_NAME;
+/** Rol, oturumdaki kullanıcının rolüdür; karşı tarafın rolü tersidir */
+export function counterpartRole(myRole: ConversationRole): string {
+  return myRole === "buyer" ? "Satıcı" : "Alıcı";
+}
+
+/**
+ * Karşı tarafın adı: görünen ad, yoksa @kullanıcı_adı. İkisi de yoksa (ilandan
+ * yazan, kullanıcı adı almamış kullanıcı) ilandaki rolü; rol de bilinmiyorsa
+ * "Kullanıcı". Jenerik bir sistem adı ("gözüyle üyesi") gösterilmez.
+ */
+export function partnerName(
+  partner: Pick<PublicProfile, "displayName" | "username">,
+  myRole?: ConversationRole,
+): string {
+  const displayName = partner.displayName?.trim();
+  if (displayName) return displayName;
+  if (partner.username) return `@${partner.username}`;
+  return myRole ? counterpartRole(myRole) : "Kullanıcı";
+}
+
+/** Adın altındaki küçük satır: görünen ad varsa @kullanıcı_adı (başlıkta zaten @ad varsa tekrar edilmez) */
+export function partnerHandle(partner: Pick<PublicProfile, "displayName" | "username">): string | null {
+  return partner.displayName?.trim() && partner.username ? `@${partner.username}` : null;
 }
 
 export function cleanMessage(text: string): string {
@@ -293,6 +313,9 @@ export async function startConversation(listingId: string): Promise<string> {
   if (error || !data) fail(error, "Mesajlaşma başlatılamadı.");
   return String(data);
 }
+
+/** start_direct_conversation'ın, başlatanın kullanıcı adı yokken verdiği mesaj (veritabanıyla aynı) */
+export const DIRECT_USERNAME_REQUIRED = "Mesaj göndermek için önce kullanıcı adını belirle.";
 
 /** Profilden doğrudan sohbet: kullanıcıyla konuşmayı açar ya da mevcut olanı döner */
 export async function startDirectConversation(userId: string): Promise<string> {

@@ -15,6 +15,7 @@ import {
   inboxTimeLabel,
   mergeMessages,
   messageError,
+  partnerHandle,
   partnerName,
   sendMessage,
   startDirectConversation,
@@ -112,10 +113,19 @@ describe("buildChatItems", () => {
 });
 
 describe("küçük yardımcılar", () => {
-  it("adı olmayan kullanıcı 'gözüyle üyesi'", () => {
-    expect(partnerName({ displayName: null })).toBe("gözüyle üyesi");
-    expect(partnerName({ displayName: "  " })).toBe("gözüyle üyesi");
-    expect(partnerName({ displayName: "Ali" })).toBe("Ali");
+  it("ad: görünen ad, yoksa @kullanıcı_adı, ikisi de yoksa karşı tarafın rolü; 'gözüyle üyesi' yok", () => {
+    expect(partnerName({ displayName: "Ali", username: "ali_oto" })).toBe("Ali");
+    expect(partnerName({ displayName: "  ", username: "ali_oto" })).toBe("@ali_oto");
+    expect(partnerName({ displayName: null, username: null }, "buyer")).toBe("Satıcı");
+    expect(partnerName({ displayName: null, username: null }, "seller")).toBe("Alıcı");
+    expect(partnerName({ displayName: null, username: null })).toBe("Kullanıcı");
+    expect(partnerName({ displayName: null })).not.toContain("gözüyle");
+  });
+
+  it("alt satır: yalnızca görünen ad varken @kullanıcı_adı (başlık zaten @ad ise tekrar yok)", () => {
+    expect(partnerHandle({ displayName: "Ali", username: "ali_oto" })).toBe("@ali_oto");
+    expect(partnerHandle({ displayName: null, username: "ali_oto" })).toBeNull();
+    expect(partnerHandle({ displayName: "Ali", username: null })).toBeNull();
   });
 
   it("mesaj boş ya da çok uzun olamaz", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { PartyPopper } from "lucide-react";
+import { Check } from "lucide-react";
 import Link from "next/link";
 import { useId, useState, type FormEvent } from "react";
 import { saveUsername } from "../../lib/profile";
@@ -16,10 +16,16 @@ export default function UsernameSheet({
   mode,
   initialValue,
   onClose,
+  onSaved,
+  intro,
 }: {
   mode: "onboarding" | "edit";
   initialValue: string;
   onClose: () => void;
+  /** Verilirse kaydedince başarı ekranı yerine bu çağrılır (ör. profilden mesaja devam) */
+  onSaved?: (username: string) => void;
+  /** Açıklama metni (verilmezse moda göre varsayılan) */
+  intro?: string;
 }) {
   const inputId = useId();
   const [value, setValue] = useState(initialValue);
@@ -40,7 +46,8 @@ export default function UsernameSheet({
     try {
       const username = await saveUsername(value);
       updateMyProfile({ username });
-      if (mode === "onboarding") setSaved(username);
+      if (onSaved) onSaved(username);
+      else if (mode === "onboarding") setSaved(username);
       else onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kullanıcı adı kaydedilemedi.");
@@ -53,8 +60,8 @@ export default function UsernameSheet({
     return (
       <BottomSheet title="Kullanıcı adın hazır" onClose={onClose} closeLabel="Tamam">
         <div className="flex flex-col items-center px-6 pb-2 text-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ECFDF3] text-[#067647] motion-safe:animate-[badge-pop_320ms_cubic-bezier(0.34,1.56,0.64,1)]">
-            <PartyPopper aria-hidden="true" className="h-8 w-8" />
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F4F4F5] text-[#18181B] motion-safe:animate-[fade-in_200ms_ease-out]">
+            <Check aria-hidden="true" className="h-7 w-7" strokeWidth={2.25} />
           </span>
           <p className="mt-3 text-[20px] font-semibold [font-family:var(--font-display)]">@{saved}</p>
           <p className="mt-1 max-w-xs text-[14px] text-[#5B616B]">
@@ -79,7 +86,9 @@ export default function UsernameSheet({
       closeLabel={mode === "onboarding" ? "Daha sonra" : "Vazgeç"}
     >
       <form onSubmit={handleSubmit} noValidate className="px-5 pb-2">
-        {mode === "onboarding" ? (
+        {intro ? (
+          <p className="mb-4 text-center text-[14px] leading-relaxed text-[#5B616B]">{intro}</p>
+        ) : mode === "onboarding" ? (
           <p className="mb-4 text-center text-[14px] leading-relaxed text-[#5B616B]">
             Vitrinin <span className="font-semibold text-[#15181C]">gozuyle.com/@{value || "kullanici_adi"}</span> adresinde
             yayında olacak. Alıcılar seni bu adla bulup takip edebilir.
