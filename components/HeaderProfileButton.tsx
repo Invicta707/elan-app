@@ -14,14 +14,21 @@ import UnreadBadge from "./ui/UnreadBadge";
 // Üst çubuktaki profil butonu: misafirde giriş penceresini açar; oturum açıksa
 // profil fotoğrafını (yoksa baş harf) ve okunmamış mesaj rozetini gösterir,
 // Vitrinim'e (profil) götürür.
-export default function HeaderProfileButton({ overlay }: { overlay: boolean }) {
+export default function HeaderProfileButton({
+  overlay,
+  className = "",
+}: {
+  overlay: boolean;
+  /** Ek sınıflar (ör. ana sayfada mobilde gizlemek için) */
+  className?: string;
+}) {
   const { session, isLoading } = useSupabaseSession();
   const { profile } = useMyProfile();
   const unread = useUnreadCount();
   const pathname = usePathname();
   const [showAuth, setShowAuth] = useState(false);
 
-  const base = `pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 ${
+  const base = `${className} pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 ${
     overlay ? "focus-visible:ring-white" : "focus-visible:ring-[#003399]"
   }`;
 

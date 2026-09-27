@@ -17,13 +17,23 @@ export type ListingSummary = {
   coverUrl: string | null;
 };
 
-export type PublicProfile = { id: string; displayName: string | null; avatarUrl: string | null };
+export type PublicProfile = {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  /** Varsa sohbetten vitrinine (/@kullanici_adi) gidilir */
+  username?: string | null;
+};
 
 export type ConversationRole = "buyer" | "seller";
+
+/** "listing": ilandan başlatıldı; "direct": profilden, ilana bağlı değil */
+export type ConversationKind = "listing" | "direct";
 
 export type ConversationSummary = {
   id: string;
   updatedAt: string;
+  kind: ConversationKind;
   role: ConversationRole;
   listing: ListingSummary | null;
   partner: PublicProfile;
@@ -33,6 +43,7 @@ export type ConversationSummary = {
 
 export type ConversationDetail = {
   id: string;
+  kind: ConversationKind;
   role: ConversationRole;
   listing: ListingSummary | null;
   partner: PublicProfile;
@@ -78,17 +89,26 @@ function toProfile(raw: unknown): PublicProfile {
     id: String(row.id ?? ""),
     displayName: (row.display_name as string | null) ?? null,
     avatarUrl: (row.avatar_url as string | null) ?? null,
+    username: (row.username as string | null) ?? null,
   };
+}
+
+/** Eski yanıtta (kind yok) ilanı olan konuşma ilanlı sayılır */
+function toKind(raw: unknown, listing: ListingSummary | null): ConversationKind {
+  if (raw === "direct" || raw === "listing") return raw;
+  return listing ? "listing" : "direct";
 }
 
 export function toConversationSummary(raw: unknown): ConversationSummary {
   const row = raw as Json;
   const last = row.last_message as Json | null;
+  const listing = toListing(row.listing);
   return {
     id: String(row.id),
     updatedAt: String(row.updated_at),
+    kind: toKind(row.kind, listing),
     role: row.role as ConversationRole,
-    listing: toListing(row.listing),
+    listing,
     partner: toProfile(row.partner),
     lastMessage: last
       ? {
@@ -104,10 +124,12 @@ export function toConversationSummary(raw: unknown): ConversationSummary {
 
 export function toConversationDetail(raw: unknown): ConversationDetail {
   const row = raw as Json;
+  const listing = toListing(row.listing);
   return {
     id: String(row.id),
+    kind: toKind(row.kind, listing),
     role: row.role as ConversationRole,
-    listing: toListing(row.listing),
+    listing,
     partner: toProfile(row.partner),
     iBlocked: Boolean(row.i_blocked),
     blockedMe: Boolean(row.blocked_me),
@@ -268,6 +290,13 @@ function fail(error: { message?: string } | null, fallback: string): never {
 
 export async function startConversation(listingId: string): Promise<string> {
   const { data, error } = await supabase.rpc("start_conversation", { p_listing_id: listingId });
+  if (error || !data) fail(error, "Mesajlaşma başlatılamadı.");
+  return String(data);
+}
+
+/** Profilden doğrudan sohbet: kullanıcıyla konuşmayı açar ya da mevcut olanı döner */
+export async function startDirectConversation(userId: string): Promise<string> {
+  const { data, error } = await supabase.rpc("start_direct_conversation", { p_user_id: userId });
   if (error || !data) fail(error, "Mesajlaşma başlatılamadı.");
   return String(data);
 }

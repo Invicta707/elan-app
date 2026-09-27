@@ -13,6 +13,7 @@ import {
   type ConversationDetail,
 } from "../../lib/messages";
 import { formatTilePrice } from "../../lib/showcase";
+import { profilePath } from "../../lib/username";
 import Avatar from "../ui/Avatar";
 
 // Sohbet ekranının sunum parçaları (veri ve Realtime: ChatView).
@@ -110,8 +111,20 @@ export function ChatHeader({
   onMenu: () => void;
 }) {
   const name = partnerName(detail.partner);
-  const listing = detail.listing;
+  const username = detail.partner.username ?? null;
+  // Profilden başlatılan (doğrudan) sohbette ilan kartı ve Alıcı/Satıcı rolü yok
+  const listing = detail.kind === "direct" ? null : detail.listing;
   const live = listing?.status === "active";
+  const subtitle = detail.kind === "direct" ? (username ? `@${username}` : "Doğrudan mesaj") : detail.role === "buyer" ? "Satıcı" : "Alıcı";
+  const identity = (
+    <>
+      <Avatar url={detail.partner.avatarUrl} name={name} size={38} />
+      <span className="ml-2 min-w-0 flex-1">
+        <span className="block truncate text-[16px] font-semibold leading-tight">{name}</span>
+        <span className="block truncate text-[12.5px] text-[#5B616B]">{subtitle}</span>
+      </span>
+    </>
+  );
 
   const card = listing && (
     <span className="flex items-center gap-2.5 rounded-2xl bg-[#F2F3F5] p-1.5 pr-3">
@@ -140,11 +153,20 @@ export function ChatHeader({
         >
           <ChevronLeft aria-hidden="true" className="h-7 w-7" />
         </button>
-        <Avatar url={detail.partner.avatarUrl} name={name} size={38} />
-        <div className="ml-2 min-w-0 flex-1">
-          <h1 className="truncate text-[16px] font-semibold leading-tight">{name}</h1>
-          <p className="text-[12.5px] text-[#5B616B]">{detail.role === "buyer" ? "Satıcı" : "Alıcı"}</p>
-        </div>
+        {/* Ad ve avatar kullanıcının vitrinine gider (kullanıcı adı varsa) */}
+        <h1 className="flex min-w-0 flex-1">
+          {username ? (
+            <Link
+              href={profilePath(username)}
+              aria-label={`${name} vitrini`}
+              className="flex min-w-0 flex-1 items-center rounded-xl py-0.5 pr-1 transition-colors hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+            >
+              {identity}
+            </Link>
+          ) : (
+            <span className="flex min-w-0 flex-1 items-center">{identity}</span>
+          )}
+        </h1>
         <button
           type="button"
           onClick={onMenu}

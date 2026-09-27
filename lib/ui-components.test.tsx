@@ -30,19 +30,20 @@ vi.mock("./supabase", () => ({ supabase: {} }));
 // next/font yalnızca Next derlemesinde çalışır (pencere ve düğmeler app/fonts'u içe aktarır)
 vi.mock("../app/fonts", () => ({ displayFont: { variable: "" }, bodyFont: { variable: "" } }));
 
-import { Composer, MessageBubble } from "../components/messages/ChatParts";
+import { ChatHeader, Composer, MessageBubble } from "../components/messages/ChatParts";
 import UsernameField, { describeUsernameCheck } from "../components/profile/UsernameField";
 import { canPromptOn } from "../components/profile/UsernameOnboarding";
 import FeedTabs from "../components/social/FeedTabs";
 import { FollowButtonView } from "../components/social/FollowButton";
 import FollowingEmpty from "../components/social/FollowingEmpty";
+import { MessageUserButtonView } from "../components/social/MessageUserButton";
 import { ProfileStats } from "../components/social/ProfileHeader";
 import BlockedUsersSheet from "../components/settings/BlockedUsersSheet";
 import Switch from "../components/ui/Switch";
 import ShowcaseTile from "../components/showcase/ShowcaseTile";
 import UnreadBadge from "../components/ui/UnreadBadge";
 import type { MyListing } from "./my-listings";
-import type { ChatMessage } from "./messages";
+import type { ChatMessage, ConversationDetail } from "./messages";
 import { USERNAME_CHECK_DELAY_MS, useUsernameCheck } from "./use-username-check";
 
 afterEach(cleanup);
@@ -393,5 +394,59 @@ describe("BlockedUsersSheet", () => {
   it("liste boşsa açıklama gösterir", () => {
     render(<BlockedUsersSheet myId="me" users={[]} onUnblocked={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText("Kimseyi engellemedin")).toBeTruthy();
+  });
+});
+
+describe("ChatHeader", () => {
+  const listingDetail: ConversationDetail = {
+    id: "c1",
+    kind: "listing",
+    role: "buyer",
+    listing: { id: "v1", title: "BMW 320i 2019", price: 1250000, currency: "TRY", status: "active", coverUrl: null },
+    partner: { id: "u2", displayName: "Kamil", avatarUrl: null, username: "kamil" },
+    iBlocked: false,
+    blockedMe: false,
+  };
+
+  it("ilandan başlatılan sohbet: ilan kartı ve rol (Satıcı) görünür", () => {
+    render(<ChatHeader detail={listingDetail} onBack={vi.fn()} onMenu={vi.fn()} />);
+    expect(screen.getByText("BMW 320i 2019")).toBeTruthy();
+    expect(screen.getByText("Satıcı")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Kamil vitrini" }).getAttribute("href")).toBe("/@kamil");
+  });
+
+  it("profilden (doğrudan) sohbet: ilan kartı ve rol yok, @kullanıcı_adı ve vitrin bağlantısı var", () => {
+    render(
+      <ChatHeader detail={{ ...listingDetail, kind: "direct", listing: null }} onBack={vi.fn()} onMenu={vi.fn()} />,
+    );
+    expect(screen.queryByText("BMW 320i 2019")).toBeNull();
+    expect(screen.queryByText("Satıcı")).toBeNull();
+    expect(screen.getByText("@kamil")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Kamil vitrini" }).getAttribute("href")).toBe("/@kamil");
+  });
+
+  it("kullanıcı adı yoksa bağlantı yok, 'Doğrudan mesaj' yazar", () => {
+    render(
+      <ChatHeader
+        detail={{ ...listingDetail, kind: "direct", listing: null, partner: { id: "u2", displayName: "Ali", avatarUrl: null, username: null } }}
+        onBack={vi.fn()}
+        onMenu={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Doğrudan mesaj")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+});
+
+describe("MessageUserButtonView", () => {
+  it("ikincil Mesaj düğmesi; meşgulken kapalı", () => {
+    const onClick = vi.fn();
+    const { rerender } = render(<MessageUserButtonView name="Kamil" onClick={onClick} />);
+    const button = screen.getByRole("button", { name: "Kamil adlı kullanıcıya mesaj gönder" }) as HTMLButtonElement;
+    expect(button.textContent).toContain("Mesaj");
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    rerender(<MessageUserButtonView name="Kamil" busy onClick={onClick} />);
+    expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
   });
 });

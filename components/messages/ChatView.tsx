@@ -226,8 +226,8 @@ export default function ChatView({ conversationId }: { conversationId: string })
           <>
             {messages.length === 0 && (
               <p className="mx-auto mt-10 max-w-xs text-center text-[14px] text-[#5B616B]">
-                {partnerName(load.detail.partner)} ile bu ilan hakkında ilk mesajı sen gönder. Kişisel bilgilerini ve
-                ödeme bilgilerini paylaşmamaya dikkat et.
+                {partnerName(load.detail.partner)} ile {load.detail.kind === "direct" ? "" : "bu ilan hakkında "}ilk mesajı
+                sen gönder. Kişisel bilgilerini ve ödeme bilgilerini paylaşmamaya dikkat et.
               </p>
             )}
             <ol aria-label="Mesajlar" aria-live="polite" aria-relevant="additions">

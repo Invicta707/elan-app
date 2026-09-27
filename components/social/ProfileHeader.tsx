@@ -11,9 +11,10 @@ import { profilePath } from "../../lib/username";
 import Avatar from "../ui/Avatar";
 import ShareButton from "../vehicle/ShareButton";
 import FollowButton from "./FollowButton";
+import MessageUserButton from "./MessageUserButton";
 
 // /@kullanici_adi başlığı: avatar, ad, @kullanıcı_adı, İlan | Takipçi | Takip
-// Edilen ve Takip Et / Takibi Bırak (kendi profilinde Profili Düzenle).
+// Edilen, Takip Et / Takibi Bırak ve Mesaj (kendi profilinde Profili Düzenle).
 // Sunucu sayfayı anonim çizer; oturum varsa profil tarayıcıda yeniden okunur
 // (takip durumu, "kendi profilim mi", güncel sayılar).
 export default function ProfileHeader({ initial }: { initial: ProfilePageData }) {
@@ -63,7 +64,10 @@ export default function ProfileHeader({ initial }: { initial: ProfilePageData })
             Profili Düzenle
           </Link>
         ) : (
-          <FollowButton userId={profile.id} variant="profile" name={name} className="flex-1" />
+          <>
+            <FollowButton userId={profile.id} variant="profile" name={name} className="flex-1" />
+            <MessageUserButton userId={profile.id} name={name} />
+          </>
         )}
         <ShareButton
           path={profilePath(profile.username)}

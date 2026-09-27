@@ -14,7 +14,9 @@ type FeedHeaderProps = {
   tone?: "overlay" | "solid";
   /**
    * Ortadaki "Akış | Ara" yerine (ana sayfa: "Takip Edilenler | Keşfet" sekmeleri).
-   * Verilince "Ara" masaüstünde sağdaki büyüteç düğmesine geçer; mobilde alt menüde.
+   * Verilince "Ara" sağ üstteki büyüteç düğmesine geçer (TikTok gibi). Mobilde
+   * profil düğmesinin yerini alır: avatar ve okunmamış rozeti alt menüdeki
+   * "Vitrinim"de; 320 px'te ikisi birden sığmaz.
    */
   center?: ReactNode;
 };
@@ -64,14 +66,14 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay", cente
             sütun genişliğe göre küçülür (eşikler logo + sekmeler + butonların
             ölçülmüş genişliğine göre): dar başlıkta "İlan Ver" yuvarlak "+"
             ikonuna döner, daha darda kalp ve "+" gizlenir. Profil her zaman
-            görünür; butonlar asla alt satıra kırılmaz. Mobilde büyüteç, kalp ve
-            "+" alt gezinme çubuğunda. */}
+            görünür (ana sayfada mobilde yerini büyüteç alır); butonlar asla alt
+            satıra kırılmaz. Mobilde kalp ve "+" alt gezinme çubuğunda. */}
         <div className="flex items-center justify-self-end gap-2">
           {center && (
             <Link
               href="/search"
               aria-label="İlan ara"
-              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:flex ${
+              className={`pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
                 overlay ? "bg-black/35" : "bg-white"
               } ${focusRing(overlay)}`}
             >
@@ -109,7 +111,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay", cente
             </AuthGatedLink>
           )}
 
-          <HeaderProfileButton overlay={overlay} />
+          <HeaderProfileButton overlay={overlay} className={center ? "max-md:hidden" : ""} />
         </div>
       </div>
 

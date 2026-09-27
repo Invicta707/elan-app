@@ -1,9 +1,9 @@
 // Güvenlik testleri: kullanıcı adı, takip sistemi, takip edilenler akışı,
-// görünen ad ve engellenenler listesi.
+// görünen ad, engellenenler listesi ve profilden doğrudan mesaj.
 //
-// 20260926210000_profiles_and_messaging.sql, 20260927120000_usernames_and_follows.sql
-// ve 20260927150000_profile_name_and_blocked_list.sql gerçek bir Postgres'te (PGlite)
-// çalıştırılır; istekler Supabase'deki gibi rol
+// 20260926210000_profiles_and_messaging.sql, 20260927120000_usernames_and_follows.sql,
+// 20260927150000_profile_name_and_blocked_list.sql ve 20260927180000_direct_conversations.sql
+// gerçek bir Postgres'te (PGlite) çalıştırılır; istekler Supabase'deki gibi rol
 // (set role) ve JWT claim'leriyle taklit edilir. BASE_SCHEMA, uzak veritabanındaki
 // ilgili tanımların (2026-09-27) asgari kopyasıdır.
 
@@ -15,6 +15,7 @@ import { RESERVED_USERNAMES, localUsernameStatus } from "./username";
 const MESSAGING = readFileSync("supabase/migrations/20260926210000_profiles_and_messaging.sql", "utf8");
 const SOCIAL = readFileSync("supabase/migrations/20260927120000_usernames_and_follows.sql", "utf8");
 const PROFILE_NAME = readFileSync("supabase/migrations/20260927150000_profile_name_and_blocked_list.sql", "utf8");
+const DIRECT = readFileSync("supabase/migrations/20260927180000_direct_conversations.sql", "utf8");
 
 const SELLER = "11111111-1111-4111-8111-111111111111";
 const BUYER = "22222222-2222-4222-8222-222222222222";
@@ -105,6 +106,7 @@ beforeAll(async () => {
   await db.exec(MESSAGING);
   await db.exec(SOCIAL);
   await db.exec(PROFILE_NAME);
+  await db.exec(DIRECT);
 }, 60_000);
 
 afterAll(async () => {
@@ -114,6 +116,8 @@ afterAll(async () => {
 beforeEach(async () => {
   // Takipler tetikleyiciyle silinir: sayaçlar da sıfıra döner
   await db.exec(`
+    delete from public.messages;
+    delete from public.conversations;
     delete from public.follows;
     delete from public.user_blocks;
     delete from public.profiles where id = '${NEWBIE}';
@@ -598,5 +602,140 @@ describe("list_blocked_users", () => {
 
   it("misafir çağıramaz", async () => {
     expect(await run(anon, "select public.list_blocked_users()")).toMatchObject({ ok: false, code: "42501" });
+  });
+});
+
+describe("profilden doğrudan mesaj (start_direct_conversation)", () => {
+  const startDirect = (sub: string, target: string) =>
+    run<{ v: string }>(as(sub), "select public.start_direct_conversation($1) as v", [target]);
+  async function direct(sub: string, target: string): Promise<string> {
+    const result = await startDirect(sub, target);
+    if (!result.ok) throw new Error(result.message);
+    return result.rows[0].v;
+  }
+
+  it("ilan olmadan konuşma açar: listing_id boş, başlatan buyer, profil sahibi seller", async () => {
+    await setUsername(SELLER, "kamil");
+    const id = await direct(BUYER, SELLER);
+    const { rows } = await db.query("select listing_id, buyer_id, seller_id from public.conversations where id = $1", [id]);
+    expect(rows).toEqual([{ listing_id: null, buyer_id: BUYER, seller_id: SELLER }]);
+  });
+
+  it("iki kişi arasında tek konuşma: tekrar ya da karşı taraf başlatınca aynı konuşma döner", async () => {
+    await setUsername(SELLER, "kamil");
+    await setUsername(BUYER, "alici");
+    const first = await direct(BUYER, SELLER);
+    expect(await direct(BUYER, SELLER)).toBe(first);
+    expect(await direct(SELLER, BUYER)).toBe(first);
+    expect((await db.query("select id from public.conversations")).rows).toHaveLength(1);
+  });
+
+  it("ilanlı konuşma ve doğrudan konuşma aynı iki kişi arasında ayrı ayrı var olabilir", async () => {
+    await setUsername(SELLER, "kamil");
+    const listing = await run<{ v: string }>(as(BUYER), "select public.start_conversation($1) as v", [ACTIVE]);
+    expect(listing).toMatchObject({ ok: true });
+    const directId = await direct(BUYER, SELLER);
+    expect(listing.ok && listing.rows[0].v).not.toBe(directId);
+    // Doğrudan konuşma tekilliği veritabanında da zorunlu
+    expect(
+      await run(service, "insert into public.conversations (listing_id, buyer_id, seller_id) values (null, $1, $2)", [SELLER, BUYER]),
+    ).toMatchObject({ ok: false, code: "23505" });
+  });
+
+  it("kendine yazılamaz; misafir başlatamaz", async () => {
+    await setUsername(BUYER, "alici");
+    expect(await startDirect(BUYER, BUYER)).toMatchObject({ ok: false, code: "23514", message: "Kendine mesaj gönderemezsin." });
+    expect(await run(anon, "select public.start_direct_conversation($1)", [SELLER])).toMatchObject({ ok: false, code: "42501" });
+  });
+
+  it("yalnızca kullanıcı adı (herkese açık profili) olan kişiye yazılır", async () => {
+    // SELLER'ın kullanıcı adı yok (ilanı olsa da): profilden mesaj açılamaz
+    expect(await startDirect(BUYER, SELLER)).toMatchObject({ ok: false, code: "P0002", message: "Kullanıcı bulunamadı." });
+    expect(await startDirect(BUYER, "99999999-9999-4999-8999-999999999999")).toMatchObject({ ok: false, code: "P0002" });
+  });
+
+  it("engel varsa yeni konuşma açılmaz; mevcut konuşma döner ama mesaj gönderilemez", async () => {
+    await setUsername(SELLER, "kamil");
+    await setUsername(OTHER, "diger");
+    await run(as(OTHER), "insert into public.user_blocks (blocker_id, blocked_id) values ($1, $2)", [OTHER, BUYER]);
+    expect(await startDirect(BUYER, OTHER)).toMatchObject({
+      ok: false,
+      code: "42501",
+      message: "Bu kullanıcıyla mesajlaşamazsın.",
+    });
+
+    const id = await direct(BUYER, SELLER);
+    await run(as(SELLER), "insert into public.user_blocks (blocker_id, blocked_id) values ($1, $2)", [SELLER, BUYER]);
+    expect(await direct(BUYER, SELLER)).toBe(id);
+    expect(
+      await run(as(BUYER), "insert into public.messages (conversation_id, sender_id, text) values ($1, $2, 'selam')", [id, BUYER]),
+    ).toMatchObject({ ok: false, code: "42501" });
+  });
+
+  it("iki taraf yazar ve okur; üçüncü kişi göremez", async () => {
+    await setUsername(SELLER, "kamil");
+    const id = await direct(BUYER, SELLER);
+    const send = (sub: string, text: string) =>
+      run(as(sub), "insert into public.messages (conversation_id, sender_id, text) values ($1, $2, $3)", [id, sub, text]);
+    expect(await send(BUYER, "Merhaba")).toMatchObject({ ok: true });
+    expect(await send(SELLER, "Selam")).toMatchObject({ ok: true });
+    expect(await send(OTHER, "Araya girdim")).toMatchObject({ ok: false, code: "42501" });
+    expect(await run(as(OTHER), "select id from public.messages where conversation_id = $1", [id])).toEqual({ ok: true, rows: [] });
+    expect(await run(as(OTHER), "select public.get_conversation($1)", [id])).toMatchObject({ ok: false, code: "P0002" });
+  });
+
+  it("get_conversation ve list_conversations türü ve karşı tarafın kullanıcı adını döner", async () => {
+    await setUsername(SELLER, "kamil");
+    await run(as(SELLER), "select public.update_profile_display_name('Kamil Oto')");
+    const directId = await direct(BUYER, SELLER);
+    const listing = await run<{ v: string }>(as(BUYER), "select public.start_conversation($1) as v", [ACTIVE]);
+    const listingId = listing.ok ? listing.rows[0].v : "";
+
+    const detail = await value<Record<string, unknown>>(as(BUYER), "select public.get_conversation($1) as v", [directId]);
+    expect(detail).toMatchObject({
+      kind: "direct",
+      listing: null,
+      partner: { id: SELLER, username: "kamil", display_name: "Kamil Oto", avatar_url: null },
+    });
+    expect(JSON.stringify(detail)).not.toContain("905551112233");
+    expect(await value(as(BUYER), "select public.get_conversation($1) as v", [listingId])).toMatchObject({
+      kind: "listing",
+      listing: { id: ACTIVE },
+    });
+
+    const inbox = await value<Record<string, unknown>[]>(as(SELLER), "select public.list_conversations() as v");
+    expect(inbox.map((c) => [c.id, c.kind]).sort()).toEqual(
+      [
+        [directId, "direct"],
+        [listingId, "listing"],
+      ].sort(),
+    );
+    expect(inbox.find((c) => c.id === directId)).toMatchObject({ listing: null, partner: { id: BUYER } });
+  });
+
+  it("spam sınırı: saatte en fazla 20 yeni doğrudan konuşma", async () => {
+    await db.exec(`
+      create temp table targets as select gen_random_uuid() as id, 'hedef_' || n as username from generate_series(1, 21) n;
+      insert into auth.users select id from targets;
+      insert into public.profiles (id, username) select id, username from targets;
+      insert into public.conversations (listing_id, buyer_id, seller_id)
+        select null, '${BUYER}', id from targets where username <> 'hedef_21';
+    `);
+    const last = (await db.query<{ id: string }>("select id from targets where username = 'hedef_21'")).rows[0].id;
+    expect(await startDirect(BUYER, last)).toMatchObject({
+      ok: false,
+      code: "23514",
+      message: "Çok fazla yeni sohbet başlattın; biraz sonra tekrar dene.",
+    });
+    await db.exec("update public.conversations set created_at = now() - interval '2 hours'");
+    expect(await startDirect(BUYER, last)).toMatchObject({ ok: true });
+    await db.exec("delete from auth.users where id in (select id from targets); drop table targets;");
+  });
+
+  it("ilanlı konuşma başlatma (start_conversation) değişmedi: ilan tekilliği sürüyor", async () => {
+    const a = await run<{ v: string }>(as(BUYER), "select public.start_conversation($1) as v", [ACTIVE]);
+    const b = await run<{ v: string }>(as(BUYER), "select public.start_conversation($1) as v", [ACTIVE]);
+    expect(a.ok && b.ok && a.rows[0].v === b.rows[0].v).toBe(true);
+    expect(await run(as(BUYER), "select public.start_conversation($1)", [ARCHIVED])).toMatchObject({ ok: false, code: "P0002" });
   });
 });

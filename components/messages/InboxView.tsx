@@ -132,7 +132,13 @@ function Inbox({ myId }: { myId: string }) {
                     {inboxTimeLabel(last?.createdAt ?? item.updatedAt, now)}
                   </span>
                 </span>
-                <span className="mt-0.5 block truncate text-[13px] text-[#5B616B]">{item.listing?.title ?? "İlan kaldırıldı"}</span>
+                <span className="mt-0.5 block truncate text-[13px] text-[#5B616B]">
+                  {item.kind === "direct"
+                    ? item.partner.username
+                      ? `@${item.partner.username} · Doğrudan mesaj`
+                      : "Doğrudan mesaj"
+                    : (item.listing?.title ?? "İlan kaldırıldı")}
+                </span>
                 <span className="mt-0.5 flex items-center justify-between gap-2">
                   <span className={`truncate text-[14px] ${unread ? "font-semibold text-[#15181C]" : "text-[#5B616B]"}`}>{preview}</span>
                   {unread && (

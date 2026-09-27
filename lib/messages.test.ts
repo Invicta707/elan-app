@@ -17,9 +17,12 @@ import {
   messageError,
   partnerName,
   sendMessage,
+  startDirectConversation,
+  toConversationDetail,
   toConversationSummary,
   type ChatMessage,
 } from "./messages";
+import { supabase } from "./supabase";
 
 const ME = "me";
 const THEM = "them";
@@ -121,7 +124,7 @@ describe("küçük yardımcılar", () => {
     expect(messageError(" merhaba ")).toBeNull();
   });
 
-  it("gelen kutusu satırı veritabanı biçiminden dönüşür", () => {
+  it("gelen kutusu satırı veritabanı biçiminden dönüşür (tür alanı olmayan eski yanıt dahil)", () => {
     expect(
       toConversationSummary({
         id: "c1",
@@ -135,9 +138,10 @@ describe("küçük yardımcılar", () => {
     ).toEqual({
       id: "c1",
       updatedAt: "2026-09-26T10:00:00Z",
+      kind: "listing",
       role: "seller",
       listing: { id: "v1", title: "BMW 3 Serisi 2020", price: 1250000, currency: "TRY", status: "active", coverUrl: null },
-      partner: { id: "u2", displayName: null, avatarUrl: "https://x/a.webp" },
+      partner: { id: "u2", displayName: null, avatarUrl: "https://x/a.webp", username: null },
       lastMessage: { text: "Merhaba", senderId: "u2", createdAt: "2026-09-26T10:00:00Z", isRead: false },
       unread: 2,
     });
@@ -158,5 +162,50 @@ describe("sendMessage", () => {
   it("RLS reddi (engel) anlaşılır bir mesaja çevrilir", async () => {
     insertSingle.mockResolvedValue({ data: null, error: { code: "42501", message: "new row violates row-level security policy" } });
     await expect(sendMessage("c1", ME, "x")).rejects.toThrow("Bu sohbete mesaj gönderilemiyor.");
+  });
+});
+
+describe("doğrudan (profilden) konuşmalar", () => {
+  const rpc = vi.mocked(supabase.rpc);
+  beforeEach(() => rpc.mockReset());
+
+  it("RPC'nin türünü ve karşı tarafın kullanıcı adını okur", () => {
+    const detail = toConversationDetail({
+      id: "c1",
+      kind: "direct",
+      role: "buyer",
+      listing: null,
+      partner: { id: "u2", username: "kamil", display_name: "Kamil", avatar_url: null },
+      i_blocked: false,
+      blocked_me: false,
+    });
+    expect(detail).toMatchObject({ kind: "direct", listing: null, partner: { username: "kamil", displayName: "Kamil" } });
+
+    const summary = toConversationSummary({
+      id: "c2",
+      updated_at: "2026-09-27T10:00:00Z",
+      kind: "listing",
+      role: "seller",
+      listing: { id: "v1", title: "BMW 320i 2019", price: 1, currency: "TRY", status: "active", cover_url: null },
+      partner: { id: "u3" },
+      last_message: null,
+      unread: 0,
+    });
+    expect(summary).toMatchObject({ kind: "listing", partner: { username: null } });
+  });
+
+  it("eski yanıtta tür yoksa ilandan çıkarılır", () => {
+    const base = { id: "c1", role: "buyer", partner: { id: "u2" }, i_blocked: false, blocked_me: false };
+    expect(toConversationDetail({ ...base, listing: null }).kind).toBe("direct");
+    expect(toConversationDetail({ ...base, listing: { id: "v1" } }).kind).toBe("listing");
+  });
+
+  it("startDirectConversation: start_direct_conversation RPC'sini çağırır, hatayı Türkçe iletir", async () => {
+    rpc.mockResolvedValue({ data: "conv-9", error: null } as never);
+    expect(await startDirectConversation("u2")).toBe("conv-9");
+    expect(rpc).toHaveBeenCalledWith("start_direct_conversation", { p_user_id: "u2" });
+
+    rpc.mockResolvedValue({ data: null, error: { message: "Bu kullanıcıyla mesajlaşamazsın." } } as never);
+    await expect(startDirectConversation("u2")).rejects.toThrow("Bu kullanıcıyla mesajlaşamazsın.");
   });
 });
