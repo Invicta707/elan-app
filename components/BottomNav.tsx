@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { bodyFont } from "../app/fonts";
 import { NAV_ITEMS, isNavItemActive, isNavHidden, type NavItemKey } from "../lib/navigation";
 import { useUnreadCount } from "../lib/use-unread-count";
@@ -13,7 +14,16 @@ import UnreadBadge from "./ui/UnreadBadge";
 // yüksekliğini bu değişkenle ayarlar.
 export default function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const unread = useUnreadCount();
+
+  // "Ara"nın iskeleti (app/search/loading.tsx) önden indirilir: dokunulduğu an
+  // çizilir. Link bunu görünür olunca zaten yapar; bu çağrı görünürlük
+  // gözlemine (arka plandaki sekme, yavaş cihaz) bağlı kalmaz. Her sayfa
+  // geçişinde tekrarlanır: önbellekteyse istek atılmaz, eskidiyse yenilenir.
+  useEffect(() => {
+    router.prefetch("/search");
+  }, [router, pathname]);
   // Siyah video akışının üstünde koyu, açık zeminli sayfalarda açık tonda
   const dark = pathname === "/";
 
