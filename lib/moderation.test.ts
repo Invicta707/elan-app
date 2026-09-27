@@ -12,6 +12,7 @@ import {
   submitListingDecision,
   submitModerationAction,
   toModerationQueue,
+  streamWatchUrl,
   toPendingListing,
   type OpenReportRow,
   type PendingListingRow,
@@ -205,6 +206,42 @@ describe("içerik denetimi kuyruğu", () => {
     expect(item.media).toHaveLength(8);
     expect(item.media[0]).toBe(`${THUMB}?height=480`);
     expect(item.media.slice(-2)).toEqual(["https://x/0.jpeg", "https://x/2.jpeg"]);
+  });
+
+  it("otomatik tarama temiz: onay bekliyor; videonun tamamı için izleme adresi", () => {
+    const item = toPendingListing(
+      row({
+        status: "pending_approval",
+        moderation_reason: "ai:safe",
+        videos: [
+          {
+            status: "ready",
+            hls_url: "https://customer-abc.cloudflarestream.com/0123456789abcdef0123456789abcdef/manifest/video.m3u8",
+            thumbnail_url: THUMB,
+            duration_seconds: 15,
+          },
+        ],
+      }),
+    );
+    expect(item).toMatchObject({
+      aiClean: true,
+      needsReview: true,
+      reasons: [],
+      watchUrl: "https://customer-abc.cloudflarestream.com/0123456789abcdef0123456789abcdef/watch",
+    });
+    expect(item.vehicle.status).toBe("pending_approval");
+  });
+
+  it("streamWatchUrl yalnızca Cloudflare Stream HLS adresinden üretilir", () => {
+    const uid = "0123456789abcdef0123456789abcdef";
+    expect(streamWatchUrl(`https://customer-x.cloudflarestream.com/${uid}/manifest/video.m3u8`)).toBe(
+      `https://customer-x.cloudflarestream.com/${uid}/watch`,
+    );
+    expect(streamWatchUrl(`https://evil.example/${uid}/manifest/video.m3u8`)).toBeNull();
+    expect(streamWatchUrl(`http://customer-x.cloudflarestream.com/${uid}/manifest/video.m3u8`)).toBeNull();
+    expect(streamWatchUrl("https://customer-x.cloudflarestream.com/x/manifest/video.m3u8")).toBeNull();
+    expect(streamWatchUrl("bozuk")).toBeNull();
+    expect(streamWatchUrl(null)).toBeNull();
   });
 
   it("nedeni olmayan ilan: denetim sürüyor ya da yarıda kaldı", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, AtSign, Clapperboard, MessageCircle, Pencil, Settings, ShieldAlert } from "lucide-react";
+import { ArrowUpRight, AtSign, Clapperboard, Hourglass, MessageCircle, Pencil, Settings, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AuthModal from "../AuthModal";
@@ -9,8 +9,8 @@ import { useSupabaseSession } from "../../lib/auth";
 import type { VehicleStatus } from "../../lib/listing-status";
 import { fetchMyListings, type MyListing } from "../../lib/my-listings";
 import { suggestedDisplayName } from "../../lib/profile";
-import { LISTING_REJECTED_MESSAGE } from "../../lib/content-moderation";
-import { formatCount, isContentRejected, showcaseStats } from "../../lib/showcase";
+import { LISTING_AWAITING_APPROVAL_MESSAGE, LISTING_REJECTED_MESSAGE } from "../../lib/content-moderation";
+import { formatCount, isAwaitingApproval, isContentRejected, showcaseStats } from "../../lib/showcase";
 import { useMyProfile } from "../../lib/use-my-profile";
 import { useUnreadCount } from "../../lib/use-unread-count";
 import { profilePath, suggestUsername } from "../../lib/username";
@@ -110,6 +110,7 @@ function Showcase({
   const listings = load.status === "ready" ? load.listings : [];
   const stats = showcaseStats(listings);
   const rejectedCount = listings.filter(isContentRejected).length;
+  const awaitingCount = listings.filter(isAwaitingApproval).length;
 
   return (
     <>
@@ -255,6 +256,18 @@ function Showcase({
                 <Link href="/terms" className="font-semibold underline underline-offset-2">
                   Kullanım koşulları
                 </Link>
+              </span>
+            </p>
+          )}
+          {awaitingCount > 0 && (
+            <p
+              role="status"
+              className="mb-2 flex items-start gap-2 rounded-xl bg-[#EEF2FA] px-3 py-2.5 text-[14px] leading-snug text-[#1F3B7A]"
+            >
+              <Hourglass aria-hidden="true" className="mt-px h-4 w-4 shrink-0" />
+              <span>
+                {LISTING_AWAITING_APPROVAL_MESSAGE}
+                {awaitingCount > 1 ? ` (${awaitingCount} ilan)` : ""}
               </span>
             </p>
           )}

@@ -124,6 +124,7 @@ describe("moderation_reason", () => {
     expect(parseReasonCode("sexual")).toEqual(["sexual"]);
     expect(parseReasonCode("review:gore,unavailable,toString,xyz")).toEqual(["gore", "unavailable"]);
     expect(parseReasonCode("manual")).toEqual([]);
+    expect(parseReasonCode("ai:safe")).toEqual([]);
     expect(parseReasonCode(null)).toEqual([]);
   });
 });

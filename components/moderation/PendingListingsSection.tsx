@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, PlayCircle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { REASON_LABELS } from "../../lib/content-moderation";
@@ -13,10 +13,12 @@ import {
 } from "../../lib/moderation";
 import { currencySymbol, formatAmount } from "../../lib/search";
 
-// /admin/reports → "İçerik denetimi": otomatik denetimin karar veremediği ilanlar
-// (şüpheli, sağlayıcı yok ya da hata, denetim yarıda kaldı). Bu ilanlar akışta
-// görünmez; burada onaylanır (yayına girer), reddedilir (medya silinir) ya da
-// otomatik denetim yeniden çalıştırılır. Yetkiyi /api/admin/listings denetler.
+// /admin/reports → "İçerik denetimi": yayına girmeyi bekleyen bütün ilanlar.
+// Hiçbir ilan yönetici onayı olmadan yayına girmez: otomatik denetim temiz
+// bulduysa ilan "onay bekliyor"dur; şüpheli, denetlenemeyen ya da denetimi
+// yarıda kalan ilanlar da burada. Bu ilanlar akışta görünmez; burada onaylanır
+// (yayına girer), reddedilir (medya silinir) ya da otomatik denetim yeniden
+// çalıştırılır. Yetkiyi /api/admin/listings denetler.
 
 type LoadState =
   | { status: "loading" }
@@ -81,7 +83,7 @@ export default function PendingListingsSection({
               ? load.items.length > 0
                 ? `${load.items.length} ilan karar bekliyor · en eski önce`
                 : "Karar bekleyen ilan yok."
-              : "Otomatik denetimin karar veremediği ilanlar."}
+              : "Yeni ilanlar yalnızca senin onayınla yayına girer."}
           </p>
         </div>
         <button type="button" onClick={() => reload()} className={SECONDARY_BUTTON}>
@@ -139,9 +141,9 @@ function PendingListingCard({
   const [showMedia, setShowMedia] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { vehicle, reasons, needsReview, media, description } = item;
+  const { vehicle, reasons, needsReview, aiClean, media, description, watchUrl } = item;
   const title = `${vehicle.title} · ${vehicle.year}`;
-  const publishesOnApprove = vehicle.status === "pending_moderation";
+  const publishesOnApprove = vehicle.status === "pending_moderation" || vehicle.status === "pending_approval";
 
   async function run(action: ListingDecision["action"]) {
     setConfirmingReject(false);
@@ -160,7 +162,8 @@ function PendingListingCard({
     }
     if (action === "approve") onResolved(`${title}: onaylandı${result.published ? " ve yayına alındı" : ""}.`);
     else if (action === "reject") onResolved(`${title}: reddedildi; video ve fotoğraflar silindi.`);
-    else if (result.decision === "safe") onResolved(`${title}: otomatik denetimden geçti${result.published ? ", yayında" : ""}.`);
+    // Otomatik denetim yayına almaz: temizse ilan listede kalır, onay bekler
+    else if (result.decision === "safe") onStillPending(`${title}: otomatik tarama temiz; yayın için onayın bekleniyor.`);
     else if (result.decision === "rejected") onResolved(`${title}: otomatik denetim reddetti; medya silindi.`);
     else onStillPending(`${title}: otomatik denetim yine karar veremedi.`);
   }
@@ -182,7 +185,11 @@ function PendingListingCard({
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Denetim nedenleri">
-        {needsReview ? (
+        {aiClean ? (
+          <span className="rounded-full bg-[#E6F6EC] px-2 py-0.5 text-[12px] font-semibold text-[#1B7A3D]">
+            Otomatik tarama temiz · videoyu izleyip onayla
+          </span>
+        ) : needsReview ? (
           reasons.map((reason) => (
             <span key={reason} className="rounded-full bg-[#FEF6E7] px-2 py-0.5 text-[12px] font-semibold text-[#8A6116]">
               {REASON_LABELS[reason]}
@@ -199,6 +206,18 @@ function PendingListingCard({
         <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-[#F6F7F9] px-3 py-2 text-[14px] text-[#4A5058]">
           {description}
         </p>
+      )}
+
+      {watchUrl && (
+        <a
+          href={watchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-sm text-[14px] font-semibold text-[#003399] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
+        >
+          <PlayCircle aria-hidden="true" className="h-4 w-4" />
+          Videonun tamamını izle ↗
+        </a>
       )}
 
       {media.length > 0 && (

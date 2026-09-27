@@ -11,7 +11,11 @@ import {
   type VehicleStatus,
 } from "../../lib/listing-status";
 import { updateListingStatus, type MyListing } from "../../lib/my-listings";
-import { LISTING_IN_REVIEW_MESSAGE, LISTING_REJECTED_MESSAGE } from "../../lib/content-moderation";
+import {
+  LISTING_AWAITING_APPROVAL_MESSAGE,
+  LISTING_IN_REVIEW_MESSAGE,
+  LISTING_REJECTED_MESSAGE,
+} from "../../lib/content-moderation";
 import { formatTilePrice, isContentRejected } from "../../lib/showcase";
 import BottomSheet, { type SheetAction } from "../ui/BottomSheet";
 
@@ -66,9 +70,9 @@ export default function ListingManageSheet({
           {LISTING_REJECTED_MESSAGE}
         </p>
       )}
-      {listing.status === "pending_moderation" && (
+      {(listing.status === "pending_moderation" || listing.status === "pending_approval") && (
         <p className="mx-auto mt-2 max-w-xs rounded-xl bg-[#EEF2FA] px-3 py-2 text-[13px] text-[#1F3B7A]">
-          {LISTING_IN_REVIEW_MESSAGE}
+          {listing.status === "pending_approval" ? LISTING_AWAITING_APPROVAL_MESSAGE : LISTING_IN_REVIEW_MESSAGE}
         </p>
       )}
       {canTransition(listing.status, "active") && !listing.hasPlayableVideo && (

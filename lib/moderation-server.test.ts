@@ -10,7 +10,14 @@ vi.mock("./supabase-server", () => ({
   getSupabaseAdmin: () => ({ auth: { admin: { getUserById } } }),
 }));
 
-import { authorizeAdmin, dismissReports, fetchModerationQueueRows, removeListing } from "./moderation-server";
+import {
+  PENDING_LISTING_SELECT,
+  authorizeAdmin,
+  dismissReports,
+  fetchModerationQueueRows,
+  fetchPendingListingRows,
+  removeListing,
+} from "./moderation-server";
 import { getAuthenticatedUserId } from "./supabase-server";
 
 const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
@@ -165,6 +172,30 @@ describe("dismissReports", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("fetchPendingListingRows (içerik denetimi kuyruğu)", () => {
+  it("karar bekleyen bütün ilanlar: denetimdeki, onay bekleyen ve arşive alınmış olanlar; en eskisi önce", async () => {
+    const { supabase, calls } = fakeSupabase({ vehicles: [{ data: [], error: null }] });
+    expect(await fetchPendingListingRows(supabase)).toEqual({ ok: true, items: [] });
+    expect(calls).toEqual([
+      {
+        table: "vehicles",
+        steps: [
+          ["select", PENDING_LISTING_SELECT],
+          ["eq", "moderation_status", "pending"],
+          ["or", "status.in.(pending_moderation,pending_approval),moderation_reason.not.is.null"],
+          ["order", "created_at", { ascending: true }],
+          ["limit", 200],
+        ],
+      },
+    ]);
+  });
+
+  it("okunamazsa ok: false", async () => {
+    const { supabase } = fakeSupabase({ vehicles: [{ data: null, error: { message: "boom" } }] });
+    expect(await fetchPendingListingRows(supabase)).toEqual({ ok: false });
   });
 });
 

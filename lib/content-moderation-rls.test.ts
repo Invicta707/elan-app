@@ -24,6 +24,8 @@ import {
 const MIGRATIONS_DIR = "supabase/migrations";
 const ENUM_MIGRATION = "20260928100000_vehicle_status_pending_moderation.sql";
 const CONTENT_MIGRATION = "20260928100100_content_moderation.sql";
+/** Zorunlu yönetici onayı: 'pending_approval' (içerik denetimi kurallarının üstüne) */
+const APPROVAL_MIGRATION = "20260928120000_vehicle_status_pending_approval.sql";
 /** Uygulanma sırasıyla; son ikisi test edilen migration'lar */
 const MIGRATIONS = [
   "20260925150000_set_vehicle_status_rpc.sql",
@@ -252,6 +254,7 @@ beforeAll(async () => {
 
   await db.exec(readMigration(ENUM_MIGRATION));
   await db.exec(readMigration(CONTENT_MIGRATION));
+  await db.exec(readMigration(APPROVAL_MIGRATION));
 }, 60_000);
 
 afterAll(async () => {
@@ -265,11 +268,12 @@ describe("migration", () => {
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(migrations.indexOf(CONTENT_MIGRATION)).toBe(migrations.indexOf(ENUM_MIGRATION) + 1);
+    expect(migrations.indexOf(APPROVAL_MIGRATION)).toBeGreaterThan(migrations.indexOf(CONTENT_MIGRATION));
   });
 
   it("vehicle_status'a pending_moderation eklendi", async () => {
     const { rows } = await db.query<{ values: string }>("select enum_range(null::public.vehicle_status)::text as values");
-    expect(rows[0].values).toBe("{draft,pending_video,active,sold,archived,rejected,pending_moderation}");
+    expect(rows[0].values).toBe("{draft,pending_video,active,sold,archived,rejected,pending_moderation,pending_approval}");
   });
 
   it("mevcut ilanlar denetimden geçmiş sayılır; videosu bekleyen ilan denetime girer", async () => {
@@ -418,6 +422,65 @@ describe("vehicles: denetim alanlarını yalnızca sunucu yazar", () => {
     expect(
       await run(db, seller, "select moderation_status from public.vehicles where id = $1", [id]),
     ).toEqual({ ok: true, rows: 1 });
+  });
+});
+
+describe("yönetici onayı bekleyen ilan ('pending_approval')", () => {
+  it("herkese görünmez; satıcı kendisininkini görür", async () => {
+    const id = await seedVehicle(db, "pending_approval", { moderation: "pending" });
+    expect(await run(db, anon, "select 1 from public.vehicles where id = $1", [id])).toEqual({ ok: true, rows: 0 });
+    expect(await run(db, buyer, "select 1 from public.vehicles where id = $1", [id])).toEqual({ ok: true, rows: 0 });
+    expect(await run(db, anon, "select 1 from public.videos where vehicle_id = $1", [id])).toEqual({ ok: true, rows: 0 });
+    expect(await run(db, seller, "select 1 from public.vehicles where id = $1", [id])).toEqual({ ok: true, rows: 1 });
+  });
+
+  it("satıcı ilanı yayına alamaz, geri çekemez; bu duruma da getiremez", async () => {
+    const id = await seedVehicle(db, "pending_approval", { moderation: "pending" });
+    for (const target of ["active", "archived", "sold", "pending_video", "pending_moderation"]) {
+      expect(await run(db, seller, "update public.vehicles set status = $2 where id = $1", [id, target])).toMatchObject({
+        ok: false,
+      });
+    }
+    expect(await run(db, seller, "select public.set_vehicle_status($1, 'active')", [id])).toMatchObject({ ok: false });
+    expect(
+      await run(db, seller, "update public.vehicles set status = 'active', moderation_status = 'approved' where id = $1", [id]),
+    ).toMatchObject({ ok: false });
+    const draft = await seedVehicle(db, "pending_video", { moderation: "pending" });
+    expect(
+      await run(db, seller, "update public.vehicles set status = 'pending_approval' where id = $1", [draft]),
+    ).toMatchObject({ ok: false });
+    expect((await vehicleRow(db, id)).status).toBe("pending_approval");
+  });
+
+  it("sunucu da yönetici kararı ('approved') yazmadan yayına alamaz", async () => {
+    const id = await seedVehicle(db, "pending_approval", { moderation: "pending" });
+    expect(await run(db, serviceRole, "update public.vehicles set status = 'active' where id = $1", [id])).toMatchObject({
+      ok: false,
+      message: "İlan yayınlanamadı: içerik denetimi henüz tamamlanmadı.",
+    });
+    // lib/listing-moderation.ts approve (yönetici onayı): karar ve yayın tek güncellemede
+    expect(
+      await run(
+        db,
+        serviceRole,
+        "update public.vehicles set status = 'active', moderation_status = 'approved', moderation_reason = 'manual' where id = $1 and status in ('pending_moderation', 'pending_approval')",
+        [id],
+      ),
+    ).toEqual({ ok: true, rows: 1 });
+  });
+
+  it("açıklama, fotoğraf ve fotoğraf adresi kilitli", async () => {
+    const id = await seedVehicle(db, "pending_approval", { moderation: "pending" });
+    expect(await run(db, seller, "update public.vehicles set description = 'yeni' where id = $1", [id])).toMatchObject({
+      ok: false,
+      code: "23514",
+    });
+    expect(
+      await run(db, seller, "insert into public.vehicle_images (vehicle_id, image_url) values ($1, $2)", [id, appPhotoUrl(id, 4)]),
+    ).toMatchObject({ ok: false });
+    expect(
+      await run(db, seller, "update public.vehicle_images set image_url = $2 where vehicle_id = $1", [id, appPhotoUrl(id, 6)]),
+    ).toMatchObject({ ok: false });
   });
 });
 

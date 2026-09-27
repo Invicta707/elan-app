@@ -6,13 +6,17 @@
 /**
  * rejected: moderasyonla yayından kaldırıldı ya da içerik denetiminden geçmedi;
  * satıcı bu durumdan çıkamaz (bkz. *_moderation.sql).
- * pending_moderation: video işlendi, otomatik içerik denetimi bekleniyor; satıcı
- * bu duruma ne girebilir ne çıkabilir (bkz. *_vehicle_status_pending_moderation.sql).
+ * pending_moderation: video işlendi, otomatik içerik denetimi sürüyor ya da
+ * denetim karar veremedi (şüpheli); bkz. *_vehicle_status_pending_moderation.sql.
+ * pending_approval: otomatik denetim temiz buldu; yönetici onayı bekleniyor.
+ * Yayına yalnızca yönetici alır (bkz. *_vehicle_status_pending_approval.sql).
+ * Satıcı bu iki duruma ne girebilir ne çıkabilir.
  */
 export type VehicleStatus =
   | "draft"
   | "pending_video"
   | "pending_moderation"
+  | "pending_approval"
   | "active"
   | "sold"
   | "archived"
@@ -25,6 +29,7 @@ export const VEHICLE_STATUSES: readonly VehicleStatus[] = [
   "draft",
   "pending_video",
   "pending_moderation",
+  "pending_approval",
   "active",
   "sold",
   "archived",
@@ -35,6 +40,7 @@ export const STATUS_LABELS: Record<VehicleStatus, string> = {
   draft: "Taslak",
   pending_video: "Video işleniyor",
   pending_moderation: "İnceleniyor",
+  pending_approval: "Onay bekliyor",
   active: "Yayında",
   sold: "Satıldı",
   archived: "Yayından kaldırıldı",
@@ -47,6 +53,7 @@ export const OWNER_TRANSITIONS: Record<VehicleStatus, readonly VehicleStatus[]> 
   draft: ["archived"],
   pending_video: ["archived"],
   pending_moderation: [],
+  pending_approval: [],
   sold: [],
   rejected: [],
 };

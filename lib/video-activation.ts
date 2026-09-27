@@ -3,8 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ModerationStatus, VehicleStatus } from "./listing-status";
 
 // Video hazır olunca ilan doğrudan yayına alınmaz: önce içerik denetimine
-// ('pending_moderation') girer; yayına alma kararını lib/listing-moderation.ts
-// verir. Bu durumlardaki ilan karantinaya alınır:
+// ('pending_moderation') girer (lib/listing-moderation.ts); temiz çıkarsa
+// 'pending_approval'da yönetici onayını bekler. Yayına yalnızca yönetici alır.
+// Bu durumlardaki ilan karantinaya alınır:
 const QUARANTINABLE_STATUSES: readonly VehicleStatus[] = ["draft", "pending_video"];
 
 export type VideoReadyInput = {

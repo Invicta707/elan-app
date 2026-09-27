@@ -50,6 +50,9 @@ function fakeStore(listing: Snapshot | null, { publishes = true } = {}) {
       events.push(`approve:${reason}`);
       return { published: publishes };
     }),
+    awaitApproval: vi.fn(async () => {
+      events.push("await-approval");
+    }),
     hold: vi.fn(async (_id, reason) => {
       events.push(`hold:${reason}`);
     }),
@@ -159,11 +162,12 @@ describe("evaluateListing", () => {
 });
 
 describe("moderateListing", () => {
-  it("safe: onaylanır, yayına girer, kayıt yazılır", async () => {
+  it("safe: yayına GİRMEZ, yönetici onayı bekler; kayıt yazılır", async () => {
     const { store, events, recorded } = fakeStore(snapshot());
     const result = await moderateListing(VEHICLE, { store, providers: { image: imageModerator(), text: null } });
-    expect(result).toEqual({ status: "decided", decision: "safe", reasons: [], published: true });
-    expect(events).toEqual(["approve:null"]);
+    expect(result).toEqual({ status: "decided", decision: "safe", reasons: [], published: false });
+    expect(events).toEqual(["await-approval"]);
+    expect(store.approve).not.toHaveBeenCalled();
     expect(recorded).toEqual([
       expect.objectContaining({ subjectType: "listing", subjectId: VEHICLE, userId: SELLER, verdict: expect.objectContaining({ decision: "safe" }) }),
     ]);
@@ -196,6 +200,28 @@ describe("moderateListing", () => {
     expect(store.record).toHaveBeenCalled();
   });
 
+  it("otomatik denetim hiçbir sonuçta ilanı onaylamaz ya da yayına almaz", async () => {
+    const cases: CategoryScores[] = [{}, { gore: 0.5 }, { sexual: 0.95 }, { suggestive: 0.9 }];
+    for (const scores of cases) {
+      const { store } = fakeStore(snapshot());
+      const result = await moderateListing(VEHICLE, { store, providers: { image: imageModerator(() => scores), text: null } });
+      expect(result).toMatchObject({ status: "decided", published: false });
+      expect(store.approve).not.toHaveBeenCalled();
+    }
+    const unavailable = fakeStore(snapshot());
+    await moderateListing(VEHICLE, { store: unavailable.store, providers: { image: null, text: null } });
+    expect(unavailable.store.approve).not.toHaveBeenCalled();
+  });
+
+  it("onay bekleyen ilan yeniden denetlenirse yine onay bekler (Tekrar denetle)", async () => {
+    const { store, events } = fakeStore(snapshot({ status: "pending_approval", moderationReason: "ai:safe" }));
+    expect(await moderateListing(VEHICLE, { store, providers: { image: imageModerator(), text: null } })).toMatchObject({
+      decision: "safe",
+      published: false,
+    });
+    expect(events).toEqual(["await-approval"]);
+  });
+
   it("karar verilmiş ya da olmayan ilanda hiçbir şey yapılmaz (webhook tekrarı)", async () => {
     const decided = fakeStore(snapshot({ moderationStatus: "approved", status: "active" }));
     const image = imageModerator();
@@ -215,6 +241,13 @@ describe("moderateListing", () => {
 });
 
 describe("decideListingManually", () => {
+  it("onay bekleyen ilanı yönetici onaylar: yayına alan tek yol", async () => {
+    const { store, events } = fakeStore(snapshot({ status: "pending_approval", moderationReason: "ai:safe" }));
+    expect(await decideListingManually(store, VEHICLE, "approve", ADMIN)).toEqual({ ok: true, published: true });
+    expect(events).toEqual(["approve:manual"]);
+    expect(store.awaitApproval).not.toHaveBeenCalled();
+  });
+
   it("onay: yayına alır, kararı yöneticiyle kaydeder", async () => {
     const { store, events, recorded } = fakeStore(snapshot({ moderationReason: "review:gore" }));
     expect(await decideListingManually(store, VEHICLE, "approve", ADMIN)).toEqual({ ok: true, published: true });
@@ -319,11 +352,45 @@ describe("createListingModerationStore", () => {
         steps: [
           ["update", { moderation_status: "approved", moderation_reason: null, moderated_at: NOW.toISOString(), status: "active" }],
           ["eq", "id", VEHICLE],
-          ["eq", "status", "pending_moderation"],
+          ["in", "status", ["pending_moderation", "pending_approval"]],
           ["eq", "moderation_status", "pending"],
           ["select", "id"],
         ],
       },
+    ]);
+  });
+
+  it("awaitApproval: yayına almaz, onay bekleyen duruma geçirir; denetim 'pending' kalır", async () => {
+    const { supabase, calls } = fakeSupabase({ vehicles: [{ data: [{ id: VEHICLE }], error: null }] });
+    await createListingModerationStore(supabase, { now: () => NOW }).awaitApproval(VEHICLE);
+    expect(calls).toEqual([
+      {
+        table: "vehicles",
+        steps: [
+          ["update", { status: "pending_approval", moderation_reason: "ai:safe" }],
+          ["eq", "id", VEHICLE],
+          ["in", "status", ["pending_moderation", "pending_approval"]],
+          ["eq", "moderation_status", "pending"],
+          ["select", "id"],
+        ],
+      },
+    ]);
+    expect(JSON.stringify(calls)).not.toContain("approved");
+    expect(JSON.stringify(calls)).not.toContain('"active"');
+  });
+
+  it("awaitApproval: arşive alınmış ilanda yalnızca neden yazılır (kuyrukta görünsün)", async () => {
+    const { supabase, calls } = fakeSupabase({
+      vehicles: [
+        { data: [], error: null },
+        { data: null, error: null },
+      ],
+    });
+    await createListingModerationStore(supabase).awaitApproval(VEHICLE);
+    expect(calls[1].steps).toEqual([
+      ["update", { moderation_reason: "ai:safe" }],
+      ["eq", "id", VEHICLE],
+      ["eq", "moderation_status", "pending"],
     ]);
   });
 

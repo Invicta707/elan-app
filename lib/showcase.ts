@@ -30,6 +30,11 @@ export function showcaseStats(listings: readonly { status: VehicleStatus; viewsC
   };
 }
 
+/** Yayına girmeyi bekliyor: içerik denetiminde ya da yönetici onayında */
+export function isAwaitingApproval(listing: { status: VehicleStatus }): boolean {
+  return listing.status === "pending_moderation" || listing.status === "pending_approval";
+}
+
 /** İçerik denetiminden geçmediği için yayınlanmadı (moderasyonun sonradan kaldırdığı ilandan ayrı) */
 export function isContentRejected(listing: { status: VehicleStatus; moderationStatus: ModerationStatus }): boolean {
   return listing.status === "rejected" && listing.moderationStatus === "rejected";
@@ -39,6 +44,7 @@ export function isContentRejected(listing: { status: VehicleStatus; moderationSt
 export function tileBadge(listing: { status: VehicleStatus; moderationStatus: ModerationStatus }): string | null {
   if (isLive(listing.status)) return null;
   if (listing.status === "pending_moderation") return "İnceleniyor";
+  if (listing.status === "pending_approval") return "Onay bekliyor";
   if (isContentRejected(listing)) return "Yayınlanmadı";
   return "Yayında Değil";
 }

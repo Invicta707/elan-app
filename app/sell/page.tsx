@@ -128,7 +128,7 @@ export default function SellPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [devNotice, setDevNotice] = useState<string | null>(null);
   const [processingConfirmed, setProcessingConfirmed] = useState(false);
-  // Yalnızca yerelde bilinir: canlıda denetim, gönderimden sonra webhook'la çalışır
+  // Yayına yalnızca yönetici onayıyla girer; gönderim anında pratikte hep false
   const [published, setPublished] = useState(false);
 
   const uploadAbortRef = useRef<(() => void) | null>(null);
@@ -472,7 +472,9 @@ export default function SellPage() {
               setDevNotice("Yerel geliştirme: içerik denetimi ilanı reddetti.");
             } else if (!devBody.published) {
               setDevNotice(
-                "Yerel geliştirme: ilan içerik denetiminde. Görsel denetim sağlayıcısı tanımlı değilse /admin/reports'tan onaylanmalı.",
+                devBody.decision === "safe"
+                  ? "Yerel geliştirme: otomatik tarama temiz; ilan /admin/reports'tan yönetici onayı bekliyor."
+                  : "Yerel geliştirme: ilan içerik denetiminde (şüpheli ya da denetlenemedi); /admin/reports'tan karar verilmeli.",
               );
             }
           }

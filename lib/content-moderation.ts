@@ -140,10 +140,16 @@ export function moderationReasonCode(verdict: ModerationVerdict): string | null 
 }
 
 export const MANUAL_REASON = "manual";
+/**
+ * Otomatik denetim temiz buldu, yönetici onayı bekleniyor (ilan 'pending_approval').
+ * Yapay zekâ ilanı hiçbir zaman kendisi yayına almaz: video yalnızca örnek
+ * karelerden taranır, kareler arasındaki sahne kaçabilir.
+ */
+export const AI_SAFE_REASON = "ai:safe";
 
 /** moderation_reason → nedenler (yönetim paneli için) */
 export function parseReasonCode(code: string | null): ModerationReason[] {
-  if (!code || code === MANUAL_REASON) return [];
+  if (!code || code === MANUAL_REASON || code === AI_SAFE_REASON) return [];
   const list = code.startsWith("review:") ? code.slice("review:".length).split(",") : [code];
   return list.filter(
     (reason): reason is ModerationReason => reason === "unavailable" || Object.hasOwn(THRESHOLDS, reason),
@@ -208,7 +214,9 @@ export function videoModerationFrames(thumbnailUrl: string, durationSeconds: num
 
 export const LISTING_REJECTED_MESSAGE = "Yüklenen içerik topluluk kurallarına uymadığı için yayınlanmadı.";
 export const LISTING_IN_REVIEW_MESSAGE =
-  "İlanın içerik denetiminde. Genelde birkaç dakika sürer; gerekirse ekibimiz inceler ve sonra yayına girer.";
+  "İlanın içerik denetiminde. Denetimden ve yönetici onayından sonra yayına alınacak.";
+export const LISTING_AWAITING_APPROVAL_MESSAGE =
+  "İlanınız onay bekliyor, yönetici incelemesinden sonra yayına alınacaktır.";
 export const AVATAR_REJECTED_MESSAGE =
   "Bu fotoğraf topluluk kurallarına uymadığı için kullanılamaz. Başka bir fotoğraf seç.";
 export const AVATAR_UNAVAILABLE_MESSAGE = "Fotoğraf şu an denetlenemiyor. Biraz sonra tekrar dene.";

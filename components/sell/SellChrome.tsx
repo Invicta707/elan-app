@@ -291,7 +291,7 @@ export function SellSuccess({
 }: {
   hasPhotos: boolean;
   processingConfirmed: boolean;
-  /** İçerik denetiminden geçip yayına girdi (yalnızca yerelde bilinir) */
+  /** Yönetici onayıyla yayına girdi (gönderim anında pratikte hep false) */
   published?: boolean;
   devNotice: string | null;
 }) {
@@ -306,8 +306,8 @@ export function SellSuccess({
           {published
             ? "Video işlendi ve içerik denetiminden geçti; ilanın yayında."
             : processingConfirmed
-              ? "Video işlendi; ilanın içerik denetiminde."
-              : "Video işlenip otomatik içerik denetiminden geçince ilanın yayına girecek. Bu genelde birkaç dakika sürer."}
+              ? "Video işlendi; ilanın içerik denetiminde ve yönetici onayını bekliyor."
+              : "Video işlendikten sonra ilanın içerik denetiminden ve yönetici onayından geçip yayına alınacak."}
         </p>
 
         <div className="mt-5 rounded-xl bg-[#FAFBFC] p-4 text-left">

@@ -1,4 +1,5 @@
 import {
+  AI_SAFE_REASON,
   parseReasonCode,
   videoModerationFrames,
   type ModerationDecision,
@@ -168,20 +169,44 @@ export async function submitModerationAction(
 // İçerik denetimi kuyruğu (/api/admin/listings)
 // ---------------------------------------------------------------
 //
-// Otomatik denetimin karar veremediği ilanlar: şüpheli (%40–60), sağlayıcı
-// tanımlı değil ya da hata verdi, ya da denetim yarıda kaldı. Hepsi
-// 'pending_moderation'da, akışta görünmez; burada bir insan karar verir.
+// Yayına yalnızca yönetici alır. Kuyrukta: otomatik denetimi temiz bulunup onay
+// bekleyen ('pending_approval'), şüpheli (%40–60) ya da denetlenemeyen
+// (sağlayıcı yok / hata) ve denetimi yarıda kalan ('pending_moderation')
+// ilanlar. Hepsi akışta görünmez; burada bir insan karar verir.
 
 export type PendingListing = {
   vehicle: MyListing;
   description: string | null;
-  /** Otomatik denetimin nedenleri (şüpheli kategori ya da "unavailable") */
+  /** Otomatik denetimin şüphe nedenleri (kategori ya da "unavailable") */
   reasons: ModerationReason[];
-  /** Otomatik denetim bitti ama karar veremedi. false: denetim sürüyor ya da yarıda kaldı */
+  /** Otomatik denetim bitti. false: denetim sürüyor ya da yarıda kaldı */
   needsReview: boolean;
+  /** Otomatik denetim temiz buldu; yalnızca yönetici onayı bekleniyor */
+  aiClean: boolean;
   /** İnceleme için video kareleri (kapak + ara kareler) ve fotoğraflar */
   media: string[];
+  /**
+   * Videonun tamamı (Cloudflare Stream izleme sayfası). Otomatik denetim yalnızca
+   * örnek karelere bakar; yönetici onaylamadan önce videoyu baştan sona izlemeli.
+   */
+  watchUrl: string | null;
 };
+
+/**
+ * Cloudflare Stream HLS adresinden izleme sayfası:
+ * https://customer-<kod>.cloudflarestream.com/<uid>/manifest/video.m3u8 → …/<uid>/watch
+ */
+export function streamWatchUrl(hlsUrl: string | null): string | null {
+  if (!hlsUrl) return null;
+  try {
+    const url = new URL(hlsUrl);
+    const match = /^\/([0-9a-f]{32})\/manifest\/video\.m3u8$/i.exec(url.pathname);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".cloudflarestream.com") || !match) return null;
+    return `${url.origin}/${match[1]}/watch`;
+  } catch {
+    return null;
+  }
+}
 
 export type PendingListingRow = Omit<MyListingRow, "videos"> & {
   description: string | null;
@@ -192,8 +217,9 @@ export type PendingListingRow = Omit<MyListingRow, "videos"> & {
 };
 
 export function toPendingListing(row: PendingListingRow): PendingListing {
-  const frames = (row.videos ?? [])
-    .filter((video) => video.status === "ready" && video.hls_url && video.thumbnail_url)
+  const readyVideos = (row.videos ?? []).filter((video) => video.status === "ready" && video.hls_url);
+  const frames = readyVideos
+    .filter((video) => video.thumbnail_url)
     .flatMap((video) => videoModerationFrames(video.thumbnail_url as string, video.duration_seconds ?? null));
   const photos = [...(row.images ?? [])]
     .sort((a, b) => a.display_order - b.display_order)
@@ -203,7 +229,9 @@ export function toPendingListing(row: PendingListingRow): PendingListing {
     description: row.description,
     reasons: parseReasonCode(row.moderation_reason),
     needsReview: row.moderation_reason !== null,
+    aiClean: row.moderation_reason === AI_SAFE_REASON,
     media: [...frames, ...photos],
+    watchUrl: streamWatchUrl(readyVideos[0]?.hls_url ?? null),
   };
 }
 

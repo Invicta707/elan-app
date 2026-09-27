@@ -24,6 +24,7 @@ const MIGRATIONS = [
   HARDEN_MIGRATION,
 ];
 const PENDING_MODERATION_MIGRATION = "20260928100000_vehicle_status_pending_moderation.sql";
+const PENDING_APPROVAL_MIGRATION = "20260928120000_vehicle_status_pending_approval.sql";
 const readMigration = (name: string) => readFileSync(`${MIGRATIONS_DIR}/${name}`, "utf8");
 
 const SELLER = "11111111-1111-4111-8111-111111111111";
@@ -232,9 +233,10 @@ beforeAll(async () => {
   // Uzak veritabanındaki gibi: migration'dan önce yüklenmiş bir fotoğraf
   await seedVehicle(db, "archived");
   await db.exec(readMigration(HARDEN_MIGRATION));
-  // Sonradan eklenen durum (VEHICLE_STATUSES'ta var): geçiş tablosu onu "else array[]"
+  // Sonradan eklenen durumlar (VEHICLE_STATUSES'ta var): geçiş tablosu onları "else array[]"
   // dalıyla karşılamalı. Denetim kuralları lib/content-moderation-rls.test.ts'te.
   await db.exec(readMigration(PENDING_MODERATION_MIGRATION));
+  await db.exec(readMigration(PENDING_APPROVAL_MIGRATION));
 }, 60_000);
 
 afterAll(async () => {

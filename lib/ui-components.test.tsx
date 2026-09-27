@@ -92,6 +92,12 @@ describe("ShowcaseTile", () => {
     expect(onManage).toHaveBeenCalledWith(expect.objectContaining({ id: "veh-1", status: "archived" }));
   });
 
+  it("yönetici onayı bekleyen ilan: \"Onay bekliyor\"", () => {
+    render(<ShowcaseTile listing={{ ...listing, status: "pending_approval", moderationStatus: "pending" }} onManage={vi.fn()} />);
+    expect(screen.getByText("Onay bekliyor")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
   it("içerik denetimindeki ilan: \"İnceleniyor\"", () => {
     render(<ShowcaseTile listing={{ ...listing, status: "pending_moderation", moderationStatus: "pending" }} onManage={vi.fn()} />);
     expect(screen.getByText("İnceleniyor")).toBeTruthy();
@@ -529,6 +535,20 @@ describe("ListingManageSheet: içerik denetimi", () => {
     );
     expect(screen.getByText("Yüklenen içerik topluluk kurallarına uymadığı için yayınlanmadı.")).toBeTruthy();
     expect(screen.queryByText("Yayına al")).toBeNull();
+  });
+
+  it("yönetici onayı bekleyen ilan: kullanıcıya verilen metin, aksiyon yok", () => {
+    render(
+      <ListingManageSheet
+        listing={{ ...listing, status: "pending_approval", moderationStatus: "pending" }}
+        onClose={vi.fn()}
+        onStatusChanged={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("İlanınız onay bekliyor, yönetici incelemesinden sonra yayına alınacaktır.")).toBeTruthy();
+    expect(screen.getByText(/Onay bekliyor/)).toBeTruthy();
+    expect(screen.queryByText("Yayına al")).toBeNull();
+    expect(screen.queryByText("İlanı geri çek")).toBeNull();
   });
 
   it("denetimdeki ilan: bilgi notu", () => {

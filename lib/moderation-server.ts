@@ -147,10 +147,11 @@ export const PENDING_LISTING_SELECT = `id, status, moderation_status, moderation
 export const PENDING_LISTINGS_LIMIT = 200;
 
 /**
- * Kararı insana kalan ilanlar, en eskisi önce: denetimi bekleyen
- * ('pending_moderation') ilanlar ile otomatik denetimin şüpheli bulduğu ama
- * satıcının arada arşive aldığı ilanlar (moderation_reason dolu). Videosu henüz
- * işlenmemiş ilanlar ('pending_video') burada görünmez.
+ * Yönetici kararını bekleyen ilanlar, en eskisi önce: otomatik denetimi süren
+ * ya da şüpheli ('pending_moderation'), otomatik denetimi temiz bulan
+ * ('pending_approval') ve bunlardan satıcının arada arşive aldıkları
+ * (moderation_reason dolu). Hiçbir ilan yönetici onayı olmadan yayına girmez.
+ * Videosu henüz işlenmemiş ilanlar ('pending_video') burada görünmez.
  */
 export async function fetchPendingListingRows(
   supabase: SupabaseClient,
@@ -159,7 +160,7 @@ export async function fetchPendingListingRows(
     .from("vehicles")
     .select(PENDING_LISTING_SELECT)
     .eq("moderation_status", "pending")
-    .or("status.eq.pending_moderation,moderation_reason.not.is.null")
+    .or("status.in.(pending_moderation,pending_approval),moderation_reason.not.is.null")
     .order("created_at", { ascending: true })
     .limit(PENDING_LISTINGS_LIMIT);
 

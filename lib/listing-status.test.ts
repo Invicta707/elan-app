@@ -42,6 +42,7 @@ describe("OWNER_TRANSITIONS", () => {
     ["draft", ["archived"]],
     ["pending_video", ["archived"]],
     ["pending_moderation", []],
+    ["pending_approval", []],
     ["sold", []],
     ["rejected", []],
   ])("%s → %j", (from, targets) => {
@@ -124,9 +125,11 @@ describe("statusActions", () => {
     ).toEqual(["active", "sold"]);
   });
 
-  it("denetim bekleyen ilanda satıcının aksiyonu yok; satıcı ilanı bu duruma da getiremez", () => {
-    expect(statusActions("pending_moderation", withVideo)).toEqual([]);
-    for (const status of VEHICLE_STATUSES) expect(canTransition(status, "pending_moderation")).toBe(false);
+  it("denetim ya da yönetici onayı bekleyen ilanda satıcının aksiyonu yok; satıcı ilanı bu durumlara da getiremez", () => {
+    for (const pending of ["pending_moderation", "pending_approval"] as const) {
+      expect(statusActions(pending, withVideo)).toEqual([]);
+      for (const status of VEHICLE_STATUSES) expect(canTransition(status, pending)).toBe(false);
+    }
   });
 
   it("hiç yayınlanmamış ilan geri çekilebilir", () => {

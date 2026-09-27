@@ -4,7 +4,7 @@ import { EyeOff, Hourglass, MoreHorizontal, Play, ShieldAlert } from "lucide-rea
 import Image from "next/image";
 import Link from "next/link";
 import type { MyListing } from "../../lib/my-listings";
-import { formatCount, formatTilePrice, isContentRejected, isLive, tileBadge } from "../../lib/showcase";
+import { formatCount, formatTilePrice, isAwaitingApproval, isContentRejected, isLive, tileBadge } from "../../lib/showcase";
 
 // Vitrinim ızgarasının dikey karesi (Reels / TikTok profili gibi): video
 // kapağı, sol altta cam efektli fiyat, sağ altta görüntülenme. Yayındaki ilan
@@ -25,7 +25,7 @@ export default function ShowcaseTile({
   const views = formatCount(listing.viewsCount);
   const badge = tileBadge(listing);
   const rejected = isContentRejected(listing);
-  const BadgeIcon = rejected ? ShieldAlert : listing.status === "pending_moderation" ? Hourglass : EyeOff;
+  const BadgeIcon = rejected ? ShieldAlert : isAwaitingApproval(listing) ? Hourglass : EyeOff;
   const label = `${listing.title} ${listing.year}, ${price}, ${listing.viewsCount} görüntülenme${badge ? `, ${badge.toLocaleLowerCase("tr")}` : ""}`;
 
   const body = (
@@ -52,7 +52,7 @@ export default function ShowcaseTile({
       <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
 
       {/* Pasif ilan: kararmış karenin ortasında etiket (köşedeki menüyle çakışmaz).
-          İçerik denetimi: "İnceleniyor" / "Yayınlanmadı" */}
+          İçerik denetimi: "İnceleniyor" / "Onay bekliyor" / "Yayınlanmadı" */}
       {badge && (
         <span className="absolute inset-x-1 top-1/2 flex -translate-y-1/2 justify-center">
           <span

@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deleteStreamVideo } from "./cloudflare";
 import {
+  AI_SAFE_REASON,
   MANUAL_REASON,
   combineVerdicts,
   moderationReasonCode,
@@ -23,12 +24,19 @@ import { getSupabaseAdmin } from "./supabase-server";
 //      fotoğrafları değiştiremez (bkz. *_content_moderation.sql).
 //   2) moderateListing: açıklama (temel filtre + OpenAI), fotoğraflar ve video
 //      kareleri (kapak + 5 ara kare) denetlenir.
-//   3) Karar:
-//        safe     → denetim 'approved', ilan 'active' (akışa girer)
-//        flagged  → ilan beklemede; /admin/reports'ta insan karar verir
+//   3) Otomatik karar:
+//        safe     → ilan 'pending_approval' (yönetici onayı bekler). Yapay zekâ
+//                   ilanı hiçbir zaman kendisi yayına almaz: video yalnızca örnek
+//                   karelerden taranır, kareler arasındaki sahne kaçabilir
+//                   (27 Eylül 2026'daki testte kaçtı).
+//        flagged  → ilan 'pending_moderation'da kalır, neden yazılır
 //        rejected → ilan ve denetim 'rejected'; Cloudflare videoları, Storage
 //                   fotoğrafları ve kayıtları silinir; Vitrinim'de uyarı çıkar
-//   4) Her karar content_moderation_events'e yazılır.
+//   4) Yayın: yalnızca yönetici /admin/reports → "İçerik denetimi"nde onaylayınca
+//      (decideListingManually) denetim 'approved', ilan 'active' olur. Yayın
+//      şartı (fn_check_vehicle_publishable) 'approved'ı ister ve onu yalnızca bu
+//      elle karar yazar.
+//   5) Her karar content_moderation_events'e yazılır.
 //
 // Veritabanı işlemleri ListingModerationStore arkasında: karar mantığı
 // lib/listing-moderation.test.ts'te sahte bir depoyla sınanır.
@@ -50,8 +58,13 @@ export type ListingSnapshot = {
 
 export interface ListingModerationStore {
   load(vehicleId: string): Promise<ListingSnapshot | null>;
-  /** Denetim 'approved'; ilan 'pending_moderation'daysa aynı güncellemede 'active'. */
+  /**
+   * Yalnızca yönetici kararı: denetim 'approved'; ilan onay/denetim bekliyorsa
+   * aynı güncellemede 'active'.
+   */
   approve(vehicleId: string, reason: string | null): Promise<{ published: boolean }>;
+  /** Otomatik denetim temiz buldu: ilan 'pending_approval', yönetici onayı bekler */
+  awaitApproval(vehicleId: string): Promise<void>;
   /** Karar insana kalır: ilan beklemede, neden yazılır */
   hold(vehicleId: string, reason: string): Promise<void>;
   /** İlan ve denetim 'rejected' */
@@ -87,28 +100,33 @@ export async function evaluateListing(
   return combineVerdicts(verdicts);
 }
 
+/**
+ * published: yalnızca yönetici onayında true olabilir; otomatik denetim hiçbir
+ * zaman yayına almaz (temizse ilan yönetici onayı bekler).
+ */
 export type ListingModerationResult =
   | { status: "skipped"; reason: "not_found" | "already_decided" }
   | { status: "decided"; decision: ModerationDecision; reasons: ModerationVerdict["reasons"]; published: boolean };
 
-/** Karar denetimden ya da yönetim panelinden gelir; uygulanışı aynı */
-async function applyDecision(
-  store: ListingModerationStore,
-  listing: ListingSnapshot,
-  decision: ModerationDecision,
-  reason: string | null,
-): Promise<{ published: boolean }> {
-  if (decision === "safe") return store.approve(listing.id, reason);
-  if (decision === "flagged") {
-    await store.hold(listing.id, reason ?? "review:unknown");
-    return { published: false };
-  }
-  await store.reject(listing.id, reason ?? "rejected");
+/** Ret (otomatik ya da elle): ilan ve denetim 'rejected', medya silinir */
+async function rejectAndPurge(store: ListingModerationStore, listing: ListingSnapshot, reason: string): Promise<void> {
+  await store.reject(listing.id, reason);
   // İlan artık görünmüyor; temizlik yarım kalırsa kararı geri almaz, loglanır
   await store.purgeMedia(listing).catch((error) =>
     console.error("İçerik denetimi: reddedilen ilanın medyası silinemedi:", listing.id, error),
   );
-  return { published: false };
+}
+
+/** Otomatik denetimin kararı: temiz → yönetici onayı bekler, şüpheli → beklemede, ihlal → ret */
+async function applyAutomaticDecision(
+  store: ListingModerationStore,
+  listing: ListingSnapshot,
+  verdict: ModerationVerdict,
+): Promise<void> {
+  const reason = moderationReasonCode(verdict);
+  if (verdict.decision === "safe") await store.awaitApproval(listing.id);
+  else if (verdict.decision === "flagged") await store.hold(listing.id, reason ?? "review:unknown");
+  else await rejectAndPurge(store, listing, reason ?? "rejected");
 }
 
 /**
@@ -125,16 +143,20 @@ export async function moderateListing(
   if (listing.moderationStatus !== "pending") return { status: "skipped", reason: "already_decided" };
 
   const verdict = await evaluateListing(listing, providers);
-  const { published } = await applyDecision(store, listing, verdict.decision, moderationReasonCode(verdict));
+  await applyAutomaticDecision(store, listing, verdict);
   await store.record({ subjectType: "listing", subjectId: listing.id, userId: listing.sellerId, verdict });
-  return { status: "decided", decision: verdict.decision, reasons: verdict.reasons, published };
+  return { status: "decided", decision: verdict.decision, reasons: verdict.reasons, published: false };
 }
 
 export type ManualDecisionResult =
   | { ok: true; published: boolean }
   | { ok: false; code: "vehicle_not_found" | "already_decided" };
 
-/** Yönetim panelinden elle karar: onayla (yayına alır) ya da reddet (medyayı siler) */
+/**
+ * Yönetim panelinden elle karar: onayla (yayına alan tek yol) ya da reddet
+ * (medyayı siler). Otomatik denetim sürerken, şüpheli bulduğunda ya da temiz
+ * bulduğunda (onay bekleyen ilan) verilebilir; karar verilmiş ilana verilemez.
+ */
 export async function decideListingManually(
   store: ListingModerationStore,
   vehicleId: string,
@@ -146,7 +168,9 @@ export async function decideListingManually(
   if (listing.moderationStatus !== "pending") return { ok: false, code: "already_decided" };
 
   const outcome: ModerationDecision = decision === "approve" ? "safe" : "rejected";
-  const { published } = await applyDecision(store, listing, outcome, MANUAL_REASON);
+  let published = false;
+  if (decision === "approve") ({ published } = await store.approve(listing.id, MANUAL_REASON));
+  else await rejectAndPurge(store, listing, MANUAL_REASON);
   await store.record({
     subjectType: "listing",
     subjectId: listing.id,
@@ -193,6 +217,9 @@ export function toListingSnapshot(row: ListingRow): ListingSnapshot {
   };
 }
 
+/** Yönetici kararını bekleyen durumlar: denetimde (ya da şüpheli) ve onay bekleyen */
+const AWAITING_DECISION_STATUSES: VehicleStatus[] = ["pending_moderation", "pending_approval"];
+
 export const LISTING_MODERATION_SELECT = `id, seller_id, status, moderation_status, moderation_reason, description, city,
   images:vehicle_images(image_url),
   videos(stream_uid, status, hls_url, thumbnail_url, duration_seconds)`;
@@ -219,7 +246,7 @@ export function createListingModerationStore(
         .from("vehicles")
         .update({ ...decided, status: "active" })
         .eq("id", vehicleId)
-        .eq("status", "pending_moderation")
+        .in("status", AWAITING_DECISION_STATUSES)
         .eq("moderation_status", "pending")
         .select("id");
       if (error) throw error;
@@ -233,6 +260,27 @@ export function createListingModerationStore(
         .eq("moderation_status", "pending");
       if (approveError) throw approveError;
       return { published: false };
+    },
+
+    async awaitApproval(vehicleId) {
+      // Yayına almaz: moderation_status 'pending' kalır (yayın şartı 'approved' ister)
+      const { data, error } = await supabase
+        .from("vehicles")
+        .update({ status: "pending_approval", moderation_reason: AI_SAFE_REASON })
+        .eq("id", vehicleId)
+        .in("status", AWAITING_DECISION_STATUSES)
+        .eq("moderation_status", "pending")
+        .select("id");
+      if (error) throw error;
+      if (data?.length) return;
+
+      // Satıcı ilanı denetim sürerken arşive aldıysa: durum aynı; yönetici kuyruğunda görünsün diye neden yazılır
+      const { error: reasonError } = await supabase
+        .from("vehicles")
+        .update({ moderation_reason: AI_SAFE_REASON })
+        .eq("id", vehicleId)
+        .eq("moderation_status", "pending");
+      if (reasonError) throw reasonError;
     },
 
     async hold(vehicleId, reason) {
@@ -293,7 +341,7 @@ export function createListingModerationStore(
 /**
  * Webhook ve geliştirme rotası buradan çağırır. Hata fırlatmaz: denetim yarıda
  * kalırsa ilan 'pending_moderation'da kalır ve yönetim panelinde "Tekrar
- * denetle" ile yeniden başlatılabilir.
+ * denetle" ile yeniden başlatılabilir. Temiz sonuç ilanı yayına almaz.
  */
 export async function runListingModeration(vehicleId: string): Promise<ListingModerationResult | null> {
   try {

@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./supabase", () => ({ supabase: {} }));
 
-import { formatCount, formatTilePrice, isContentRejected, isLive, showcaseStats, tileBadge } from "./showcase";
+import {
+  formatCount,
+  formatTilePrice,
+  isAwaitingApproval,
+  isContentRejected,
+  isLive,
+  showcaseStats,
+  tileBadge,
+} from "./showcase";
 
 describe("formatTilePrice", () => {
   it.each([
@@ -47,12 +55,20 @@ describe("içerik denetimi etiketleri", () => {
     ["active", "approved", null],
     ["pending_video", "pending", "Yayında Değil"],
     ["pending_moderation", "pending", "İnceleniyor"],
+    ["pending_approval", "pending", "Onay bekliyor"],
     ["rejected", "rejected", "Yayınlanmadı"],
     // Moderasyonun bildirim sonrası kaldırdığı ilan: içerik denetiminden geçmişti
     ["rejected", "approved", "Yayında Değil"],
     ["archived", "approved", "Yayında Değil"],
   ] as const)("%s + %s → %s", (status, moderationStatus, badge) => {
     expect(tileBadge({ status, moderationStatus })).toBe(badge);
+  });
+
+  it("yayına girmeyi bekleyenler: denetimdeki ve yönetici onayı bekleyen", () => {
+    expect(isAwaitingApproval({ status: "pending_approval" })).toBe(true);
+    expect(isAwaitingApproval({ status: "pending_moderation" })).toBe(true);
+    expect(isAwaitingApproval({ status: "active" })).toBe(false);
+    expect(isAwaitingApproval({ status: "pending_video" })).toBe(false);
   });
 
   it("yalnızca içerik denetiminin reddettiği ilan \"yayınlanmadı\" uyarısı alır", () => {

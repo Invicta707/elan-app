@@ -16,7 +16,7 @@ import { markVideoReadyAndQueueModeration } from "../../../../lib/video-activati
 // çalıştırılabilir (idempotent). 5xx dönülen bildirimler tekrar denenebilir.
 //
 // Video hazır olunca ilan yayına değil içerik denetimine girer
-// ('pending_moderation'). Denetim (video kareleri, fotoğraflar, açıklama) yanıt
+// ('pending_moderation'); temiz çıkarsa yönetici onayını bekler ('pending_approval'). Denetim (video kareleri, fotoğraflar, açıklama) yanıt
 // gönderildikten sonra after() içinde çalışır: Cloudflare beklemez, sağlayıcı
 // yavaşsa bile bildirim zaman aşımına düşmez. Denetim yarıda kalırsa ilan
 // incelemede kalır (bkz. lib/listing-moderation.ts runListingModeration).
