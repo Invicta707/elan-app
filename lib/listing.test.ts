@@ -57,6 +57,9 @@ describe("validateListingDraft", () => {
     ["yakıt türü yok", { fuelType: "" }, "Yakıt türü seç."],
     ["vites yok", { transmission: "" }, "Vites tipi seç."],
     ["numara geçersiz", { whatsapp: "12345" }, "Geçerli bir WhatsApp numarası gir."],
+    ["yazılan model küfür", { modelId: "", modelName: "Orospu" }, "Marka ve model seçmelisin."],
+    ["şehir küfür", { city: "s1kt1r" }, "Bu şehir adı kullanılamaz."],
+    ["açıklama yasa dışı teklif", { description: "Satılık tabanca da var" }, "Açıklama topluluk kurallarına aykırı ifadeler içeriyor."],
   ])("%s", (_name, change, message) => {
     expect(validateListingDraft({ ...validDraft, ...change }, NOW)).toBe(message);
   });
@@ -65,6 +68,12 @@ describe("validateListingDraft", () => {
     expect(validateListingDraft({ ...validDraft, modelId: "", modelName: "M340i" }, NOW)).toBeNull();
     expect(
       validateListingDraft({ ...validDraft, brandId: "", brandName: "Togg", modelId: "", modelName: "T10X" }, NOW),
+    ).toBeNull();
+  });
+
+  it("metin filtresi masum ilan metnine takılmaz", () => {
+    expect(
+      validateListingDraft({ ...validDraft, description: "Sıkıntısız, sık sık bakımı yapıldı. Öldürecek fiyat!" }, NOW),
     ).toBeNull();
   });
 
@@ -212,6 +221,10 @@ describe("listingFieldErrors", () => {
     { brandId: "", brandName: "Togg" },
     { brandId: "", brandName: "<b>", modelId: "", modelName: "X" },
     { modelId: "", modelName: "   " },
+    { modelId: "", modelName: "Orospu" },
+    { city: "s1kt1r" },
+    { description: "Satılık tabanca da var" },
+    { description: "Sıkıntısız, bakımlı" },
   ];
 
   it.each(cases)("validateListingDraft ile aynı kararı verir: %j", (change) => {
@@ -239,6 +252,16 @@ describe("listingFieldErrors", () => {
     });
   });
 
+  it("filtreye takılan metnin hatası kendi alanında", () => {
+    expect(listingFieldErrors({ ...validDraft, description: "aq", city: "amk" }, NOW)).toEqual({
+      description: "Açıklama topluluk kurallarına aykırı ifadeler içeriyor.",
+      city: "Bu şehir adı kullanılamaz.",
+    });
+    expect(listingFieldErrors({ ...validDraft, modelId: "", modelName: "Siktir" }, NOW)).toEqual({
+      modelId: "Bu marka ya da model adı kullanılamaz.",
+    });
+  });
+
   it("boş taslakta açıklama ve hasar dışındaki bütün alanlar hatalı", () => {
     expect(Object.keys(listingFieldErrors(EMPTY_LISTING_DRAFT, NOW)).sort()).toEqual(
       ["brandId", "city", "fuelType", "mileageKm", "modelId", "price", "transmission", "whatsapp", "year", "bodyType"].sort(),
@@ -248,7 +271,8 @@ describe("listingFieldErrors", () => {
 
 describe("LISTING_STEPS", () => {
   it("doğrulanan her alan tam olarak bir adımda", () => {
-    const all = Object.keys(listingFieldErrors(EMPTY_LISTING_DRAFT, NOW)) as ListingField[];
+    // Açıklama isteğe bağlı: yalnızca metin filtresine takılınca hatalı
+    const all = Object.keys(listingFieldErrors({ ...EMPTY_LISTING_DRAFT, description: "aq" }, NOW)) as ListingField[];
     const inSteps = LISTING_STEPS.flatMap((step) => step.fields);
     expect([...inSteps].sort()).toEqual([...all].sort());
     expect(new Set(inSteps).size).toBe(inSteps.length);

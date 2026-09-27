@@ -1,4 +1,4 @@
-import type { VehicleStatus } from "./listing-status";
+import type { ModerationStatus, VehicleStatus } from "./listing-status";
 import { supabase } from "./supabase";
 
 // "Vitrinim": giriş yapan satıcının ilanları ve durum değişikliği.
@@ -12,6 +12,8 @@ export type MyListing = {
   mileageKm: number;
   city: string | null;
   status: VehicleStatus;
+  /** İçerik denetiminin kararı: 'rejected' → "topluluk kurallarına uymadığı için yayınlanmadı" */
+  moderationStatus: ModerationStatus;
   createdAt: string;
   /** Kapak fotoğrafı, yoksa video kapağı */
   coverUrl: string | null;
@@ -24,6 +26,8 @@ export type MyListing = {
 export type MyListingRow = {
   id: string;
   status: VehicleStatus;
+  /** Eski sorgularda yok: denetimden geçmiş sayılır */
+  moderation_status?: ModerationStatus | null;
   year: number;
   price: number | string;
   currency: string;
@@ -54,6 +58,7 @@ export function toMyListing(row: MyListingRow): MyListing {
     mileageKm: row.mileage_km,
     city: row.city,
     status: row.status,
+    moderationStatus: row.moderation_status ?? "approved",
     createdAt: row.created_at,
     coverUrl:
       images[0]?.image_url ??
@@ -67,7 +72,7 @@ export function toMyListing(row: MyListingRow): MyListing {
 }
 
 /** Vitrin ızgarasının sorgusu (Vitrinim ve herkese açık profil aynı kareyi çizer) */
-export const LISTING_SELECT = `id, status, year, price, currency, mileage_km, city, created_at, views_count,
+export const LISTING_SELECT = `id, status, moderation_status, year, price, currency, mileage_km, city, created_at, views_count,
        brand:brands(name),
        model:models(name),
        images:vehicle_images(image_url, is_primary, display_order),

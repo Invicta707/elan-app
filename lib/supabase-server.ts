@@ -34,7 +34,7 @@ export function getSupabaseAdmin(): SupabaseClient {
  * anahtarlarda Supabase Auth'a sorar.
  */
 export async function getAuthenticatedUserId(request: Request): Promise<string | null> {
-  const token = request.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  const token = bearerToken(request);
   if (!token) return null;
 
   const { data, error } = await getSupabaseAdmin().auth.getClaims(token);
@@ -43,4 +43,27 @@ export async function getAuthenticatedUserId(request: Request): Promise<string |
     return null;
   }
   return claims.sub;
+}
+
+/** "Authorization: Bearer <token>" başlığındaki token (doğrulanmamış) */
+export function bearerToken(request: Request): string | null {
+  return request.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1] ?? null;
+}
+
+/**
+ * Kullanıcının kendi oturumuyla çalışan istemci: istekler tarayıcıdan gelmiş gibi
+ * RLS'e ve tetikleyicilere tabidir. Sunucu bir işi kullanıcı adına yapıp araya
+ * kendi denetimini koymak istediğinde (ör. /api/messages) kullanılır. Token önce
+ * getAuthenticatedUserId ile doğrulanmalı.
+ */
+export function getSupabaseForUser(accessToken: string): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error("Sunucu ortam değişkenleri eksik: NEXT_PUBLIC_SUPABASE_URL ve yayımlanabilir (anon) anahtar.");
+  }
+  return createClient(url, key, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
 }

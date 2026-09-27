@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, AtSign, Clapperboard, MessageCircle, Pencil, Settings } from "lucide-react";
+import { ArrowUpRight, AtSign, Clapperboard, MessageCircle, Pencil, Settings, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AuthModal from "../AuthModal";
@@ -9,7 +9,8 @@ import { useSupabaseSession } from "../../lib/auth";
 import type { VehicleStatus } from "../../lib/listing-status";
 import { fetchMyListings, type MyListing } from "../../lib/my-listings";
 import { suggestedDisplayName } from "../../lib/profile";
-import { formatCount, showcaseStats } from "../../lib/showcase";
+import { LISTING_REJECTED_MESSAGE } from "../../lib/content-moderation";
+import { formatCount, isContentRejected, showcaseStats } from "../../lib/showcase";
 import { useMyProfile } from "../../lib/use-my-profile";
 import { useUnreadCount } from "../../lib/use-unread-count";
 import { profilePath, suggestUsername } from "../../lib/username";
@@ -108,6 +109,7 @@ function Showcase({
   const username = profile?.username ?? null;
   const listings = load.status === "ready" ? load.listings : [];
   const stats = showcaseStats(listings);
+  const rejectedCount = listings.filter(isContentRejected).length;
 
   return (
     <>
@@ -240,13 +242,30 @@ function Showcase({
           <p className="max-w-xs text-[14px] text-[#5B616B]">Aracının dikey videosunu yükle; ilk ilanın burada görünsün.</p>
         </div>
       ) : (
-        <ul className="grid grid-cols-3 gap-1 sm:gap-1.5">
+        <>
+          {rejectedCount > 0 && (
+            <p
+              role="status"
+              className="mb-2 flex items-start gap-2 rounded-xl bg-[#FDEDEC] px-3 py-2.5 text-[14px] leading-snug text-[#B42318]"
+            >
+              <ShieldAlert aria-hidden="true" className="mt-px h-4 w-4 shrink-0" />
+              <span>
+                {LISTING_REJECTED_MESSAGE}
+                {rejectedCount > 1 ? ` (${rejectedCount} ilan)` : ""}{" "}
+                <Link href="/terms" className="font-semibold underline underline-offset-2">
+                  Kullanım koşulları
+                </Link>
+              </span>
+            </p>
+          )}
+          <ul className="grid grid-cols-3 gap-1 sm:gap-1.5">
           {listings.map((listing, index) => (
             <li key={listing.id}>
               <ShowcaseTile listing={listing} onManage={setManaging} priority={index < 6} />
             </li>
           ))}
-        </ul>
+          </ul>
+        </>
       )}
 
       {managing && (

@@ -8,6 +8,7 @@ import FeedHeader from "../../components/FeedHeader";
 import {
   ChoiceGroup,
   Field,
+  FieldError,
   GroupedNumberInput,
   TextInput,
   controlClass,
@@ -123,6 +124,8 @@ export default function SellPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [devNotice, setDevNotice] = useState<string | null>(null);
   const [processingConfirmed, setProcessingConfirmed] = useState(false);
+  // Yalnızca yerelde bilinir: canlıda denetim, gönderimden sonra webhook'la çalışır
+  const [published, setPublished] = useState(false);
 
   const uploadAbortRef = useRef<(() => void) | null>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -348,6 +351,7 @@ export default function SellPage() {
     try {
       setDevNotice(null);
       setProcessingConfirmed(false);
+      setPublished(false);
 
       // Taslak, doğrulamadan sonra (giriş penceresi açıkken) değişmiş olabilir;
       // buildListingRecords yeniden doğrular ve geçersizse hata fırlatır.
@@ -359,7 +363,8 @@ export default function SellPage() {
       if (profileError) throw new Error("İletişim numaran kaydedilemedi: " + profileError.message);
 
       // 2) İlan "pending_video" durumunda açılır; video hazır olunca webhook
-      // (bkz. app/api/webhooks/cloudflare/route.ts) "active" yapar.
+      // (bkz. app/api/webhooks/cloudflare/route.ts) ilanı içerik denetimine alır,
+      // denetimden geçerse "active" olur (lib/listing-moderation.ts).
       // Marka/model listeden seçildiyse id'ler hazır; yazılan adı RPC bulur ya da kataloğa ekler
       const catalogRow = catalogIds(records.catalog) ?? (await resolveCatalog(records.catalog));
 
@@ -435,7 +440,7 @@ export default function SellPage() {
             body: JSON.stringify({ videoId: body.videoId }),
           });
           const devBody = (await devResponse.json().catch(() => null)) as
-            | { ok?: boolean; error?: { message?: string } }
+            | { ok?: boolean; published?: boolean; decision?: string | null; error?: { message?: string } }
             | null;
 
           if (!devResponse.ok || !devBody?.ok) {
@@ -445,6 +450,14 @@ export default function SellPage() {
             );
           } else {
             setProcessingConfirmed(true);
+            setPublished(Boolean(devBody.published));
+            if (devBody.decision === "rejected") {
+              setDevNotice("Yerel geliştirme: içerik denetimi ilanı reddetti.");
+            } else if (!devBody.published) {
+              setDevNotice(
+                "Yerel geliştirme: ilan içerik denetiminde. Görsel denetim sağlayıcısı tanımlı değilse /admin/reports'tan onaylanmalı.",
+              );
+            }
           }
         } catch (error) {
           console.error("Dev tamamlama isteği başarısız:", error);
@@ -464,7 +477,12 @@ export default function SellPage() {
     return (
       <main className="min-h-dvh bg-[#F2F3F5] text-[#15181C]">
         <FeedHeader activeTab="sell" tone="solid" />
-        <SellSuccess hasPhotos={photos.length > 0} processingConfirmed={processingConfirmed} devNotice={devNotice} />
+        <SellSuccess
+          hasPhotos={photos.length > 0}
+          processingConfirmed={processingConfirmed}
+          published={published}
+          devNotice={devNotice}
+        />
       </main>
     );
   }
@@ -735,13 +753,17 @@ export default function SellPage() {
                 Açıklama
               </label>
               <textarea
-                id="sell-description"
+                id={fieldId("description")}
                 rows={4}
                 placeholder="Bakım geçmişi, ekstralar, değişen parçalar…"
                 value={draft.description}
                 onChange={(event) => update({ description: event.target.value })}
-                className={controlClass(false, "block resize-y px-3.5 py-3 leading-relaxed")}
+                onBlur={touch("description")}
+                aria-invalid={Boolean(errorFor("description"))}
+                aria-describedby={describedBy(fieldId("description"), { error: errorFor("description") })}
+                className={controlClass(Boolean(errorFor("description")), "block resize-y px-3.5 py-3 leading-relaxed")}
               />
+              <FieldError id={fieldId("description")} message={errorFor("description")} />
             </FormCard>
 
             <FormCard title="İletişim">

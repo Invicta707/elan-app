@@ -1,34 +1,38 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // "server-only" paketi Next dışında içe aktarılınca hata fırlatır
 vi.mock("server-only", () => ({}));
 
-import { markVideoReadyAndActivateVehicle } from "./video-activation";
+import { markVideoReadyAndQueueModeration } from "./video-activation";
 
 type Result = { data: unknown; error: unknown };
-type Call = { table: string; method: string; args: unknown[] };
 
-// Supabase sorgu zincirinin sahtesi: her çağrıyı kaydeder, await edilince
-// tabloya verilen yanıtı döner.
-function fakeClient(responses: Record<string, Result>) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const builder: Record<string, unknown> = {
-        then: (resolve: (r: Result) => unknown, reject: (e: unknown) => unknown) =>
-          Promise.resolve(responses[table]).then(resolve, reject),
-      };
-      for (const method of ["update", "eq", "in", "select", "maybeSingle"]) {
-        builder[method] = (...args: unknown[]) => {
-          calls.push({ table, method, args });
-          return builder;
-        };
-      }
-      return builder;
-    },
+// Supabase sorgu zincirinin sahtesi: her tablo çağrısındaki adımlar kaydedilir,
+// await edilince o tablonun sıradaki yanıtı döner.
+function fakeClient(results: Record<string, Result[]>) {
+  const calls: { table: string; steps: unknown[][] }[] = [];
+  const from = (table: string) => {
+    const call = { table, steps: [] as unknown[][] };
+    calls.push(call);
+    const builder: Record<string, unknown> = new Proxy(
+      {},
+      {
+        get(_target, property: string) {
+          if (property === "then") {
+            const result = results[table]?.shift() ?? { data: null, error: new Error(`beklenmeyen sorgu: ${table}`) };
+            return (resolve: (value: Result) => void) => resolve(result);
+          }
+          return (...args: unknown[]) => {
+            call.steps.push([property, ...args]);
+            return builder;
+          };
+        },
+      },
+    );
+    return builder;
   };
-  return { client: client as unknown as SupabaseClient, calls };
+  return { client: { from } as unknown as SupabaseClient, calls };
 }
 
 const input = {
@@ -38,64 +42,106 @@ const input = {
   durationSeconds: 42,
 };
 
-describe("markVideoReadyAndActivateVehicle", () => {
-  it("videoyu ready yapar ve ilanı sadece draft/pending_video iken active'e alır", async () => {
+const videoReady = { data: { vehicle_id: "veh-1" }, error: null };
+const vehicle = (status: string, moderation_status: string) => ({ data: { status, moderation_status }, error: null });
+const ok = { data: null, error: null };
+
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("markVideoReadyAndQueueModeration", () => {
+  it("videoyu ready yapar; ilan yayına değil içerik denetimine ('pending_moderation') girer", async () => {
     const { client, calls } = fakeClient({
-      videos: { data: { vehicle_id: "veh-1" }, error: null },
-      vehicles: { data: [{ id: "veh-1" }], error: null },
+      videos: [videoReady],
+      vehicles: [vehicle("pending_video", "pending"), ok],
     });
 
-    const result = await markVideoReadyAndActivateVehicle(client, input);
-
-    expect(result).toEqual({ ok: true, vehicleId: "veh-1", vehicleActivated: true });
-    expect(calls).toContainEqual({
-      table: "videos",
-      method: "update",
-      args: [{ status: "ready", hls_url: input.hlsUrl, thumbnail_url: input.thumbnailUrl, duration_seconds: 42 }],
-    });
-    expect(calls).toContainEqual({ table: "videos", method: "eq", args: ["stream_uid", "stream-1"] });
-    expect(calls).toContainEqual({ table: "vehicles", method: "update", args: [{ status: "active" }] });
-    expect(calls).toContainEqual({ table: "vehicles", method: "eq", args: ["id", "veh-1"] });
-    expect(calls).toContainEqual({ table: "vehicles", method: "in", args: ["status", ["draft", "pending_video"]] });
-  });
-
-  it("satılmış/arşivlenmiş ilan yeniden açılmaz (güncellenen satır yok)", async () => {
-    const { client } = fakeClient({
-      videos: { data: { vehicle_id: "veh-1" }, error: null },
-      vehicles: { data: [], error: null },
-    });
-
-    await expect(markVideoReadyAndActivateVehicle(client, input)).resolves.toEqual({
+    expect(await markVideoReadyAndQueueModeration(client, input)).toEqual({
       ok: true,
       vehicleId: "veh-1",
-      vehicleActivated: false,
+      moderationQueued: true,
     });
+    expect(calls).toEqual([
+      {
+        table: "videos",
+        steps: [
+          ["update", { status: "ready", hls_url: input.hlsUrl, thumbnail_url: input.thumbnailUrl, duration_seconds: 42 }],
+          ["eq", "stream_uid", "stream-1"],
+          ["select", "vehicle_id"],
+          ["maybeSingle"],
+        ],
+      },
+      {
+        table: "vehicles",
+        steps: [["select", "status, moderation_status"], ["eq", "id", "veh-1"], ["maybeSingle"]],
+      },
+      {
+        table: "vehicles",
+        steps: [
+          ["update", { status: "pending_moderation" }],
+          ["eq", "id", "veh-1"],
+          ["in", "status", ["draft", "pending_video"]],
+        ],
+      },
+    ]);
+    // Hiçbir yolda ilan doğrudan 'active' yapılmaz
+    expect(JSON.stringify(calls)).not.toContain('"active"');
+  });
+
+  it("video işlenirken arşive alınmış ilan: durum aynı kalır, yine denetlenir", async () => {
+    const { client, calls } = fakeClient({ videos: [videoReady], vehicles: [vehicle("archived", "pending")] });
+    expect(await markVideoReadyAndQueueModeration(client, input)).toMatchObject({ ok: true, moderationQueued: true });
+    expect(calls.filter((c) => c.table === "vehicles")).toHaveLength(1);
+  });
+
+  it("onaylanmış yayındaki ilana yeni video: karar sıfırlanır, ilan yeniden denetime girer", async () => {
+    const { client, calls } = fakeClient({ videos: [videoReady], vehicles: [vehicle("active", "approved"), ok] });
+    expect(await markVideoReadyAndQueueModeration(client, input)).toMatchObject({ ok: true, moderationQueued: true });
+    expect(calls.at(-1)).toEqual({
+      table: "vehicles",
+      steps: [
+        [
+          "update",
+          { moderation_status: "pending", moderation_reason: null, moderated_at: null, status: "pending_moderation" },
+        ],
+        ["eq", "id", "veh-1"],
+        ["eq", "moderation_status", "approved"],
+      ],
+    });
+  });
+
+  it("onaylanmış arşivdeki ilana yeni video: yalnızca karar sıfırlanır", async () => {
+    const { client, calls } = fakeClient({ videos: [videoReady], vehicles: [vehicle("archived", "approved"), ok] });
+    await markVideoReadyAndQueueModeration(client, input);
+    expect(calls.at(-1)?.steps[0]).toEqual([
+      "update",
+      { moderation_status: "pending", moderation_reason: null, moderated_at: null },
+    ]);
+  });
+
+  it.each(["sold", "rejected"])("%s ilana dokunulmaz, denetim başlatılmaz", async (status) => {
+    const { client, calls } = fakeClient({ videos: [videoReady], vehicles: [vehicle(status, "approved")] });
+    expect(await markVideoReadyAndQueueModeration(client, input)).toEqual({
+      ok: true,
+      vehicleId: "veh-1",
+      moderationQueued: false,
+    });
+    expect(calls.filter((c) => c.table === "vehicles")).toHaveLength(1);
   });
 
   it("kayıtlı olmayan videoda ilana dokunmaz", async () => {
-    const { client, calls } = fakeClient({ videos: { data: null, error: null } });
-
-    await expect(markVideoReadyAndActivateVehicle(client, input)).resolves.toEqual({
-      ok: false,
-      error: "unknown_video",
-    });
+    const { client, calls } = fakeClient({ videos: [{ data: null, error: null }] });
+    expect(await markVideoReadyAndQueueModeration(client, input)).toEqual({ ok: false, error: "unknown_video" });
     expect(calls.some((c) => c.table === "vehicles")).toBe(false);
   });
 
-  it.each(["videos", "vehicles"])("%s tablosunda hata olursa database_error döner", async (failing) => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { client } = fakeClient({
-      videos:
-        failing === "videos"
-          ? { data: null, error: { message: "boom" } }
-          : { data: { vehicle_id: "veh-1" }, error: null },
-      vehicles: { data: null, error: { message: "boom" } },
-    });
-
-    await expect(markVideoReadyAndActivateVehicle(client, input)).resolves.toEqual({
-      ok: false,
-      error: "database_error",
-    });
-    consoleError.mockRestore();
+  it.each([
+    ["video güncellemesi", { videos: [{ data: null, error: { message: "boom" } }] }],
+    ["ilan okuma", { videos: [videoReady], vehicles: [{ data: null, error: { message: "boom" } }] }],
+    ["karantina", { videos: [videoReady], vehicles: [vehicle("pending_video", "pending"), { data: null, error: { message: "boom" } }] }],
+  ])("%s hata verirse database_error", async (_label, results) => {
+    const { client } = fakeClient(results as Record<string, Result[]>);
+    expect(await markVideoReadyAndQueueModeration(client, input)).toEqual({ ok: false, error: "database_error" });
   });
 });

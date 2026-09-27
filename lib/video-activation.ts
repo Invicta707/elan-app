@@ -1,9 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ModerationStatus, VehicleStatus } from "./listing-status";
 
-// Video hazır olunca sadece bu durumlardaki ilanlar yayına alınır. Satılmış,
-// arşivlenmiş ya da zaten yayındaki ilanların durumuna dokunulmaz.
-const ACTIVATABLE_VEHICLE_STATUSES = ["draft", "pending_video"];
+// Video hazır olunca ilan doğrudan yayına alınmaz: önce içerik denetimine
+// ('pending_moderation') girer; yayına alma kararını lib/listing-moderation.ts
+// verir. Bu durumlardaki ilan karantinaya alınır:
+const QUARANTINABLE_STATUSES: readonly VehicleStatus[] = ["draft", "pending_video"];
 
 export type VideoReadyInput = {
   streamUid: string;
@@ -13,17 +15,25 @@ export type VideoReadyInput = {
 };
 
 export type ActivationResult =
-  | { ok: true; vehicleId: string; vehicleActivated: boolean }
+  | { ok: true; vehicleId: string; moderationQueued: boolean }
   | { ok: false; error: "unknown_video" | "database_error" };
 
 /**
- * Video hazır olduğunda videos satırını 'ready' yapar ve ilanı (draft/pending_video
- * ise) 'active'e alır. Üretimde bunu Cloudflare webhook'u çağırır (bkz.
- * app/api/webhooks/cloudflare/route.ts); yerel geliştirmede webhook Cloudflare'den
- * localhost'a ulaşamadığı için app/api/dev/complete-upload aynı fonksiyonu
- * doğrudan çağırır (bkz. o dosyadaki açıklama).
+ * Video hazır olduğunda videos satırını 'ready' yapar ve ilanı içerik
+ * denetimine hazırlar. moderationQueued: true ise çağıran,
+ * runListingModeration(vehicleId) ile denetimi başlatmalı.
+ *
+ *   draft / pending_video           → 'pending_moderation' (akışta görünmez)
+ *   denetimi bekleyen başka durumlar → durum aynı, denetlenir (ör. satıcı
+ *                                      ilanı video işlenirken arşive aldıysa)
+ *   karar verilmiş ilana yeni video  → karar sıfırlanır, yayındaysa
+ *                                      'pending_moderation'a döner, yeniden denetlenir
+ *   satılmış / reddedilmiş ilan      → dokunulmaz
+ *
+ * Üretimde bunu Cloudflare webhook'u çağırır (app/api/webhooks/cloudflare);
+ * yerel geliştirmede app/api/dev/complete-upload.
  */
-export async function markVideoReadyAndActivateVehicle(
+export async function markVideoReadyAndQueueModeration(
   supabase: SupabaseClient,
   input: VideoReadyInput,
 ): Promise<ActivationResult> {
@@ -47,21 +57,46 @@ export async function markVideoReadyAndActivateVehicle(
     return { ok: false, error: "unknown_video" };
   }
 
-  const { data: activated, error: vehicleError } = await supabase
+  const vehicleId: string = video.vehicle_id;
+  const { data: vehicle, error: readError } = await supabase
     .from("vehicles")
-    .update({ status: "active" })
-    .eq("id", video.vehicle_id)
-    .in("status", ACTIVATABLE_VEHICLE_STATUSES)
-    .select("id");
+    .select("status, moderation_status")
+    .eq("id", vehicleId)
+    .maybeSingle();
 
-  if (vehicleError) {
-    console.error("İlan yayına alınamadı:", video.vehicle_id, vehicleError);
+  if (readError || !vehicle) {
+    console.error("İlan okunamadı:", vehicleId, readError);
     return { ok: false, error: "database_error" };
   }
 
-  return {
-    ok: true,
-    vehicleId: video.vehicle_id,
-    vehicleActivated: (activated?.length ?? 0) > 0,
-  };
+  const status = vehicle.status as VehicleStatus;
+  const moderationStatus = vehicle.moderation_status as ModerationStatus;
+  if (status === "sold" || status === "rejected") return { ok: true, vehicleId, moderationQueued: false };
+
+  let error: unknown = null;
+  if (moderationStatus !== "pending") {
+    // Onaydan sonra gelen video (ör. aynı ilana ikinci yükleme) denetlenmeden yayında kalamaz
+    ({ error } = await supabase
+      .from("vehicles")
+      .update({
+        moderation_status: "pending",
+        moderation_reason: null,
+        moderated_at: null,
+        ...(status === "active" ? { status: "pending_moderation" } : {}),
+      })
+      .eq("id", vehicleId)
+      .eq("moderation_status", moderationStatus));
+  } else if (QUARANTINABLE_STATUSES.includes(status)) {
+    ({ error } = await supabase
+      .from("vehicles")
+      .update({ status: "pending_moderation" })
+      .eq("id", vehicleId)
+      .in("status", QUARANTINABLE_STATUSES));
+  }
+
+  if (error) {
+    console.error("İlan içerik denetimine alınamadı:", vehicleId, error);
+    return { ok: false, error: "database_error" };
+  }
+  return { ok: true, vehicleId, moderationQueued: true };
 }

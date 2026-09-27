@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const insertSingle = vi.fn();
 vi.mock("./supabase", () => ({
   supabase: {
-    from: () => ({ insert: () => ({ select: () => ({ single: insertSingle }) }) }),
     rpc: vi.fn(),
   },
 }));
@@ -15,6 +13,7 @@ import {
   inboxTimeLabel,
   mergeMessages,
   messageError,
+  messageInsertError,
   partnerHandle,
   partnerName,
   sendMessage,
@@ -158,20 +157,52 @@ describe("küçük yardımcılar", () => {
   });
 });
 
-describe("sendMessage", () => {
-  beforeEach(() => insertSingle.mockReset());
+describe("sendMessage (/api/messages)", () => {
+  const getAccessToken = async () => "tok";
+  const row = { id: "m1", conversation_id: "c1", sender_id: ME, text: "Merhaba", is_read: false, created_at: "2026-09-26T10:00:00Z" };
 
-  it("metni kırpıp gönderir ve kaydedilen mesajı döner", async () => {
-    insertSingle.mockResolvedValue({
-      data: { id: "m1", conversation_id: "c1", sender_id: ME, text: "Merhaba", is_read: false, created_at: "2026-09-26T10:00:00Z" },
-      error: null,
+  it("metni kırpıp oturum token'ıyla gönderir ve kaydedilen mesajı döner", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ message: row }), { status: 201 }));
+    await expect(sendMessage("c1", "  Merhaba  ", { fetchImpl, getAccessToken })).resolves.toMatchObject({
+      id: "m1",
+      text: "Merhaba",
     });
-    await expect(sendMessage("c1", ME, "  Merhaba  ")).resolves.toMatchObject({ id: "m1", text: "Merhaba" });
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/messages");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+    expect(JSON.parse(init.body as string)).toEqual({ conversationId: "c1", text: "Merhaba" });
   });
 
-  it("RLS reddi (engel) anlaşılır bir mesaja çevrilir", async () => {
-    insertSingle.mockResolvedValue({ data: null, error: { code: "42501", message: "new row violates row-level security policy" } });
-    await expect(sendMessage("c1", ME, "x")).rejects.toThrow("Bu sohbete mesaj gönderilemiyor.");
+  it("sunucunun Türkçe hata metni gösterilir (engel, içerik filtresi)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: "content_policy", message: "Mesajın topluluk kurallarına aykırı…" } }), {
+        status: 422,
+      }),
+    );
+    await expect(sendMessage("c1", "x", { fetchImpl, getAccessToken })).rejects.toThrow("Mesajın topluluk kurallarına aykırı…");
+  });
+
+  it("oturum yoksa ya da ağ yoksa anlaşılır hata", async () => {
+    await expect(sendMessage("c1", "x", { getAccessToken: async () => null })).rejects.toThrow(/giriş yapmalısın/);
+    const offline = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await expect(sendMessage("c1", "x", { fetchImpl: offline, getAccessToken })).rejects.toThrow(/Sunucuya ulaşılamadı/);
+  });
+});
+
+describe("messageInsertError", () => {
+  it("RLS reddi, veritabanı kuralı ve diğer hatalar", () => {
+    expect(messageInsertError({ code: "42501", message: "new row violates row-level security policy" })).toEqual({
+      status: 403,
+      message: "Bu sohbete mesaj gönderilemiyor.",
+    });
+    expect(messageInsertError({ code: "23514", message: "Çok hızlı mesaj gönderiyorsun; biraz bekleyip tekrar dene." })).toEqual({
+      status: 422,
+      message: "Çok hızlı mesaj gönderiyorsun; biraz bekleyip tekrar dene.",
+    });
+    expect(messageInsertError({ code: "XX000", message: "boom" })).toEqual({ status: 500, message: "Mesaj gönderilemedi." });
+    expect(messageInsertError(null).status).toBe(500);
   });
 });
 

@@ -336,10 +336,12 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
   return toConversationDetail(data);
 }
 
+export const MESSAGE_COLUMNS = "id, conversation_id, sender_id, text, is_read, created_at";
+
 export async function fetchMessages(conversationId: string, limit = 200): Promise<ChatMessage[]> {
   const { data, error } = await supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, text, is_read, created_at")
+    .select(MESSAGE_COLUMNS)
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -347,18 +349,52 @@ export async function fetchMessages(conversationId: string, limit = 200): Promis
   return ((data ?? []) as MessageRow[]).map(toChatMessage).reverse();
 }
 
-export async function sendMessage(conversationId: string, senderId: string, text: string): Promise<ChatMessage> {
-  const { data, error } = await supabase
-    .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, text: cleanMessage(text) })
-    .select("id, conversation_id, sender_id, text, is_read, created_at")
-    .single();
-  if (error || !data) {
-    // RLS reddi: engel var ya da artık katılımcı değil
-    if (error?.code === "42501") throw new Error("Bu sohbete mesaj gönderilemiyor.");
-    fail(error, "Mesaj gönderilemedi.");
+/**
+ * Mesaj yazılamadığında: HTTP durumu ve kullanıcıya gösterilecek metin.
+ * 42501: RLS reddi (engel var ya da artık katılımcı değil). 23514: spam sınırı ya
+ * da içerik filtresi; mesaj veritabanından, Türkçe (fn_messages_before_insert,
+ * fn_messages_text_filter).
+ */
+export function messageInsertError(error: { code?: string; message?: string } | null): {
+  status: 403 | 422 | 500;
+  message: string;
+} {
+  if (error?.code === "42501") return { status: 403, message: "Bu sohbete mesaj gönderilemiyor." };
+  if (error?.code === "23514" && error.message) return { status: 422, message: error.message };
+  return { status: 500, message: "Mesaj gönderilemedi." };
+}
+
+async function currentAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+/**
+ * Mesaj /api/messages üzerinden gider: sunucu içerik denetimini (temel filtre +
+ * OpenAI) yapıp mesajı kullanıcının kendi oturumuyla yazar; RLS ve tetikleyiciler
+ * aynen geçerli, Realtime aynı şekilde yayınlar.
+ */
+export async function sendMessage(
+  conversationId: string,
+  text: string,
+  { fetchImpl = fetch, getAccessToken = currentAccessToken }: { fetchImpl?: typeof fetch; getAccessToken?: () => Promise<string | null> } = {},
+): Promise<ChatMessage> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) throw new Error("Mesaj göndermek için giriş yapmalısın.");
+
+  let response: Response;
+  try {
+    response = await fetchImpl("/api/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ conversationId, text: cleanMessage(text) }),
+    });
+  } catch {
+    throw new Error("Sunucuya ulaşılamadı. Bağlantını kontrol edip tekrar dene.");
   }
-  return toChatMessage(data as MessageRow);
+  const body = (await response.json().catch(() => null)) as { message?: MessageRow; error?: { message?: string } } | null;
+  if (!response.ok || !body?.message) throw new Error(body?.error?.message ?? "Mesaj gönderilemedi.");
+  return toChatMessage(body.message);
 }
 
 export async function markConversationRead(conversationId: string): Promise<number> {

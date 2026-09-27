@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { getStreamVideoDetails } from "../../../../lib/cloudflare";
 import { isUuid } from "../../../../lib/feed";
 import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../../lib/supabase-server";
-import { markVideoReadyAndActivateVehicle } from "../../../../lib/video-activation";
+import { runListingModeration } from "../../../../lib/listing-moderation";
+import { markVideoReadyAndQueueModeration } from "../../../../lib/video-activation";
 
 // GELİŞTİRME ORTAMINA ÖZEL: Cloudflare Stream webhook'u localhost'a ulaşamadığı
 // için video Cloudflare'e yüklendikten sonra videos/vehicles satırlarını burada
-// doğrudan güncelliyoruz (Cloudflare'e "hazır mı?" diye sorup markVideoReadyAndActivateVehicle
-// ile aynı işlemi uyguluyoruz). Üretimde bu işi gerçek imzalı webhook üstlenir
-// (bkz. app/api/webhooks/cloudflare/route.ts); bu route orada NODE_ENV=production
+// doğrudan güncelliyoruz (Cloudflare'e "hazır mı?" diye sorup webhook'la aynı işlemi,
+// markVideoReadyAndQueueModeration + içerik denetimini uyguluyoruz). Denetim burada
+// yanıttan önce çalışır: /sell sonucu (yayında / incelemede) gösterebilsin.
+// Üretimde bu işi gerçek imzalı webhook üstlenir (bkz.
+// app/api/webhooks/cloudflare/route.ts); bu route orada NODE_ENV=production
 // olduğu için 404 döner ve hiçbir işlev görmez.
 //
 // POST /api/dev/complete-upload
@@ -98,7 +101,7 @@ export async function POST(request: Request) {
     }
 
     if (details.readyToStream && details.hlsUrl) {
-      const result = await markVideoReadyAndActivateVehicle(supabase, {
+      const result = await markVideoReadyAndQueueModeration(supabase, {
         streamUid: video.stream_uid,
         hlsUrl: details.hlsUrl,
         thumbnailUrl: details.thumbnailUrl,
@@ -108,10 +111,12 @@ export async function POST(request: Request) {
       if (!result.ok) {
         return errorResponse(500, "database_error", "Video hazır ama veritabanı güncellenemedi.");
       }
+      const moderation = result.moderationQueued ? await runListingModeration(result.vehicleId) : null;
       return NextResponse.json({
         ok: true,
         vehicleId: result.vehicleId,
-        vehicleActivated: result.vehicleActivated,
+        published: moderation?.status === "decided" && moderation.published,
+        decision: moderation?.status === "decided" ? moderation.decision : null,
       });
     }
 

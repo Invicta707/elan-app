@@ -11,7 +11,8 @@ import {
   type VehicleStatus,
 } from "../../lib/listing-status";
 import { updateListingStatus, type MyListing } from "../../lib/my-listings";
-import { formatTilePrice } from "../../lib/showcase";
+import { LISTING_IN_REVIEW_MESSAGE, LISTING_REJECTED_MESSAGE } from "../../lib/content-moderation";
+import { formatTilePrice, isContentRejected } from "../../lib/showcase";
 import BottomSheet, { type SheetAction } from "../ui/BottomSheet";
 
 // Vitrindeki bir ilanın menüsü: görüntüle, akışta gör, durum değiştir.
@@ -57,11 +58,27 @@ export default function ListingManageSheet({
         {listing.title} · {listing.year}
       </p>
       <p className="mt-0.5 text-[14px] text-[#5B616B]">
-        {formatTilePrice(listing.price, listing.currency)} · {STATUS_LABELS[listing.status]}
+        {formatTilePrice(listing.price, listing.currency)} ·{" "}
+        {isContentRejected(listing) ? "Yayınlanmadı" : STATUS_LABELS[listing.status]}
       </p>
+      {isContentRejected(listing) && (
+        <p className="mx-auto mt-2 max-w-xs rounded-xl bg-[#FDEDEC] px-3 py-2 text-[13px] text-[#B42318]">
+          {LISTING_REJECTED_MESSAGE}
+        </p>
+      )}
+      {listing.status === "pending_moderation" && (
+        <p className="mx-auto mt-2 max-w-xs rounded-xl bg-[#EEF2FA] px-3 py-2 text-[13px] text-[#1F3B7A]">
+          {LISTING_IN_REVIEW_MESSAGE}
+        </p>
+      )}
       {canTransition(listing.status, "active") && !listing.hasPlayableVideo && (
         <p className="mx-auto mt-2 max-w-xs rounded-xl bg-[#FEF6E7] px-3 py-2 text-[13px] text-[#8A6116]">
           Yayına almak için videonun işlenmesi gerekiyor.
+        </p>
+      )}
+      {canTransition(listing.status, "active") && listing.hasPlayableVideo && listing.moderationStatus !== "approved" && (
+        <p className="mx-auto mt-2 max-w-xs rounded-xl bg-[#FEF6E7] px-3 py-2 text-[13px] text-[#8A6116]">
+          Yayına almak için içerik denetiminin tamamlanması gerekiyor.
         </p>
       )}
       <div role="status" aria-live="polite">
@@ -99,7 +116,10 @@ export default function ListingManageSheet({
       actions.push({ label: "Akışta gör", icon: <CirclePlay className="h-5 w-5" />, onSelect: () => router.push(`/?v=${listing.id}`) });
     }
   }
-  for (const action of statusActions(listing.status, { hasPlayableVideo: listing.hasPlayableVideo })) {
+  for (const action of statusActions(listing.status, {
+    hasPlayableVideo: listing.hasPlayableVideo,
+    moderationStatus: listing.moderationStatus,
+  })) {
     actions.push({
       label: pending ? "Kaydediliyor…" : action.label,
       icon: ACTION_ICON[action.target] ?? <Undo2 className="h-5 w-5" />,

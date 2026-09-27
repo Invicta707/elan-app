@@ -34,8 +34,11 @@ type UploadRequestBody = {
 // sınır olmazsa tek bir hesap tüm kotayı kilitleyebilir.
 const MAX_PENDING_UPLOADS_PER_USER = 5;
 
-// Satılmış, arşivlenmiş ya da moderasyonla kaldırılmış ilana video eklenmez
-const LOCKED_VEHICLE_STATUSES = new Set(["sold", "archived", "rejected"]);
+// Video yalnızca içerik denetiminden önce eklenir. Yayındaki, denetimdeki, satılmış,
+// arşivlenmiş ya da kaldırılmış ilana yeni video eklenirse denetlenmemiş içerik
+// yayına girebilirdi (fotoğraflar için aynı kural veritabanında:
+// *_content_moderation.sql, fn_can_upload_vehicle_photo).
+const UPLOADABLE_VEHICLE_STATUSES = new Set(["draft", "pending_video"]);
 
 // details: hata ayıklama için Cloudflare'in ham mesajı (varsa). message zaten
 // kullanıcıya gösterilebilir bir metin; details onu Cloudflare'in orijinal
@@ -97,11 +100,11 @@ export async function POST(request: Request) {
   if (vehicle.seller_id !== userId) {
     return errorResponse(403, "forbidden", "Bu ilana video yükleme yetkin yok.");
   }
-  if (LOCKED_VEHICLE_STATUSES.has(vehicle.status)) {
+  if (!UPLOADABLE_VEHICLE_STATUSES.has(vehicle.status)) {
     return errorResponse(
       409,
       "vehicle_locked",
-      "Satılmış, arşivlenmiş ya da yayından kaldırılmış bir ilana video eklenemez.",
+      "Bu ilana artık video eklenemez. Yeni video için yeni ilan oluştur.",
     );
   }
 

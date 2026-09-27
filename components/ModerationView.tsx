@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import FeedHeader from "./FeedHeader";
+import PendingListingsSection from "./moderation/PendingListingsSection";
 import { useSupabaseSession } from "../lib/auth";
 import { STATUS_LABELS } from "../lib/listing-status";
 import {
@@ -16,7 +17,8 @@ import { REPORT_REASONS } from "../lib/reports";
 import { currencySymbol, formatAmount } from "../lib/search";
 import { supabase } from "../lib/supabase";
 
-// /admin/reports: açık ilan bildirimleri ve moderasyon işlemleri.
+// /admin/reports: içerik denetimi kuyruğu (components/moderation/PendingListingsSection.tsx),
+// açık ilan bildirimleri ve moderasyon işlemleri.
 // Yetkiyi /api/admin/reports denetler. Oturum yoksa ya da API 401/403
 // dönerse kullanıcı ana sayfaya gönderilir; o ana kadar sadece iskelet görünür.
 export default function ModerationView() {
@@ -28,13 +30,23 @@ export default function ModerationView() {
     if (!isLoading && !userId) router.replace("/");
   }, [isLoading, userId, router]);
 
+  const goHome = useCallback(() => router.replace("/"), [router]);
+
   return (
     <>
       <FeedHeader activeTab="my-listings" tone="solid" />
       <div className="mx-auto max-w-3xl px-4 pt-2 pb-[max(2.5rem,calc(var(--bottom-nav-height)+1.5rem),env(safe-area-inset-bottom))]">
-        <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">Bildirimler</h1>
-        {/* Kullanıcı değişince kuyruk sıfırdan yüklenir */}
-        {userId ? <ModerationQueue key={userId} /> : <QueueSkeleton />}
+        <h1 className="text-[26px] font-semibold [font-family:var(--font-display)]">Moderasyon</h1>
+        {/* Kullanıcı değişince kuyruklar sıfırdan yüklenir */}
+        {userId ? (
+          <div key={userId}>
+            <PendingListingsSection getAccessToken={currentAccessToken} onUnauthorized={goHome} />
+            <h2 className="mt-8 text-[20px] font-semibold [font-family:var(--font-display)]">Bildirimler</h2>
+            <ModerationQueue />
+          </div>
+        ) : (
+          <QueueSkeleton />
+        )}
       </div>
     </>
   );

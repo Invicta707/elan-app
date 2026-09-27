@@ -1,4 +1,4 @@
-import type { VehicleStatus } from "./listing-status";
+import type { ModerationStatus, VehicleStatus } from "./listing-status";
 import { currencySymbol, formatAmount } from "./search";
 
 // Vitrinim ızgarası: dar karelere sığan kısa fiyat ve sayı biçimleri. UI'dan bağımsız.
@@ -28,4 +28,17 @@ export function showcaseStats(listings: readonly { status: VehicleStatus; viewsC
     live: listings.filter((l) => isLive(l.status)).length,
     views: listings.reduce((sum, l) => sum + l.viewsCount, 0),
   };
+}
+
+/** İçerik denetiminden geçmediği için yayınlanmadı (moderasyonun sonradan kaldırdığı ilandan ayrı) */
+export function isContentRejected(listing: { status: VehicleStatus; moderationStatus: ModerationStatus }): boolean {
+  return listing.status === "rejected" && listing.moderationStatus === "rejected";
+}
+
+/** Yayında olmayan karenin ortasındaki etiket */
+export function tileBadge(listing: { status: VehicleStatus; moderationStatus: ModerationStatus }): string | null {
+  if (isLive(listing.status)) return null;
+  if (listing.status === "pending_moderation") return "İnceleniyor";
+  if (isContentRejected(listing)) return "Yayınlanmadı";
+  return "Yayında Değil";
 }

@@ -203,7 +203,8 @@ export function ChatHeader({
 
 const MAX_COMPOSER_HEIGHT = 132;
 
-export function Composer({ onSend, onFocus }: { onSend: (text: string) => void; onFocus?: () => void }) {
+/** onSend false dönerse (ör. içerik filtresine takıldı) yazılan metin silinmez, düzeltilebilir */
+export function Composer({ onSend, onFocus }: { onSend: (text: string) => boolean | void; onFocus?: () => void }) {
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const clean = cleanMessage(text);
@@ -220,7 +221,7 @@ export function Composer({ onSend, onFocus }: { onSend: (text: string) => void; 
   function submit(event?: FormEvent) {
     event?.preventDefault();
     if (!canSend) return;
-    onSend(clean);
+    if (onSend(clean) === false) return;
     setText("");
     areaRef.current?.focus();
   }

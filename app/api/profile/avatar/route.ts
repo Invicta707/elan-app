@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { MAX_AVATAR_BYTES } from "../../../../lib/avatar";
+import { MAX_AVATAR_BYTES, detectAvatarType } from "../../../../lib/avatar";
 import { deleteAvatar, saveAvatar } from "../../../../lib/avatar-server";
+import { moderateAvatarUpload, recordModerationEvent } from "../../../../lib/content-moderation-server";
+import { moderationProvidersFromEnv } from "../../../../lib/moderation-providers";
 import { clientIp, rateLimitSubject } from "../../../../lib/rate-limit";
 import { consumeRateLimit, rateLimitSecret } from "../../../../lib/rate-limit-server";
 import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../../lib/supabase-server";
@@ -8,6 +10,10 @@ import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../../lib/supaba
 // POST   /api/profile/avatar  gövde: sıkıştırılmış görüntü (image/webp | image/jpeg, ≤ 1 MB)
 // DELETE /api/profile/avatar  profil fotoğrafını kaldırır
 // İkisi de Authorization: Bearer <access_token> ister. Yanıt: { avatarUrl } | { error }
+//
+// Yüklenen fotoğraf kaydedilmeden önce otomatik içerik denetiminden geçer
+// (lib/content-moderation-server.ts moderateAvatarUpload): kurala aykırı ya da
+// şüpheli fotoğraf 422, denetlenemezse 503; ikisinde de hiçbir şey kaydedilmez.
 
 const RULES = [{ scope: "user", limit: 20, windowSeconds: 60 * 60 }] as const;
 
@@ -40,6 +46,19 @@ export async function POST(request: Request) {
   if ("response" in auth) return auth.response;
 
   const bytes = new Uint8Array(await request.arrayBuffer());
+  // Tür geçersizse denetime gerek yok; saveAvatar 400 döner
+  const type = detectAvatarType(bytes);
+  if (type && bytes.length <= MAX_AVATAR_BYTES) {
+    const moderation = await moderateAvatarUpload(moderationProvidersFromEnv().image, bytes, type);
+    await recordModerationEvent(auth.supabase, {
+      subjectType: "avatar",
+      subjectId: null,
+      userId: auth.userId,
+      verdict: moderation.verdict,
+    });
+    if (!moderation.allowed) return errorResponse(moderation.status, moderation.message);
+  }
+
   const result = await saveAvatar(auth.supabase, auth.userId, bytes);
   return result.ok
     ? NextResponse.json({ avatarUrl: result.avatarUrl })

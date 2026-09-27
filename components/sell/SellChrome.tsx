@@ -286,10 +286,13 @@ export function SellActionBar({
 export function SellSuccess({
   hasPhotos,
   processingConfirmed,
+  published = false,
   devNotice,
 }: {
   hasPhotos: boolean;
   processingConfirmed: boolean;
+  /** İçerik denetiminden geçip yayına girdi (yalnızca yerelde bilinir) */
+  published?: boolean;
   devNotice: string | null;
 }) {
   return (
@@ -300,9 +303,11 @@ export function SellSuccess({
         </span>
         <h1 className="mt-4 text-[26px] font-semibold [font-family:var(--font-display)]">İlanın alındı!</h1>
         <p className="mt-1 text-[15px] leading-relaxed text-[#5B616B]">
-          {processingConfirmed
-            ? "Video işlendi; ilanın yayına alındı."
-            : "Video işlenir işlenmez ilanın otomatik olarak yayına girecek. Bu genelde birkaç dakika sürer."}
+          {published
+            ? "Video işlendi ve içerik denetiminden geçti; ilanın yayında."
+            : processingConfirmed
+              ? "Video işlendi; ilanın içerik denetiminde."
+              : "Video işlenip otomatik içerik denetiminden geçince ilanın yayına girecek. Bu genelde birkaç dakika sürer."}
         </p>
 
         <div className="mt-5 rounded-xl bg-[#FAFBFC] p-4 text-left">

@@ -1,3 +1,9 @@
+import {
+  parseReasonCode,
+  videoModerationFrames,
+  type ModerationDecision,
+  type ModerationReason,
+} from "./content-moderation";
 import { isUuid } from "./feed";
 import { toMyListing, type MyListing, type MyListingRow } from "./my-listings";
 import type { ReportReason } from "./reports";
@@ -116,13 +122,14 @@ const NETWORK_ERROR = "Sunucuya ulaşılamadı. Bağlantını kontrol edip tekra
 const GENERIC_ERROR = "İşlem tamamlanamadı. Biraz sonra tekrar dene.";
 
 async function callModerationApi<T>(
-  payload: ModerationAction | null,
+  payload: object | null,
   accessToken: string,
   fetchImpl: typeof fetch,
+  path: "/api/admin/reports" | "/api/admin/listings" = "/api/admin/reports",
 ): Promise<{ ok: true; body: T } | ModerationFailure> {
   let response: Response;
   try {
-    response = await fetchImpl("/api/admin/reports", {
+    response = await fetchImpl(path, {
       method: payload ? "POST" : "GET",
       cache: "no-store",
       headers: {
@@ -155,4 +162,87 @@ export async function submitModerationAction(
 ): Promise<{ ok: true; resolved: number } | ModerationFailure> {
   const result = await callModerationApi<{ resolved: number }>(input, accessToken, fetchImpl);
   return result.ok ? { ok: true, resolved: result.body.resolved } : result;
+}
+
+// ---------------------------------------------------------------
+// İçerik denetimi kuyruğu (/api/admin/listings)
+// ---------------------------------------------------------------
+//
+// Otomatik denetimin karar veremediği ilanlar: şüpheli (%40–60), sağlayıcı
+// tanımlı değil ya da hata verdi, ya da denetim yarıda kaldı. Hepsi
+// 'pending_moderation'da, akışta görünmez; burada bir insan karar verir.
+
+export type PendingListing = {
+  vehicle: MyListing;
+  description: string | null;
+  /** Otomatik denetimin nedenleri (şüpheli kategori ya da "unavailable") */
+  reasons: ModerationReason[];
+  /** Otomatik denetim bitti ama karar veremedi. false: denetim sürüyor ya da yarıda kaldı */
+  needsReview: boolean;
+  /** İnceleme için video kareleri (kapak + ara kareler) ve fotoğraflar */
+  media: string[];
+};
+
+export type PendingListingRow = Omit<MyListingRow, "videos"> & {
+  description: string | null;
+  moderation_reason: string | null;
+  videos:
+    | { status: string; hls_url: string | null; thumbnail_url: string | null; duration_seconds?: number | null }[]
+    | null;
+};
+
+export function toPendingListing(row: PendingListingRow): PendingListing {
+  const frames = (row.videos ?? [])
+    .filter((video) => video.status === "ready" && video.hls_url && video.thumbnail_url)
+    .flatMap((video) => videoModerationFrames(video.thumbnail_url as string, video.duration_seconds ?? null));
+  const photos = [...(row.images ?? [])]
+    .sort((a, b) => a.display_order - b.display_order)
+    .flatMap((image) => (image.image_url ? [image.image_url] : []));
+  return {
+    vehicle: toMyListing(row),
+    description: row.description,
+    reasons: parseReasonCode(row.moderation_reason),
+    needsReview: row.moderation_reason !== null,
+    media: [...frames, ...photos],
+  };
+}
+
+/** approve: yayına al; reject: reddet ve medyayı sil; recheck: otomatik denetimi yeniden çalıştır */
+export type ListingDecision = { action: "approve" | "reject" | "recheck"; vehicleId: string };
+
+export type ParseDecisionResult =
+  | { ok: true; value: ListingDecision }
+  | { ok: false; code: "invalid_action" | "invalid_vehicle"; message: string };
+
+export function parseListingDecision(body: unknown): ParseDecisionResult {
+  const { action, vehicleId } = (body ?? {}) as Record<string, unknown>;
+  if (action !== "approve" && action !== "reject" && action !== "recheck") {
+    return { ok: false, code: "invalid_action", message: "Bilinmeyen moderasyon işlemi." };
+  }
+  if (!isUuid(vehicleId)) return { ok: false, code: "invalid_vehicle", message: "İlan bulunamadı." };
+  return { ok: true, value: { action, vehicleId } };
+}
+
+export async function fetchPendingListings(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: true; items: PendingListing[] } | ModerationFailure> {
+  const result = await callModerationApi<{ items: PendingListing[] }>(null, accessToken, fetchImpl, "/api/admin/listings");
+  return result.ok ? { ok: true, items: result.body.items } : result;
+}
+
+export async function submitListingDecision(
+  input: ListingDecision,
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: true; decision: ModerationDecision | null; published: boolean } | ModerationFailure> {
+  const result = await callModerationApi<{ decision?: ModerationDecision | null; published?: boolean }>(
+    input,
+    accessToken,
+    fetchImpl,
+    "/api/admin/listings",
+  );
+  return result.ok
+    ? { ok: true, decision: result.body.decision ?? null, published: Boolean(result.body.published) }
+    : result;
 }

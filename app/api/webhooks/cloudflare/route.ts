@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { verifyWebhookSignature, type StreamWebhookPayload } from "../../../../lib/cloudflare";
 import { getSupabaseAdmin } from "../../../../lib/supabase-server";
-import { markVideoReadyAndActivateVehicle } from "../../../../lib/video-activation";
+import { runListingModeration } from "../../../../lib/listing-moderation";
+import { markVideoReadyAndQueueModeration } from "../../../../lib/video-activation";
 
 // POST /api/webhooks/cloudflare
 //
@@ -13,6 +14,15 @@ import { markVideoReadyAndActivateVehicle } from "../../../../lib/video-activati
 //
 // Cloudflare aynı bildirimi birden fazla gönderebilir; tüm güncellemeler tekrar
 // çalıştırılabilir (idempotent). 5xx dönülen bildirimler tekrar denenebilir.
+//
+// Video hazır olunca ilan yayına değil içerik denetimine girer
+// ('pending_moderation'). Denetim (video kareleri, fotoğraflar, açıklama) yanıt
+// gönderildikten sonra after() içinde çalışır: Cloudflare beklemez, sağlayıcı
+// yavaşsa bile bildirim zaman aşımına düşmez. Denetim yarıda kalırsa ilan
+// incelemede kalır (bkz. lib/listing-moderation.ts runListingModeration).
+
+/** after() içindeki denetim bu süreye kadar çalışabilir (kareler + fotoğraflar) */
+export const maxDuration = 60;
 
 function json(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
@@ -48,7 +58,7 @@ export async function POST(request: Request) {
 
   // --- Video hazır ---
   if (state === "ready" && payload.readyToStream && payload.playback?.hls) {
-    const result = await markVideoReadyAndActivateVehicle(supabase, {
+    const result = await markVideoReadyAndQueueModeration(supabase, {
       streamUid,
       hlsUrl: payload.playback.hls,
       thumbnailUrl: payload.thumbnail ?? null,
@@ -67,7 +77,11 @@ export async function POST(request: Request) {
       return json(500, { error: "database_error" });
     }
 
-    return json(200, { ok: true, vehicleActivated: result.vehicleActivated });
+    if (result.moderationQueued) {
+      const vehicleId = result.vehicleId;
+      after(() => runListingModeration(vehicleId));
+    }
+    return json(200, { ok: true, moderationQueued: result.moderationQueued });
   }
 
   // --- Video işlenemedi ---

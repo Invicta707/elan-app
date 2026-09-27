@@ -3,7 +3,7 @@ import ModerationView from "../../../components/ModerationView";
 import { bodyFont, displayFont } from "../../fonts";
 
 export const metadata: Metadata = {
-  title: "Bildirimler | gözüyle yönetim",
+  title: "Moderasyon | gözüyle yönetim",
   robots: { index: false, follow: false },
 };
 

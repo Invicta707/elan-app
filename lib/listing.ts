@@ -2,6 +2,12 @@ import { MAX_BRAND_NAME, MAX_MODEL_NAME, catalogNameError, cleanCatalogName } fr
 import type { FuelType, TransmissionType } from "./feed";
 import { normalizeTurkishPhone } from "./phone";
 import type { BodyType } from "./search";
+import {
+  CATALOG_NAME_POLICY_ERROR,
+  CITY_POLICY_ERROR,
+  DESCRIPTION_POLICY_ERROR,
+  textModerationCategory,
+} from "./text-moderation";
 
 // /sell formunun saf (React'ten ve Supabase istemcisinden bağımsız) mantığı:
 // doğrulama ve veritabanına yazılacak kayıtların hazırlanması. Testleri
@@ -53,15 +59,21 @@ const MIN_YEAR = 1970;
 function brandError(draft: ListingDraft): string | null {
   if (draft.brandId) return null;
   if (!cleanCatalogName(draft.brandName)) return "Marka seç ya da yaz.";
-  return catalogNameError(draft.brandName, MAX_BRAND_NAME);
+  return catalogNameError(draft.brandName, MAX_BRAND_NAME) ?? catalogPolicyError(draft.brandName);
 }
 
 /** Model: katalogdaki markanın katalog modeli ya da geçerli bir ad */
 function modelError(draft: ListingDraft): string | null {
   if (draft.modelId && draft.brandId) return null;
   if (!cleanCatalogName(draft.modelName)) return brandError(draft) ? "Önce marka seç." : "Model seç ya da yaz.";
-  return catalogNameError(draft.modelName, MAX_MODEL_NAME);
+  return catalogNameError(draft.modelName, MAX_MODEL_NAME) ?? catalogPolicyError(draft.modelName);
 }
+
+// Metin filtresi (lib/text-moderation.ts): veritabanı aynı kuralla reddeder
+// (fn_catalog_name_filter, fn_guard_vehicle_content); burada yazarken söylenir.
+const catalogPolicyError = (name: string) => (textModerationCategory(name) ? CATALOG_NAME_POLICY_ERROR : null);
+const cityError = (city: string) => (!city.trim() ? "Şehir seç ya da yaz." : textModerationCategory(city) ? CITY_POLICY_ERROR : null);
+const descriptionError = (text: string) => (textModerationCategory(text) ? DESCRIPTION_POLICY_ERROR : null);
 
 /** İlk hatanın kullanıcıya gösterilecek metnini, form geçerliyse null döner. */
 export function validateListingDraft(draft: ListingDraft, now: Date = new Date()): string | null {
@@ -70,22 +82,22 @@ export function validateListingDraft(draft: ListingDraft, now: Date = new Date()
   if (!year || year < MIN_YEAR || year > now.getFullYear() + 1) return "Geçerli bir yıl gir.";
   if (!onlyDigits(draft.mileageKm)) return "Kilometreyi gir.";
   if (!onlyDigits(draft.price)) return "Fiyatı gir.";
-  if (!draft.city.trim()) return "Şehir seç ya da yaz.";
+  const city = cityError(draft.city);
+  if (city) return city;
   if (!draft.bodyType) return "Kasa tipi seç.";
   if (!draft.fuelType) return "Yakıt türü seç.";
   if (!draft.transmission) return "Vites tipi seç.";
   if (!normalizeTurkishPhone(draft.whatsapp)) return "Geçerli bir WhatsApp numarası gir.";
-  return null;
+  return descriptionError(draft.description);
 }
 
 // ---------------------------------------------------------------
 // Adımlı form: alan hataları, adımlar ve sayı biçimi
 // ---------------------------------------------------------------
 
-/** Doğrulanan alanlar (hasar durumu ve açıklama her zaman geçerlidir) */
-/** Doğrulanan alanlar (hasar durumu ve açıklama her zaman geçerli; yazılan marka/model adı
- * hatası marka/model alanında gösterilir) */
-export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "description" | "brandName" | "modelName">;
+/** Doğrulanan alanlar (hasar durumu her zaman geçerli; açıklama isteğe bağlı, yalnızca metin
+ * filtresine bakılır; yazılan marka/model adı hatası marka/model alanında gösterilir) */
+export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "brandName" | "modelName">;
 export type ListingFieldErrors = Partial<Record<ListingField, string>>;
 
 /**
@@ -105,11 +117,14 @@ export function listingFieldErrors(draft: ListingDraft, now: Date = new Date()):
   if (!year || year < MIN_YEAR || year > maxYear) errors.year = `${MIN_YEAR}–${maxYear} arasında bir yıl gir.`;
   if (!onlyDigits(draft.mileageKm)) errors.mileageKm = "Kilometreyi gir.";
   if (!onlyDigits(draft.price)) errors.price = "Fiyatı gir.";
-  if (!draft.city.trim()) errors.city = "Şehir seç ya da yaz.";
+  const city = cityError(draft.city);
+  if (city) errors.city = city;
   if (!draft.bodyType) errors.bodyType = "Kasa tipi seç.";
   if (!draft.fuelType) errors.fuelType = "Yakıt türü seç.";
   if (!draft.transmission) errors.transmission = "Vites tipi seç.";
   if (!normalizeTurkishPhone(draft.whatsapp)) errors.whatsapp = "Geçerli bir WhatsApp numarası gir.";
+  const description = descriptionError(draft.description);
+  if (description) errors.description = description;
   return errors;
 }
 
@@ -124,7 +139,7 @@ export const LISTING_STEPS: readonly { id: ListingStepId; title: string; fields:
   },
   // Video zorunluluğu dosya seçimine bağlı; formda ayrıca denetlenir
   { id: "media", title: "Medya & Video", fields: [] },
-  { id: "details", title: "Fiyat & Detaylar", fields: ["price", "city", "whatsapp"] },
+  { id: "details", title: "Fiyat & Detaylar", fields: ["price", "city", "description", "whatsapp"] },
 ];
 
 /** Hataların yalnızca bu adımdaki alanlara ait olanları */

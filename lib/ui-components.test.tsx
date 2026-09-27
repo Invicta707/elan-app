@@ -27,6 +27,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("./supabase", () => ({ supabase: {} }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 // next/font yalnızca Next derlemesinde çalışır (pencere ve düğmeler app/fonts'u içe aktarır)
 vi.mock("../app/fonts", () => ({ displayFont: { variable: "" }, bodyFont: { variable: "" } }));
 
@@ -42,6 +43,7 @@ import { MessageUserButtonView } from "../components/social/MessageUserButton";
 import { ProfileStats } from "../components/social/ProfileHeader";
 import BlockedUsersSheet from "../components/settings/BlockedUsersSheet";
 import Switch from "../components/ui/Switch";
+import ListingManageSheet from "../components/showcase/ListingManageSheet";
 import ShowcaseTile from "../components/showcase/ShowcaseTile";
 import UnreadBadge from "../components/ui/UnreadBadge";
 import type { MyListing } from "./my-listings";
@@ -60,6 +62,7 @@ const listing: MyListing = {
   mileageKm: 90000,
   city: "İzmir",
   status: "active",
+  moderationStatus: "approved",
   createdAt: "2026-09-20T10:00:00Z",
   coverUrl: "https://x/cover.jpg",
   posterUrl: "https://x/poster.jpg",
@@ -87,6 +90,23 @@ describe("ShowcaseTile", () => {
     expect(screen.queryByRole("link")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /yayında değil\. Yönet/ }));
     expect(onManage).toHaveBeenCalledWith(expect.objectContaining({ id: "veh-1", status: "archived" }));
+  });
+
+  it("içerik denetimindeki ilan: \"İnceleniyor\"", () => {
+    render(<ShowcaseTile listing={{ ...listing, status: "pending_moderation", moderationStatus: "pending" }} onManage={vi.fn()} />);
+    expect(screen.getByText("İnceleniyor")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /inceleniyor. Yönet/ })).toBeTruthy();
+  });
+
+  it("içerik denetiminin reddettiği ilan: medyası silinmiş, yalnızca \"Yayınlanmadı\"", () => {
+    render(
+      <ShowcaseTile
+        listing={{ ...listing, status: "rejected", moderationStatus: "rejected", posterUrl: null, coverUrl: null }}
+        onManage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Yayınlanmadı")).toBeTruthy();
+    expect(screen.queryByText("Kapak yok")).toBeNull();
   });
 
   it("köşedeki menü butonu her durumda yönetimi açar", () => {
@@ -162,6 +182,16 @@ describe("Composer", () => {
     fireEvent.click(button);
     expect(onSend).toHaveBeenCalledWith("Son fiyat nedir?");
     expect(area.value).toBe("");
+  });
+
+  it("gönderim reddedilirse (içerik filtresi) yazılan metin kutuda kalır", () => {
+    const onSend = vi.fn(() => false);
+    render(<Composer onSend={onSend} />);
+    const area = screen.getByLabelText("Mesaj yaz") as HTMLTextAreaElement;
+    fireEvent.change(area, { target: { value: "düzeltilecek metin" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gönder" }));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(area.value).toBe("düzeltilecek metin");
   });
 });
 
@@ -485,5 +515,42 @@ describe("marka işareti", () => {
     expect(screen.getByRole("img", { name: "gözüyle" })).toBeTruthy();
     const { container } = render(<Logo />);
     expect(container.textContent).toBe("gözüyle");
+  });
+});
+
+describe("ListingManageSheet: içerik denetimi", () => {
+  it("reddedilen ilan: topluluk kuralları uyarısı, aksiyon yok", () => {
+    render(
+      <ListingManageSheet
+        listing={{ ...listing, status: "rejected", moderationStatus: "rejected" }}
+        onClose={vi.fn()}
+        onStatusChanged={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Yüklenen içerik topluluk kurallarına uymadığı için yayınlanmadı.")).toBeTruthy();
+    expect(screen.queryByText("Yayına al")).toBeNull();
+  });
+
+  it("denetimdeki ilan: bilgi notu", () => {
+    render(
+      <ListingManageSheet
+        listing={{ ...listing, status: "pending_moderation", moderationStatus: "pending" }}
+        onClose={vi.fn()}
+        onStatusChanged={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/İlanın içerik denetiminde/)).toBeTruthy();
+  });
+
+  it("denetimi bitmemiş arşivdeki ilan yayına alınamaz, nedeni yazılır", () => {
+    render(
+      <ListingManageSheet
+        listing={{ ...listing, status: "archived", moderationStatus: "pending" }}
+        onClose={vi.fn()}
+        onStatusChanged={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Yayına al")).toBeNull();
+    expect(screen.getByText("Yayına almak için içerik denetiminin tamamlanması gerekiyor.")).toBeTruthy();
   });
 });

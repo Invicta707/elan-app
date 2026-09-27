@@ -23,6 +23,7 @@ const MIGRATIONS = [
   "20260926150100_moderation.sql",
   HARDEN_MIGRATION,
 ];
+const PENDING_MODERATION_MIGRATION = "20260928100000_vehicle_status_pending_moderation.sql";
 const readMigration = (name: string) => readFileSync(`${MIGRATIONS_DIR}/${name}`, "utf8");
 
 const SELLER = "11111111-1111-4111-8111-111111111111";
@@ -231,6 +232,9 @@ beforeAll(async () => {
   // Uzak veritabanındaki gibi: migration'dan önce yüklenmiş bir fotoğraf
   await seedVehicle(db, "archived");
   await db.exec(readMigration(HARDEN_MIGRATION));
+  // Sonradan eklenen durum (VEHICLE_STATUSES'ta var): geçiş tablosu onu "else array[]"
+  // dalıyla karşılamalı. Denetim kuralları lib/content-moderation-rls.test.ts'te.
+  await db.exec(readMigration(PENDING_MODERATION_MIGRATION));
 }, 60_000);
 
 afterAll(async () => {
@@ -342,7 +346,10 @@ describe("vehicles.status: satıcının tabloya doğrudan yazması", () => {
   });
 
   describe("sunucu yolları kısıtlanmaz", () => {
-    it("servis anahtarı: video hazır olunca draft/pending_video → active (lib/video-activation.ts)", async () => {
+    // Bugün video hazır olunca ilan önce 'pending_moderation'a, denetimden sonra 'active'e
+    // geçer (lib/video-activation.ts, lib/listing-moderation.ts); o kurallar
+    // lib/content-moderation-rls.test.ts'te. Burada: geçiş tablosu sunucuyu kısıtlamaz.
+    it("servis anahtarı: draft/pending_video → active geçiş tablosuna takılmaz", async () => {
       const id = await seedVehicle(db, "pending_video");
       const outcome = await run(
         db,

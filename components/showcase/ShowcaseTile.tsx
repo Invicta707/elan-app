@@ -1,10 +1,10 @@
 "use client";
 
-import { EyeOff, MoreHorizontal, Play } from "lucide-react";
+import { EyeOff, Hourglass, MoreHorizontal, Play, ShieldAlert } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import type { MyListing } from "../../lib/my-listings";
-import { formatCount, formatTilePrice, isLive } from "../../lib/showcase";
+import { formatCount, formatTilePrice, isContentRejected, isLive, tileBadge } from "../../lib/showcase";
 
 // Vitrinim ızgarasının dikey karesi (Reels / TikTok profili gibi): video
 // kapağı, sol altta cam efektli fiyat, sağ altta görüntülenme. Yayındaki ilan
@@ -23,7 +23,10 @@ export default function ShowcaseTile({
   const live = isLive(listing.status);
   const price = formatTilePrice(listing.price, listing.currency);
   const views = formatCount(listing.viewsCount);
-  const label = `${listing.title} ${listing.year}, ${price}, ${listing.viewsCount} görüntülenme${live ? "" : ", yayında değil"}`;
+  const badge = tileBadge(listing);
+  const rejected = isContentRejected(listing);
+  const BadgeIcon = rejected ? ShieldAlert : listing.status === "pending_moderation" ? Hourglass : EyeOff;
+  const label = `${listing.title} ${listing.year}, ${price}, ${listing.viewsCount} görüntülenme${badge ? `, ${badge.toLocaleLowerCase("tr")}` : ""}`;
 
   const body = (
     <>
@@ -37,20 +40,26 @@ export default function ShowcaseTile({
           className={`object-cover transition-[filter] duration-200 ${live ? "" : "brightness-[0.55] saturate-[0.7]"}`}
         />
       ) : (
-        <span className="absolute inset-0 flex items-center justify-center text-[12px] font-medium text-white/60">
-          Kapak yok
-        </span>
+        // Reddedilen ilanın medyası silinir: ortada yalnızca etiket kalır
+        !badge && (
+          <span className="absolute inset-0 flex items-center justify-center text-[12px] font-medium text-white/60">
+            Kapak yok
+          </span>
+        )
       )}
 
       {/* Alt kenarda okunabilirlik için hafif karartma */}
       <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
 
-      {/* Pasif ilan: kararmış karenin ortasında etiket (köşedeki menüyle çakışmaz) */}
-      {!live && (
+      {/* Pasif ilan: kararmış karenin ortasında etiket (köşedeki menüyle çakışmaz).
+          İçerik denetimi: "İnceleniyor" / "Yayınlanmadı" */}
+      {badge && (
         <span className="absolute inset-x-1 top-1/2 flex -translate-y-1/2 justify-center">
-          <span className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-white backdrop-blur-md">
-            <EyeOff aria-hidden="true" className="h-3 w-3" />
-            Yayında Değil
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-white backdrop-blur-md ${rejected ? "bg-[#B42318]/85" : "bg-black/55"}`}
+          >
+            <BadgeIcon aria-hidden="true" className="h-3 w-3" />
+            {badge}
           </span>
         </span>
       )}

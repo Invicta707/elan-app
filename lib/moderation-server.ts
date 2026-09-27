@@ -1,6 +1,14 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseAdminEmails, toModerationQueue, type ModerationItem, type OpenReportRow } from "./moderation";
+import {
+  parseAdminEmails,
+  toModerationQueue,
+  toPendingListing,
+  type ModerationItem,
+  type OpenReportRow,
+  type PendingListing,
+  type PendingListingRow,
+} from "./moderation";
 import { getAuthenticatedUserId, getSupabaseAdmin } from "./supabase-server";
 
 // Moderasyon paneli: yönetici denetimi ve servis anahtarıyla yapılan işlemler.
@@ -122,4 +130,42 @@ async function resolveReports(
     return { ok: false, code: "database_error" };
   }
   return { ok: true, resolved: data?.length ?? 0 };
+}
+
+// ---------------------------------------------------------------
+// İçerik denetimi kuyruğu
+// ---------------------------------------------------------------
+
+export const PENDING_LISTING_SELECT = `id, status, moderation_status, moderation_reason, description, year, price, currency,
+       mileage_km, city, created_at, views_count,
+       brand:brands(name),
+       model:models(name),
+       images:vehicle_images(image_url, is_primary, display_order),
+       videos(status, hls_url, thumbnail_url, duration_seconds)`;
+
+/** Tek istekte okunacak en fazla ilan */
+export const PENDING_LISTINGS_LIMIT = 200;
+
+/**
+ * Kararı insana kalan ilanlar, en eskisi önce: denetimi bekleyen
+ * ('pending_moderation') ilanlar ile otomatik denetimin şüpheli bulduğu ama
+ * satıcının arada arşive aldığı ilanlar (moderation_reason dolu). Videosu henüz
+ * işlenmemiş ilanlar ('pending_video') burada görünmez.
+ */
+export async function fetchPendingListingRows(
+  supabase: SupabaseClient,
+): Promise<{ ok: true; items: PendingListing[] } | { ok: false }> {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select(PENDING_LISTING_SELECT)
+    .eq("moderation_status", "pending")
+    .or("status.eq.pending_moderation,moderation_reason.not.is.null")
+    .order("created_at", { ascending: true })
+    .limit(PENDING_LISTINGS_LIMIT);
+
+  if (error) {
+    console.error("Moderasyon: denetim kuyruğu okunamadı:", error);
+    return { ok: false };
+  }
+  return { ok: true, items: ((data ?? []) as unknown as PendingListingRow[]).map(toPendingListing) };
 }

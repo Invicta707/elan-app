@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./supabase", () => ({ supabase: {} }));
 
-import { formatCount, formatTilePrice, isLive, showcaseStats } from "./showcase";
+import { formatCount, formatTilePrice, isContentRejected, isLive, showcaseStats, tileBadge } from "./showcase";
 
 describe("formatTilePrice", () => {
   it.each([
@@ -39,5 +39,25 @@ describe("showcaseStats", () => {
       ]),
     ).toEqual({ total: 3, live: 2, views: 125 });
     expect(isLive("pending_video")).toBe(false);
+  });
+});
+
+describe("içerik denetimi etiketleri", () => {
+  it.each([
+    ["active", "approved", null],
+    ["pending_video", "pending", "Yayında Değil"],
+    ["pending_moderation", "pending", "İnceleniyor"],
+    ["rejected", "rejected", "Yayınlanmadı"],
+    // Moderasyonun bildirim sonrası kaldırdığı ilan: içerik denetiminden geçmişti
+    ["rejected", "approved", "Yayında Değil"],
+    ["archived", "approved", "Yayında Değil"],
+  ] as const)("%s + %s → %s", (status, moderationStatus, badge) => {
+    expect(tileBadge({ status, moderationStatus })).toBe(badge);
+  });
+
+  it("yalnızca içerik denetiminin reddettiği ilan \"yayınlanmadı\" uyarısı alır", () => {
+    expect(isContentRejected({ status: "rejected", moderationStatus: "rejected" })).toBe(true);
+    expect(isContentRejected({ status: "rejected", moderationStatus: "approved" })).toBe(false);
+    expect(isContentRejected({ status: "pending_moderation", moderationStatus: "pending" })).toBe(false);
   });
 });

@@ -5,11 +5,16 @@ vi.mock("./supabase", () => ({ supabase: {} }));
 import {
   MAX_DISMISS_REPORTS,
   fetchModerationQueue,
+  fetchPendingListings,
   parseAdminEmails,
+  parseListingDecision,
   parseModerationAction,
+  submitListingDecision,
   submitModerationAction,
   toModerationQueue,
+  toPendingListing,
   type OpenReportRow,
+  type PendingListingRow,
 } from "./moderation";
 import type { MyListingRow } from "./my-listings";
 
@@ -163,5 +168,70 @@ describe("fetchModerationQueue / submitModerationAction", () => {
       ok: false,
       status: 502,
     });
+  });
+});
+
+describe("içerik denetimi kuyruğu", () => {
+  const THUMB = "https://customer-abc.cloudflarestream.com/uid/thumbnails/thumbnail.jpg";
+  const row = (overrides: Partial<PendingListingRow> = {}): PendingListingRow => ({
+    id: VEHICLE_A,
+    status: "pending_moderation",
+    moderation_status: "pending",
+    year: 2019,
+    price: "850000",
+    currency: "TRY",
+    mileage_km: 90000,
+    city: "Bursa",
+    created_at: "2026-09-28T09:00:00Z",
+    views_count: 0,
+    brand: { name: "Fiat" },
+    model: { name: "Egea" },
+    description: "Temiz araç",
+    moderation_reason: "review:gore,unavailable",
+    images: [
+      { image_url: "https://x/2.jpeg", is_primary: false, display_order: 2 },
+      { image_url: "https://x/0.jpeg", is_primary: true, display_order: 0 },
+    ],
+    videos: [{ status: "ready", hls_url: "https://h", thumbnail_url: THUMB, duration_seconds: 10 }],
+    ...overrides,
+  });
+
+  it("satır → kart: nedenler, inceleme gereği, önce video kareleri sonra fotoğraflar", () => {
+    const item = toPendingListing(row());
+    expect(item.vehicle).toMatchObject({ id: VEHICLE_A, title: "Fiat Egea", status: "pending_moderation", moderationStatus: "pending" });
+    expect(item.reasons).toEqual(["gore", "unavailable"]);
+    expect(item.needsReview).toBe(true);
+    expect(item.description).toBe("Temiz araç");
+    expect(item.media).toHaveLength(8);
+    expect(item.media[0]).toBe(`${THUMB}?height=480`);
+    expect(item.media.slice(-2)).toEqual(["https://x/0.jpeg", "https://x/2.jpeg"]);
+  });
+
+  it("nedeni olmayan ilan: denetim sürüyor ya da yarıda kaldı", () => {
+    expect(toPendingListing(row({ moderation_reason: null }))).toMatchObject({ reasons: [], needsReview: false });
+  });
+
+  it("parseListingDecision", () => {
+    expect(parseListingDecision({ action: "approve", vehicleId: VEHICLE_A })).toEqual({
+      ok: true,
+      value: { action: "approve", vehicleId: VEHICLE_A },
+    });
+    expect(parseListingDecision({ action: "publish", vehicleId: VEHICLE_A })).toMatchObject({ ok: false, code: "invalid_action" });
+    expect(parseListingDecision({ action: "reject", vehicleId: "x" })).toMatchObject({ ok: false, code: "invalid_vehicle" });
+    expect(parseListingDecision(null)).toMatchObject({ ok: false });
+  });
+
+  it("/api/admin/listings çağrıları", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? new Response(JSON.stringify({ ok: true, decision: "safe", published: true }))
+        : new Response(JSON.stringify({ items: [] })),
+    );
+    expect(await fetchPendingListings("tok", fetchImpl as unknown as typeof fetch)).toEqual({ ok: true, items: [] });
+    expect(
+      await submitListingDecision({ action: "approve", vehicleId: VEHICLE_A }, "tok", fetchImpl as unknown as typeof fetch),
+    ).toEqual({ ok: true, decision: "safe", published: true });
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual(["/api/admin/listings", "/api/admin/listings"]);
+    expect(JSON.parse(fetchImpl.mock.calls[1][1]?.body as string)).toEqual({ action: "approve", vehicleId: VEHICLE_A });
   });
 });

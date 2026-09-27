@@ -22,6 +22,7 @@ import {
   type MessageRow,
 } from "../../lib/messages";
 import { supabase } from "../../lib/supabase";
+import { messagePolicyError } from "../../lib/text-moderation";
 import { refreshUnreadCount } from "../../lib/use-unread-count";
 import { ReportDialog } from "../ReportButton";
 import BottomSheet from "../ui/BottomSheet";
@@ -158,7 +159,7 @@ export default function ChatView({ conversationId }: { conversationId: string })
     };
     setMessages((current) => mergeMessages(current.filter((m) => m.id !== retryOf?.id), [optimistic]));
     try {
-      const saved = await sendMessage(conversationId, myId, text);
+      const saved = await sendMessage(conversationId, text);
       setMessages((current) => mergeMessages(current, [saved], { tempId }));
     } catch (err) {
       setMessages((current) => current.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
@@ -272,7 +273,15 @@ export default function ChatView({ conversationId }: { conversationId: string })
           </p>
         ) : (
           <Composer
-            onSend={(text) => void send(text)}
+            onSend={(text) => {
+              // Filtreye takılan mesaj balon olarak eklenmez; metin kutuda kalır, düzeltilebilir
+              const policy = messagePolicyError(text);
+              if (policy) {
+                setError(policy);
+                return false;
+              }
+              void send(text);
+            }}
             onFocus={() => {
               nearBottom.current = true;
             }}
