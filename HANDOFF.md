@@ -252,7 +252,7 @@ _Son güncelleme: 27 Eylül 2026_
   - **Kararlar:**
     - **Ret** (cinsel içerik / çıplaklık ya da şiddet / kan / silah **> %60**): ilan ve denetim `rejected` oluyor. Cloudflare videoları, `vehicle-photos/<ilan>/` klasöründeki bütün dosyalar ve video/fotoğraf kayıtları siliniyor. Vitrinim'de "Yüklenen içerik topluluk kurallarına uymadığı için yayınlanmadı" uyarısı çıkıyor (üstte kırmızı şerit, karede "Yayınlanmadı", yönetim menüsünde açıklama).
     - **İnceleme** (%40–60, "müstehcen" > %60, ya da sağlayıcı yok / hata verdi): ilan beklemede kalıyor. `moderation_reason = 'review:…'` yazılıyor; ilan /admin/reports → "İçerik denetimi"nde bir insanın kararını bekliyor. Kapalı başarısızlık: denetlenmemiş içerik yayına girmez.
-    - **Temiz:** ilan onaylanıp aynı güncellemede yayına alınıyor.
+    - **Temiz:** ~~ilan onaylanıp aynı güncellemede yayına alınıyor~~ → **`59e7c86`'dan beri ilan `pending_approval`'a geçiyor, yayına yalnızca yönetici onayıyla giriyor** (aşağıda "Zorunlu yönetici onayı").
     - Reşit olmayanlarla ilgili cinsel içerikte (OpenAI) ret eşiği %20.
   - **Sağlayıcılar** ([lib/moderation-providers.ts](lib/moderation-providers.ts)), ortam değişkeniyle seçiliyor (bkz. `.env.example`): `MODERATION_IMAGE_PROVIDER` = `sightengine` | `rekognition` | `openai` | `none`; boşsa anahtarı tanımlı ilk sağlayıcı kullanılıyor.
     - **Sightengine:** `nudity-2.1`, `weapon`, `violence`, `gore-2.0` modelleri; adres modu (GET) ve bayt modu (multipart).
@@ -368,7 +368,7 @@ _Son güncelleme: 27 Eylül 2026_
 
 ## 4. Git ve dağıtım durumu
 
-- Son kod commit'i **`59e7c86`** ("feat(moderation): mandatory admin approval before any listing goes live"); ondan önce `e11af9d` (`/sell` fotoğraf türleri), `47a384a` (avatar tür düzeltmesi) ve `2938b50` (içerik denetimi). Production deploy'u **`elan-g25du1gbz`** (27 Eylül 2026 20:59 TSİ), `gozuyle.com`'a bağlı.
+- Son kod commit'i **`59e7c86`** ("feat(moderation): mandatory admin approval before any listing goes live"); ondan önce `e11af9d` (`/sell` fotoğraf türleri), `47a384a` (avatar tür düzeltmesi) ve `2938b50` (içerik denetimi). Kodun deploy'u **`elan-g25du1gbz`** (27 Eylül 2026 20:59 TSİ). Ardından gelen doküman push'u (`bed1e64`) aynı kodu **`elan-4bia4hl1b`** ile yeniden deploy etti; oturum kapanırken `gozuyle.com` buna bağlıydı (`/`, `/my-listings`, `/admin/reports`, `/sell` → 200). Her doküman push'u yeni bir deploy kimliği üretir; güncel olanı `npx vercel inspect gozuyle.com` gösterir.
 - İçerik denetimi (`2938b50`) ilk olarak `elan-hur1fzyh5` ile yayına girdi. Sightengine anahtarları eklenince kullanıcı yeniden deploy etti: `elan-3ajm0ibrc` (27 Eylül 2026 19:38 TSİ); sağlayıcı doğrulaması bununla yapıldı. Bu dosya ondan sonra ayrı dokümantasyon commit'leriyle güncellendi; her push aynı ortam değişkenleriyle yeniden deploy eder. Güncel `HEAD` için `git log -1`, güncel deploy için `npx vercel inspect gozuyle.com` kullanın.
 - `origin/main`'e push edilen her commit'in production deploy'unu GitHub entegrasyonu başlatıyor. Durumu görmek için: `npx vercel ls elan-app`.
 - Veritabanı kodla uyumlu: 21 migration'ın hepsi uzak veritabanında uygulanmış durumda (`npx supabase migration list --linked` ile kontrol edilebilir). **Sıra önemli:**
@@ -421,7 +421,7 @@ _Son güncelleme: 27 Eylül 2026_
 **Kullanıcı tarafında:**
 
 0. ✅ **İçerik denetimi sağlayıcısı: Sightengine tanımlandı ve canlıda doğrulandı (27 Eylül 2026, `elan-3ajm0ibrc`).**
-   - Anahtar geçerli; gerçek ilan safe, tabanca fotoğrafı rejected (silah 0,99), JPEG/WebP avatar kabul (ayrıntılar 3. bölümde). Yeni ilanlar artık denetimden geçince otomatik yayına giriyor; avatar yüklemesi açık.
+   - Anahtar geçerli; gerçek ilan safe, tabanca fotoğrafı rejected (silah 0,99), JPEG/WebP avatar kabul (ayrıntılar 3. bölümde). Avatar yüklemesi açık. Yeni ilanlar denetimden temiz geçse de yönetici onayı bekliyor (`pending_approval`, `59e7c86`).
    - Maliyet: Sightengine'de her görsel 4 işlem (nudity, weapon, violence, gore); bir ilan (6 kare + en fazla 10 fotoğraf) 24–64 işlem. Kota Sightengine panelinden izlenmeli; kota biterse ilanlar "Otomatik denetim yapılamadı" ile panelde elle onay bekler, avatar yüklemesi 503 döner.
    - **Kalan (kullanıcı):**
      - **Gizlilik:** ilan görselleri ve profil fotoğrafları artık Sightengine'e (Fransa) gönderiliyor. Gizlilik politikasında (KVKK aydınlatma, yurt dışına aktarım) bu işleyici belirtilmeli; `OPENAI_API_KEY` eklenirse ilan metinleri ve **özel mesajlar** OpenAI'ye (ABD) de gider. Hukuki inceleme maddesiyle birlikte ele alınmalı.
