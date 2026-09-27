@@ -67,7 +67,7 @@ export default function HomeFeed({
       >
         {isLoading ? null : !session ? (
           followingVisible && (
-            <div className="flex h-full flex-col items-center overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top)+6.5rem)] pb-5">
+            <div className="flex h-full flex-col items-center overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top)+4.5rem)] pb-5">
               <FollowingEmpty kind="guest" onExplore={() => selectTab("explore")} onSignIn={() => setShowAuth(true)} />
             </div>
           )
@@ -90,9 +90,7 @@ export default function HomeFeed({
         )}
       </div>
 
-      <FeedHeader>
-        <FeedTabs active={tab} onChange={selectTab} panelIds={PANEL_IDS} />
-      </FeedHeader>
+      <FeedHeader center={<FeedTabs active={tab} onChange={selectTab} panelIds={PANEL_IDS} />} />
 
       {showAuth &&
         createPortal(

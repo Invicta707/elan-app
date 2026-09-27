@@ -3,7 +3,7 @@ import SearchView from "../../components/SearchView";
 import {
   EMPTY_FILTERS,
   FOCUS_PARAM,
-  fetchCatalog,
+  fetchCatalogCached,
   filtersFromSearchParams,
   filtersToSearchParams,
   searchVehicles,
@@ -40,7 +40,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   try {
     // Marka/model URL'de slug olarak durur; id'lere çevirmek için önce katalog gerekir
-    catalog = await fetchCatalog();
+    catalog = await fetchCatalogCached();
     filters = filtersFromSearchParams(params, catalog);
     firstPage = await searchVehicles(filters, 0);
   } catch (error) {

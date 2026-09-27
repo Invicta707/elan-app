@@ -9,8 +9,9 @@ const TABS: readonly { key: FeedTab; label: string }[] = [
   { key: "explore", label: "Keşfet" },
 ];
 
-// Ana sayfadaki akışın üstünde, TikTok'taki gibi iki sekme: cam efektli bir
-// hap içinde. ARIA sekme deseni: ok tuşlarıyla gezilir, seçili sekme odak alır.
+// Ana sayfanın en üst satırında, TikTok / Reels'teki gibi iki sekme (başlığın
+// "Akış | Ara" bağlantılarının yerinde, aynı görünümde: seçili olan kalın ve
+// altı çizgili). ARIA sekme deseni: ok tuşlarıyla gezilir, seçili sekme odak alır.
 export default function FeedTabs({
   active,
   onChange,
@@ -42,7 +43,7 @@ export default function FeedTabs({
       role="tablist"
       aria-label="Akış"
       onKeyDown={handleKeyDown}
-      className="pointer-events-auto mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-black/35 p-1 ring-1 ring-inset ring-white/15 backdrop-blur-md"
+      className="pointer-events-auto flex items-center gap-5 @max-[21rem]:gap-3"
     >
       {TABS.map((tab) => {
         const selected = tab.key === active;
@@ -59,11 +60,14 @@ export default function FeedTabs({
             aria-controls={panelIds[tab.key]}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.key)}
-            className={`h-8 whitespace-nowrap rounded-full px-3.5 text-[14px] font-semibold transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
-              selected ? "bg-white text-[#15181C] shadow-[0_1px_4px_rgba(0,0,0,0.25)]" : "text-white/80 hover:text-white"
+            className={`relative flex h-11 items-center whitespace-nowrap rounded-sm px-1 text-[17px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white @max-[21rem]:text-[16px] ${
+              selected ? "font-semibold text-white" : "font-medium text-white/70 hover:text-white"
             }`}
           >
             {tab.label}
+            {selected && (
+              <span aria-hidden="true" className="absolute inset-x-1 bottom-1.5 h-[2.5px] rounded-full bg-white" />
+            )}
           </button>
         );
       })}

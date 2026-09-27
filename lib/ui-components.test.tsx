@@ -37,6 +37,8 @@ import FeedTabs from "../components/social/FeedTabs";
 import { FollowButtonView } from "../components/social/FollowButton";
 import FollowingEmpty from "../components/social/FollowingEmpty";
 import { ProfileStats } from "../components/social/ProfileHeader";
+import BlockedUsersSheet from "../components/settings/BlockedUsersSheet";
+import Switch from "../components/ui/Switch";
 import ShowcaseTile from "../components/showcase/ShowcaseTile";
 import UnreadBadge from "../components/ui/UnreadBadge";
 import type { MyListing } from "./my-listings";
@@ -347,5 +349,49 @@ describe("canPromptOn (kullanıcı adı penceresi)", () => {
     for (const path of ["/sell", "/auth/callback", "/messages/123", "/admin/reports", "/privacy", "/terms", null]) {
       expect(canPromptOn(path)).toBe(false);
     }
+  });
+});
+
+describe("Switch", () => {
+  it("role=switch, aria-checked; satıra dokununca ters değeri bildirir", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<Switch label="Mesajlar" description="Biri sana mesaj gönderdiğinde" checked onChange={onChange} />);
+    const toggle = screen.getByRole("switch", { name: "Mesajlar" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.getAttribute("aria-describedby")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith(false);
+
+    rerender(<Switch label="Mesajlar" checked={false} onChange={onChange} />);
+    expect(screen.getByRole("switch", { name: "Mesajlar" }).getAttribute("aria-checked")).toBe("false");
+  });
+});
+
+describe("BlockedUsersSheet", () => {
+  const blocked = [
+    { id: "u1", username: "kamil", displayName: "Kamil", avatarUrl: null, blockedAt: "2026-09-27T10:00:00Z" },
+    { id: "u2", username: null, displayName: null, avatarUrl: null, blockedAt: "2026-09-26T10:00:00Z" },
+  ];
+
+  it("engellenenleri adla listeler; adı olmayan 'gözüyle üyesi' görünür", () => {
+    render(<BlockedUsersSheet myId="me" users={blocked} onUnblocked={vi.fn()} onClose={vi.fn()} />);
+    const list = screen.getByRole("list", { name: "Engellenen kullanıcılar" });
+    expect(list.textContent).toContain("Kamil");
+    expect(list.textContent).toContain("@kamil");
+    expect(list.textContent).toContain("gözüyle üyesi");
+    expect(screen.getAllByRole("button", { name: /engelini kaldır/ })).toHaveLength(2);
+  });
+
+  it("liste yüklenemediyse boş sanılmaz: hata ve tekrar dene", () => {
+    const onRetry = vi.fn();
+    render(<BlockedUsersSheet myId="me" users={null} failed onRetry={onRetry} onUnblocked={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByText("Kimseyi engellemedin")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tekrar dene" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("liste boşsa açıklama gösterir", () => {
+    render(<BlockedUsersSheet myId="me" users={[]} onUnblocked={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText("Kimseyi engellemedin")).toBeTruthy();
   });
 });

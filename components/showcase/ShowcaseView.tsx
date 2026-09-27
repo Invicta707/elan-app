@@ -123,8 +123,8 @@ function Showcase({
             <UnreadBadge count={unread} className="absolute right-0.5 top-0.5" />
           </Link>
           <Link
-            href="/account"
-            aria-label="Hesap ayarları"
+            href="/settings"
+            aria-label="Ayarlar"
             className="flex h-11 w-11 items-center justify-center rounded-full text-[#15181C] transition-transform hover:bg-black/5 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
           >
             <Settings aria-hidden="true" className="h-6 w-6" />
@@ -265,7 +265,6 @@ function Showcase({
       )}
       {editingName && (
         <EditNameSheet
-          userId={userId}
           initialName={name ?? suggestedDisplayName(metadata)}
           onClose={() => setEditingName(false)}
         />

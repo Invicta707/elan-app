@@ -77,7 +77,7 @@ export default function TermsPage() {
 
       <h2>Hesabın kapatılması</h2>
       <p>
-        Hesabını dilediğin zaman <Link href="/account">Hesabım</Link> sayfasından kalıcı olarak silebilirsin.
+        Hesabını dilediğin zaman <Link href="/settings">Ayarlar</Link> sayfasından kalıcı olarak silebilirsin.
         Bu koşulları ihlal etmen durumunda hesabını askıya alabilir ya da kapatabiliriz.
       </p>
 

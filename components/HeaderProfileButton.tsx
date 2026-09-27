@@ -33,7 +33,7 @@ export default function HeaderProfileButton({ overlay }: { overlay: boolean }) {
   if (session) {
     const email = session.user.email ?? "";
     const name = profile?.displayName ?? email;
-    const active = pathname === "/my-listings" || pathname === "/account";
+    const active = pathname === "/my-listings" || pathname === "/settings";
     return (
       <Link
         href="/my-listings"

@@ -92,15 +92,18 @@ export async function saveUsername(name: string): Promise<string> {
   return String(data);
 }
 
-export async function saveDisplayName(userId: string, name: string): Promise<string> {
+export async function saveDisplayName(name: string): Promise<string> {
   const displayName = cleanDisplayName(name);
   const error = displayNameError(displayName);
   if (error) throw new Error(error);
-  const { error: dbError } = await supabase
-    .from("profiles")
-    .upsert({ id: userId, display_name: displayName, updated_at: new Date().toISOString() });
-  if (dbError) throw new Error("Ad kaydedilemedi. Biraz sonra tekrar dene.");
-  return displayName;
+  // Tabloya doğrudan upsert değil: updated_at'e INSERT yetkisi olmadığı için
+  // 42501 alıyordu (bkz. *_profile_name_and_blocked_list.sql). Kural ve zaman sunucuda.
+  const { data, error: dbError } = await supabase.rpc("update_profile_display_name", { p_name: displayName });
+  if (dbError) {
+    if (dbError.code === "23514") throw new Error(dbError.message);
+    throw new Error("Ad kaydedilemedi. Biraz sonra tekrar dene.");
+  }
+  return typeof data === "string" ? data : displayName;
 }
 
 type AvatarResponse = { avatarUrl?: string | null; error?: { message?: string } };

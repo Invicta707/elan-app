@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./supabase", () => ({ supabase: { rpc: vi.fn(), from: vi.fn() } }));
 
 import {
+  CATALOG_TTL_MS,
   EMPTY_FILTERS,
+  clearCatalogCache,
   compareCatalogNames,
   countActiveFilters,
   fetchCatalog,
+  fetchCatalogCached,
   filtersFromSearchParams,
   filtersToSearchParams,
   parseYear,
@@ -226,5 +229,71 @@ describe("fetchCatalog", () => {
       "3008",
     ]);
     expect(result.models.filter((m) => m.brandId === "b1").map((m) => m.name)).toEqual(["3 Serisi", "10 Serisi"]);
+  });
+});
+
+describe("katalog: istek sayısı ve önbellek", () => {
+  const from = vi.mocked(supabase.from);
+  let rangeCalls: string[] = [];
+  let fail = false;
+
+  // Her tablo için satır listesi; range(start, end) o aralığı döner
+  function mockTables(rows: Record<string, unknown[]>) {
+    rangeCalls = [];
+    from.mockImplementation(((table: string) => ({
+      select: () => ({
+        eq: () => ({
+          order: () => ({
+            range: async (start: number, end: number) => {
+              rangeCalls.push(`${table}:${start}`);
+              if (fail) return { data: null, error: new Error("ağ hatası") };
+              return { data: rows[table].slice(start, end + 1), error: null };
+            },
+          }),
+        }),
+      }),
+    })) as never);
+  }
+
+  const brand = (i: number) => ({ id: `b${i}`, name: `Marka ${i}`, slug: `marka-${i}` });
+  const model = (i: number) => ({ id: `m${i}`, brand_id: "b1", name: `Model ${i}`, slug: `model-${i}` });
+
+  beforeEach(() => {
+    fail = false;
+    clearCatalogCache();
+  });
+
+  it("tek parça yetiyorsa boş parça için ikinci istek atılmaz (tablo başına tek istek)", async () => {
+    mockTables({ brands: [brand(1), brand(2)], models: [model(1)] });
+    await fetchCatalog();
+    expect(rangeCalls.sort()).toEqual(["brands:0", "models:0"]);
+  });
+
+  it("parça tam doluysa sonraki parça istenir", async () => {
+    mockTables({ brands: [brand(1)], models: Array.from({ length: 1005 }, (_, i) => model(i)) });
+    const catalog = await fetchCatalog();
+    expect(catalog.models).toHaveLength(1005);
+    expect(rangeCalls.filter((c) => c.startsWith("models")).sort()).toEqual(["models:0", "models:1000"]);
+  });
+
+  it("fetchCatalogCached: aynı anda gelen istekler tek sorguyu paylaşır, süre dolunca yenilenir", async () => {
+    mockTables({ brands: [brand(1)], models: [model(1)] });
+    const [a, b] = await Promise.all([fetchCatalogCached(1_000), fetchCatalogCached(1_000)]);
+    expect(a).toBe(b);
+    expect(rangeCalls).toHaveLength(2);
+
+    await fetchCatalogCached(1_000 + CATALOG_TTL_MS - 1);
+    expect(rangeCalls).toHaveLength(2);
+
+    await fetchCatalogCached(1_000 + CATALOG_TTL_MS);
+    expect(rangeCalls).toHaveLength(4);
+  });
+
+  it("fetchCatalogCached: hata önbelleğe alınmaz, sonraki istek yeniden dener", async () => {
+    mockTables({ brands: [brand(1)], models: [model(1)] });
+    fail = true;
+    await expect(fetchCatalogCached(5_000)).rejects.toThrow("ağ hatası");
+    fail = false;
+    await expect(fetchCatalogCached(5_001)).resolves.toMatchObject({ brands: [{ id: "b1" }] });
   });
 });

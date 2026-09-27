@@ -48,7 +48,7 @@ import {
   type ListingField,
   type VehicleImageRow,
 } from "../../lib/listing";
-import { fetchCatalog, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
+import { fetchCatalogCached, TURKISH_CITIES, type BodyType, type Catalog } from "../../lib/search";
 import {
   overallSubmitPercent,
   submitPhaseLabel,
@@ -130,7 +130,7 @@ export default function SellPage() {
 
   useEffect(() => {
     let active = true;
-    fetchCatalog()
+    fetchCatalogCached()
       .then((data) => active && setCatalog(data))
       .catch((error) => {
         console.error("Marka/model kataloğu yüklenemedi:", error);

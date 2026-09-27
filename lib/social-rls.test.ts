@@ -1,7 +1,9 @@
-// Güvenlik testleri: kullanıcı adı, takip sistemi ve takip edilenler akışı.
+// Güvenlik testleri: kullanıcı adı, takip sistemi, takip edilenler akışı,
+// görünen ad ve engellenenler listesi.
 //
-// 20260926210000_profiles_and_messaging.sql ve 20260927120000_usernames_and_follows.sql
-// gerçek bir Postgres'te (PGlite) çalıştırılır; istekler Supabase'deki gibi rol
+// 20260926210000_profiles_and_messaging.sql, 20260927120000_usernames_and_follows.sql
+// ve 20260927150000_profile_name_and_blocked_list.sql gerçek bir Postgres'te (PGlite)
+// çalıştırılır; istekler Supabase'deki gibi rol
 // (set role) ve JWT claim'leriyle taklit edilir. BASE_SCHEMA, uzak veritabanındaki
 // ilgili tanımların (2026-09-27) asgari kopyasıdır.
 
@@ -12,6 +14,7 @@ import { RESERVED_USERNAMES, localUsernameStatus } from "./username";
 
 const MESSAGING = readFileSync("supabase/migrations/20260926210000_profiles_and_messaging.sql", "utf8");
 const SOCIAL = readFileSync("supabase/migrations/20260927120000_usernames_and_follows.sql", "utf8");
+const PROFILE_NAME = readFileSync("supabase/migrations/20260927150000_profile_name_and_blocked_list.sql", "utf8");
 
 const SELLER = "11111111-1111-4111-8111-111111111111";
 const BUYER = "22222222-2222-4222-8222-222222222222";
@@ -101,6 +104,7 @@ beforeAll(async () => {
   await db.exec(BASE_SCHEMA);
   await db.exec(MESSAGING);
   await db.exec(SOCIAL);
+  await db.exec(PROFILE_NAME);
 }, 60_000);
 
 afterAll(async () => {
@@ -517,5 +521,82 @@ describe("following_feed", () => {
   it("kimseyi takip etmeyen için boş; misafir çağıramaz", async () => {
     expect(await run(as(OTHER), "select id from public.following_feed()")).toEqual({ ok: true, rows: [] });
     expect(await run(anon, "select id from public.following_feed()")).toMatchObject({ ok: false, code: "42501" });
+  });
+});
+
+describe("görünen ad (update_profile_display_name)", () => {
+  const setName = (sub: string, name: string) =>
+    run<{ v: string }>(as(sub), "select public.update_profile_display_name($1) as v", [name]);
+  const nameOf = async (id: string) =>
+    (await db.query<{ display_name: string | null }>("select display_name from public.profiles where id = $1", [id])).rows[0]
+      ?.display_name ?? null;
+
+  it("hata kaydı: istemcinin eski upsert'i (updated_at ile) satır varken bile yetki hatası alıyordu", async () => {
+    const legacy = `insert into public.profiles (id, display_name, updated_at) values ($1, $2, now())
+                    on conflict (id) do update set display_name = excluded.display_name, updated_at = excluded.updated_at`;
+    expect(await run(as(SELLER), legacy, [SELLER, "Kamil"])).toMatchObject({ ok: false, code: "42501" });
+    expect(await nameOf(SELLER)).toBeNull();
+  });
+
+  it("var olan profilde adı kaydeder, boşlukları düzeltir ve updated_at'i sunucu atar", async () => {
+    await db.query("update public.profiles set updated_at = now() - interval '1 day' where id = $1", [SELLER]);
+    expect(await setName(SELLER, "  Kamil   Oto  ")).toEqual({ ok: true, rows: [{ v: "Kamil Oto" }] });
+    expect(await nameOf(SELLER)).toBe("Kamil Oto");
+    const { rows } = await db.query<{ fresh: boolean }>(
+      "select updated_at > now() - interval '1 minute' as fresh from public.profiles where id = $1",
+      [SELLER],
+    );
+    expect(rows[0].fresh).toBe(true);
+  });
+
+  it("profil satırı olmayan kullanıcıda satırı açar", async () => {
+    expect(await setName(NEWBIE, "Yeni Üye")).toMatchObject({ ok: true });
+    expect(await nameOf(NEWBIE)).toBe("Yeni Üye");
+  });
+
+  it.each(["K", " ", "a".repeat(31), "<b>Kamil</b>", "Kamil\u0007"])("kurala uymayan ad reddedilir: %j", async (bad) => {
+    expect(await setName(BUYER, bad)).toMatchObject({
+      ok: false,
+      code: "23514",
+      message: "Ad 2–30 karakter olmalı; < ve > kullanılamaz.",
+    });
+  });
+
+  it("yalnızca kendi adını değiştirir; misafir çağıramaz", async () => {
+    await setName(SELLER, "Satıcı");
+    await setName(BUYER, "Alıcı");
+    expect(await nameOf(SELLER)).toBe("Satıcı");
+    expect(await run(anon, "select public.update_profile_display_name('Hack')")).toMatchObject({ ok: false, code: "42501" });
+    expect(await nameOf(SELLER)).toBe("Satıcı");
+  });
+
+  it("kullanıcı adı ve takip sayaçları olan profilde de çalışır", async () => {
+    await setUsername(SELLER, "kamil");
+    await follow(BUYER, SELLER);
+    expect(await setName(SELLER, "Kamil C.")).toMatchObject({ ok: true });
+    expect(await counts(SELLER)).toEqual({ followers_count: 1, following_count: 0 });
+    expect(await usernameOf(SELLER)).toBe("kamil");
+  });
+});
+
+describe("list_blocked_users", () => {
+  it("yalnızca kendi engellediklerini ad ve kullanıcı adıyla, en yeni önce döner", async () => {
+    await setUsername(OTHER, "diger");
+    await run(as(OTHER), "select public.update_profile_display_name('Diğer Kişi')");
+    await run(as(BUYER), "insert into public.user_blocks (blocker_id, blocked_id) values ($1, $2)", [BUYER, SELLER]);
+    await run(as(BUYER), "insert into public.user_blocks (blocker_id, blocked_id) values ($1, $2)", [BUYER, OTHER]);
+    await db.query("update public.user_blocks set created_at = now() - interval '1 day' where blocked_id = $1", [SELLER]);
+    // Başkasının engeli listede görünmez
+    await run(as(SELLER), "insert into public.user_blocks (blocker_id, blocked_id) values ($1, $2)", [SELLER, NEWBIE]);
+
+    const list = await value<Record<string, unknown>[]>(as(BUYER), "select public.list_blocked_users() as v");
+    expect(list.map((b) => b.id)).toEqual([OTHER, SELLER]);
+    expect(list[0]).toMatchObject({ id: OTHER, username: "diger", display_name: "Diğer Kişi", avatar_url: null });
+    expect(JSON.stringify(list)).not.toContain("905551112233");
+    expect(await value(as(OTHER), "select public.list_blocked_users() as v")).toEqual([]);
+  });
+
+  it("misafir çağıramaz", async () => {
+    expect(await run(anon, "select public.list_blocked_users()")).toMatchObject({ ok: false, code: "42501" });
   });
 });

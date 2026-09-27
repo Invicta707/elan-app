@@ -5,7 +5,7 @@ import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../../lib/supaba
 
 // POST /api/user/delete
 //
-// İstek (tarayıcıdan, /account sayfasındaki onay penceresi):
+// İstek (tarayıcıdan, /settings sayfasındaki onay penceresi):
 //   headers: { Authorization: `Bearer <access_token>`, "Content-Type": "application/json" }
 //   body:    { confirm: true }
 //

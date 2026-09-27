@@ -293,9 +293,37 @@ async function fetchAllRows<T>(table: "brands" | "models", columns: string): Pro
 
     if (error) throw error;
     const chunk = (data ?? []) as unknown as T[];
-    if (chunk.length === 0) return rows;
     rows.push(...chunk);
+    // Eksik parça son parçadır: boş bir parça için ayrıca istek atılmaz
+    if (chunk.length < CATALOG_CHUNK) return rows;
   }
+}
+
+/** Önbellekteki katalog bu kadar süre kullanılır (yeni marka/model en geç bu sürede görünür) */
+export const CATALOG_TTL_MS = 10 * 60 * 1000;
+
+let catalogCache: { promise: Promise<Catalog>; at: number } | null = null;
+
+/**
+ * Katalog (36 marka, ~300 model) nadiren değişir ve her /search açılışında
+ * sunucuda iki sorguyla yeniden okunuyordu: "Ara"ya geçiş 1–1,5 sn bekliyordu.
+ * Modül düzeyinde önbellek: sunucuda örnek başına, tarayıcıda sayfa ömrü
+ * boyunca. Aynı anda gelen istekler tek sorguyu paylaşır; hata önbelleğe
+ * alınmaz (sonraki istek yeniden dener).
+ */
+export function fetchCatalogCached(now: number = Date.now()): Promise<Catalog> {
+  if (catalogCache && now - catalogCache.at < CATALOG_TTL_MS) return catalogCache.promise;
+  const entry = { promise: fetchCatalog(), at: now };
+  catalogCache = entry;
+  entry.promise.catch(() => {
+    if (catalogCache === entry) catalogCache = null;
+  });
+  return entry.promise;
+}
+
+/** Testler için */
+export function clearCatalogCache() {
+  catalogCache = null;
 }
 
 export async function fetchCatalog(): Promise<Catalog> {

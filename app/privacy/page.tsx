@@ -83,7 +83,7 @@ export default function PrivacyPage() {
         hemen silinir.
       </p>
 
-      <h2>Hakların</h2>
+      <h2 id="haklarin">Hakların</h2>
       <p>KVKK&apos;nın 11. maddesi uyarınca;</p>
       <ul>
         <li>verilerinin işlenip işlenmediğini öğrenme ve bilgi isteme,</li>
@@ -96,9 +96,9 @@ export default function PrivacyPage() {
         adresine iletebilirsin; en geç 30 gün içinde yanıtlarız.
       </p>
 
-      <h2>Hesabını silme</h2>
+      <h2 id="hesabini-silme">Hesabını silme</h2>
       <p>
-        Hesabını ve tüm verilerini dilediğin zaman <Link href="/account">Hesabım</Link> sayfasındaki{" "}
+        Hesabını ve tüm verilerini dilediğin zaman <Link href="/settings">Ayarlar</Link> sayfasındaki{" "}
         <strong>Hesabımı sil</strong> butonuyla kalıcı olarak silebilirsin. Hesabınla birlikte ilanların,
         videoların, fotoğrafların, favorilerin ve iletişim bilgilerin silinir. Başkalarının ilanları için yaptığın
         bildirimler, kimliğinden ayrılarak moderasyon amacıyla saklanabilir. Hesabına giriş yapamıyorsan silme

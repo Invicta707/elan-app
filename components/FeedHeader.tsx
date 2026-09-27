@@ -12,14 +12,17 @@ type FeedHeaderProps = {
    * solid: açık zeminli sayfalarda normal akışta (arama sayfası)
    */
   tone?: "overlay" | "solid";
-  /** Başlığın altında ikinci satır (ana sayfada "Takip Edilenler / Keşfet" sekmeleri) */
-  children?: ReactNode;
+  /**
+   * Ortadaki "Akış | Ara" yerine (ana sayfa: "Takip Edilenler | Keşfet" sekmeleri).
+   * Verilince "Ara" masaüstünde sağdaki büyüteç düğmesine geçer; mobilde alt menüde.
+   */
+  center?: ReactNode;
 };
 
 // Kancasız (hook'suz) bir bileşen: hem sunucu hem istemci bileşenlerinin içinde
 // kullanılabilir. Oturuma bakan parçalar (profil, "+ İlan Ver") kendi istemci
 // bileşenlerindedir.
-export default function FeedHeader({ activeTab = "feed", tone = "overlay", children }: FeedHeaderProps) {
+export default function FeedHeader({ activeTab = "feed", tone = "overlay", center }: FeedHeaderProps) {
   const overlay = tone === "overlay";
 
   return (
@@ -30,10 +33,11 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay", child
           : "pt-[env(safe-area-inset-top)] text-[#15181C]"
       }
     >
-      {/* Üstteki video sütunuyla aynı genişlikte; masaüstünde ortalanır */}
+      {/* Akışta mobilde video genişliğinde; masaüstünde (md+) TikTok'taki gibi tam
+          genişlik: sekmeler videonun üstünde ortada, düğmeler sağ uçta */}
       <div
         className={`@container mx-auto grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-x-3 px-3 ${
-          overlay ? "max-w-[calc(100dvh*9/16)]" : "max-w-5xl"
+          overlay ? "max-w-[calc(100dvh*9/16)] md:max-w-none md:px-5" : "max-w-5xl"
         }`}
       >
         <Link
@@ -45,23 +49,35 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay", child
           <Logo className="h-9" iconClassName="h-9 w-9" showText={false} />
         </Link>
 
-        <nav aria-label="Ana gezinme" className="pointer-events-auto flex items-center gap-6">
-          <Tab href="/" active={activeTab === "feed"} overlay={overlay}>
-            Akış
-          </Tab>
-          <Tab href="/search" active={activeTab === "search"} overlay={overlay}>
-            Ara
-          </Tab>
-        </nav>
+        {center ?? (
+          <nav aria-label="Ana gezinme" className="pointer-events-auto flex items-center gap-6">
+            <Tab href="/" active={activeTab === "feed"} overlay={overlay}>
+              Akış
+            </Tab>
+            <Tab href="/search" active={activeTab === "search"} overlay={overlay}>
+              Ara
+            </Tab>
+          </nav>
+        )}
 
-        {/* Akışta başlık video genişliğinde (kısa pencerede dar) ve sekmelerin
-            ortada kalması için yan sütunlar alanı eşit paylaşır. Sağ sütun bu
-            yüzden genişliğe göre küçülür (eşikler logo + sekmeler + butonların
+        {/* Sekmelerin ortada kalması için yan sütunlar alanı eşit paylaşır; sağ
+            sütun genişliğe göre küçülür (eşikler logo + sekmeler + butonların
             ölçülmüş genişliğine göre): dar başlıkta "İlan Ver" yuvarlak "+"
-            ikonuna döner; masaüstünde ≈600px'ten kısa pencerede kalp, ≈510px'ten
-            kısada "+" gizlenir. Profil her zaman görünür. Butonlar asla alt
-            satıra kırılmaz. Mobilde kalp ve "+" alt gezinme çubuğunda. */}
+            ikonuna döner, daha darda kalp ve "+" gizlenir. Profil her zaman
+            görünür; butonlar asla alt satıra kırılmaz. Mobilde büyüteç, kalp ve
+            "+" alt gezinme çubuğunda. */}
         <div className="flex items-center justify-self-end gap-2">
+          {center && (
+            <Link
+              href="/search"
+              aria-label="İlan ara"
+              className={`pointer-events-auto hidden h-11 w-11 shrink-0 items-center justify-center rounded-full md:flex ${
+                overlay ? "bg-black/35" : "bg-white"
+              } ${focusRing(overlay)}`}
+            >
+              <SearchIcon className="h-5 w-5" />
+            </Link>
+          )}
           <Link
             href="/favorites"
             aria-label="Favorilerim"
@@ -97,11 +113,6 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay", child
         </div>
       </div>
 
-      {children && (
-        <div className={`mx-auto flex justify-center px-3 ${overlay ? "max-w-[calc(100dvh*9/16)]" : "max-w-5xl"}`}>
-          {children}
-        </div>
-      )}
     </header>
   );
 }
@@ -158,6 +169,24 @@ function HeartIcon({ filled, className }: { filled: boolean; className?: string 
       aria-hidden="true"
     >
       <path d="M12 20.5s-7.5-4.6-9.2-9.4A5.1 5.1 0 0 1 12 6.6a5.1 5.1 0 0 1 9.2 4.5C19.5 15.9 12 20.5 12 20.5Z" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.2-4.2" />
     </svg>
   );
 }

@@ -8,11 +8,9 @@ import BottomSheet from "../ui/BottomSheet";
 
 // Görünen ad: mesajlarda karşı tarafa bu ad görünür (e-posta asla görünmez).
 export default function EditNameSheet({
-  userId,
   initialName,
   onClose,
 }: {
-  userId: string;
   initialName: string;
   onClose: () => void;
 }) {
@@ -27,7 +25,7 @@ export default function EditNameSheet({
     if (problem) return setError(problem);
     setSaving(true);
     try {
-      updateMyProfile({ displayName: await saveDisplayName(userId, name) });
+      updateMyProfile({ displayName: await saveDisplayName(name) });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ad kaydedilemedi.");

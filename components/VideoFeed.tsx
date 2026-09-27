@@ -211,7 +211,7 @@ export default function VideoFeed({
             tailIsFullScreen ? "h-full" : "h-28"
           } ${tailIsStop ? "snap-start snap-always" : ""} ${
             emptyState && vehicles.length === 0 && tailIsStop
-              ? "px-5 pt-[calc(env(safe-area-inset-top)+6.5rem)] pb-5"
+              ? "px-5 pt-[calc(env(safe-area-inset-top)+4.5rem)] pb-5"
               : "px-10"
           }`}
         >
@@ -230,7 +230,7 @@ export default function VideoFeed({
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+7rem)] z-40 flex justify-center"
+        className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 flex justify-center"
       >
         {notice && (
           <p className="max-w-sm rounded-md bg-black/80 px-4 py-3 text-center text-[14px] leading-snug text-white">

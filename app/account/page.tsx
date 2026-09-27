@@ -1,19 +1,7 @@
-import type { Metadata } from "next";
-import AccountView from "../../components/AccountView";
-import { bodyFont, displayFont } from "../fonts";
+import { permanentRedirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Hesabım | gözüyle",
-  description: "Hesap bilgilerin, çıkış yapma ve hesabını silme.",
-  robots: { index: false },
-};
-
+// Eski "Hesabım" sayfası Ayarlar'a taşındı. Adres korunur: yasal metinlerdeki
+// eski bağlantılar ve Google Play'e verilen hesap silme adresi çalışmaya devam eder.
 export default function AccountPage() {
-  return (
-    <main
-      className={`${displayFont.variable} ${bodyFont.variable} min-h-dvh w-full bg-[#F2F3F5] text-[#15181C] [font-family:var(--font-body)]`}
-    >
-      <AccountView />
-    </main>
-  );
+  permanentRedirect("/settings");
 }
