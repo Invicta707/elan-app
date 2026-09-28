@@ -6,6 +6,7 @@ import { bodyFont, displayFont } from "../app/fonts";
 import { fetchVehicleDetails, type FeedVehicle, type VehicleDetails } from "../lib/feed";
 import { buildVehicleShareText } from "../lib/vehicle-page";
 import FavoriteButton from "./FavoriteButton";
+import ConditionList from "./vehicle/ConditionList";
 import MessageSellerButton from "./vehicle/MessageSellerButton";
 import PhotoGallery, { GallerySkeleton } from "./vehicle/PhotoGallery";
 import ShareButton from "./vehicle/ShareButton";
@@ -306,6 +307,17 @@ function Sheet({ vehicle, onClose, onContact, isContacting, notice }: VehicleDet
               bodyType: load.status === "loading" ? undefined : (details?.bodyType ?? null),
             }}
           />
+
+          {/* Ekspertiz özeti: akış kartı artık yalnızca fiyat, yıl, km ve şehri gösteriyor */}
+          <section aria-labelledby={`${titleId}-condition`} className="mt-5">
+            <h3 id={`${titleId}-condition`} className="mb-2 text-[15px] font-semibold">
+              Ekspertiz
+            </h3>
+            <ConditionList
+              vehicle={vehicle}
+              className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg border border-[#E3E6EA] bg-white px-3 py-2.5 text-[14px] font-medium text-[#15181C]"
+            />
+          </section>
 
           {details?.description && (
             <section aria-labelledby={`${titleId}-desc`} className="mt-5">

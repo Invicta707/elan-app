@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ToggleOutcome } from "../lib/favorites-store";
 import { toggleFavorite, useFavorites } from "../lib/use-favorites";
+import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "./feed/actionStyles";
 
 const MESSAGES: Partial<Record<ToggleOutcome, string>> = {
   failed: "Favoriler güncellenemedi. Tekrar dene.",
@@ -22,8 +23,8 @@ type FavoriteButtonProps = {
 };
 
 const CIRCLE: Record<FavoriteButtonProps["variant"], string> = {
-  // Masaüstünde (lg) sütun videonun dışında, koyu zeminde
-  overlay: "h-11 w-11 bg-black/45 lg:bg-[#27272A] lg:group-hover:bg-[#3F3F46]",
+  // Akış sütunu: mobilde saydam, masaüstünde (lg) koyu daire (feed/actionStyles.ts)
+  overlay: ACTION_ICON_BOX,
   sheet: "h-10 w-10 bg-[#F2F3F5] hover:bg-[#E6E8EB]",
   page: "h-11 w-11 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] hover:bg-[#F7F8FA]",
   card: "h-9 w-9 bg-white/90 shadow-[0_1px_4px_rgba(0,0,0,0.25)]",
@@ -62,24 +63,24 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
         onClick={handleClick}
         aria-pressed={isFavorite}
         aria-label="Favorilere ekle"
-        className={`group pointer-events-auto flex flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 ${
+        className={
           overlay
-            ? "rounded-lg focus-visible:ring-white"
-            : "rounded-full focus-visible:ring-[#003399] focus-visible:ring-offset-2"
-        }`}
+            ? ACTION_BUTTON
+            : "group pointer-events-auto flex flex-col items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+        }
       >
         <span
           className={`flex items-center justify-center rounded-full motion-safe:transition-transform motion-safe:active:scale-90 ${CIRCLE[variant]}`}
         >
           <HeartIcon
             filled={isFavorite}
-            className={`${variant === "card" ? "h-[18px] w-[18px]" : "h-5 w-5"} ${
+            className={`${variant === "card" ? "h-[18px] w-[18px]" : overlay ? ACTION_ICON : "h-5 w-5"} ${
               isFavorite ? "text-[#E5484D]" : overlay ? "text-white" : "text-[#15181C]"
             }`}
           />
         </span>
         {overlay && (
-          <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          <span aria-hidden="true" className={ACTION_LABEL}>
             Favori
           </span>
         )}

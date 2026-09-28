@@ -8,14 +8,13 @@ import ReportButton from "./ReportButton";
 import ShareButton from "./vehicle/ShareButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
 import EyePlayMark from "./brand/EyePlayMark";
+import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "./feed/actionStyles";
 import SellerRow from "./social/SellerRow";
-import ConditionList from "./vehicle/ConditionList";
 import PricePlate from "./vehicle/PricePlate";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
 import { setCommentCount, useCommentCount } from "../lib/use-comment-counts";
 import { buildVehicleShareText } from "../lib/vehicle-page";
-import { FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
 type VideoCardProps = {
   vehicle: FeedVehicle;
@@ -260,19 +259,26 @@ export default function VideoCard({
           </p>
         )}
 
+        {/* Mobil: videonun alt şeridinde hafif gölge; yazılar onun üstünde okunur.
+            Masaüstünde (lg) bilgiler sağdaki kalıcı panelde */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-[24%] min-h-36 bg-[linear-gradient(to_top,rgba(0,0,0,0.62)_0%,rgba(0,0,0,0.3)_55%,rgba(0,0,0,0)_100%)] lg:hidden"
+        />
+
         {/* Bilgi katmanı: metne yapılan dokunuşlar alttaki oynat/duraklat
-            butonuna geçer, sadece bu katmandaki butonlar tıklanabilir */}
-        {/* Mobilde ekranın altındaki güvenli alanı alt gezinme çubuğu karşılar.
-            Masaüstünde (lg) bilgiler sağdaki kalıcı panelde; burada yalnızca düğme
-            sütunu kalır ve çerçevenin sağına, alta hizalı geçer */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.5)_55%,rgba(0,0,0,0)_100%)] px-4 pt-28 pb-5 md:pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:top-0 lg:right-auto lg:left-full lg:flex lg:items-end lg:bg-none lg:p-0 lg:pl-4">
-          <div className="flex items-end gap-3">
-            <div className="min-w-0 flex-1 lg:hidden">
+            butonuna geçer, sadece bu katmandaki butonlar tıklanabilir.
+            Mobilde (< 1024 px) yalnızca alt şerit: satıcı etiketi, tek satır
+            başlık, fiyat ve Yıl / KM / İl hapları; videonun ortası boş kalır.
+            Ekranın altındaki güvenli alanı alt gezinme çubuğu karşılar.
+            Masaüstünde (lg) yalnızca düğme sütunu kalır ve çerçevenin sağına,
+            alta hizalı geçer */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pr-1.5 pb-3 pl-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:top-0 lg:right-auto lg:left-full lg:flex lg:items-end lg:p-0 lg:pl-4">
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1 pb-0.5 lg:hidden">
               <SellerRow sellerId={vehicle.sellerId} />
 
-              <PricePlate price={vehicle.price} currency={vehicle.currency} />
-
-              <h2 className="mt-3 text-[1.75rem] font-semibold leading-none [font-family:var(--font-display)]">
+              <h2 className="text-[20px] font-semibold leading-6 [font-family:var(--font-display)] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
                 <button
                   type="button"
                   onClick={() => setDetailsOpen(true)}
@@ -283,53 +289,35 @@ export default function VideoCard({
                 </button>
               </h2>
 
-              {/* Rozetlere dokunmak da detayları açar (klavye/ekran okuyucu için
-                  başlık ve "Detaylar" butonu var) */}
+              {/* Fiyat ve haplara dokunmak da detayları açar (klavye/ekran
+                  okuyucu için başlık ve "Detaylar" düğmesi var) */}
               <ul
-                aria-label="Araç özellikleri"
+                aria-label="Fiyat ve araç özellikleri"
                 onClick={() => setDetailsOpen(true)}
-                className="pointer-events-auto mt-2.5 flex cursor-pointer flex-wrap gap-1.5"
+                className="pointer-events-auto mt-1.5 flex cursor-pointer flex-wrap items-center gap-1"
               >
+                <li className="mr-0.5">
+                  <PricePlate price={vehicle.price} currency={vehicle.currency} size="sm" />
+                </li>
                 <Tag>{vehicle.year}</Tag>
                 <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
-                <Tag>{FUEL_LABELS[vehicle.fuelType]}</Tag>
-                <Tag>{TRANSMISSION_LABELS[vehicle.transmission]}</Tag>
-                {vehicle.city && (
-                  <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>
-                )}
+                {vehicle.city && <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>}
+                {vehicle.hasHeavyDamage && <Tag tone="danger">Ağır hasar</Tag>}
               </ul>
-
-              {vehicle.hasHeavyDamage && (
-                <p className="mt-3 inline-flex rounded-md bg-[#E5484D] px-2 py-0.5 text-[13px] font-semibold">
-                  Ağır hasar kayıtlı
-                </p>
-              )}
-
-              <ConditionList vehicle={vehicle} className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] font-medium" />
 
               <div role="status" aria-live="polite">
                 {notice && (
-                  <p className="mt-3 max-w-[20rem] rounded-md bg-black/75 px-3 py-2 text-[13px] leading-snug">
+                  <p className="mt-2 max-w-[20rem] rounded-md bg-black/75 px-3 py-2 text-[13px] leading-snug">
                     {notice}
                   </p>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={handleContact}
-                disabled={isContacting}
-                aria-busy={isContacting}
-                className="pointer-events-auto mt-4 inline-flex h-12 items-center gap-2 rounded-full bg-[#25D366] pl-4 pr-5 text-base font-semibold text-[#062612] disabled:opacity-70 motion-safe:transition-transform motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-              >
-                <ChatIcon className="h-5 w-5" />
-                {isContacting ? "Açılıyor…" : "WhatsApp'tan yaz"}
-              </button>
             </div>
 
-            {/* 6 düğme: kısa ekranda (320×568) aralık daralır, sütun başlığa değmez.
-                Masaüstünde "Detaylar" yok (yan panelde) */}
-            <div className="flex shrink-0 flex-col items-center gap-4 [@media(max-height:620px)]:gap-2">
+            {/* Mobilde TikTok / Reels gibi arka plansız 26 px simgeler (feed/actionStyles.ts);
+                kısa ekranda (320×568) aralık daralır, sütun başlığa değmez.
+                Masaüstünde "WhatsApp" ve "Detaylar" yok (yan panelde) */}
+            <div className="flex shrink-0 flex-col items-center gap-2.5 [@media(max-height:620px)]:gap-1 lg:gap-4">
               <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
 
               <CommentButton vehicleId={vehicle.id} count={commentsCount} onCountChange={handleCommentsCount} />
@@ -343,15 +331,33 @@ export default function VideoCard({
 
               <button
                 type="button"
+                onClick={handleContact}
+                disabled={isContacting}
+                aria-busy={isContacting}
+                aria-label="WhatsApp'tan yaz"
+                className={`${ACTION_BUTTON} disabled:opacity-70 lg:hidden`}
+              >
+                <span className="flex h-10 w-11 items-center justify-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-[#062612] shadow-[0_1px_4px_rgba(0,0,0,0.35)] motion-safe:transition-transform motion-safe:group-active:scale-90">
+                    <ChatIcon className="h-6 w-6" />
+                  </span>
+                </span>
+                <span aria-hidden="true" className={ACTION_LABEL}>
+                  {isContacting ? "Açılıyor" : "WhatsApp"}
+                </span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setDetailsOpen(true)}
                 aria-haspopup="dialog"
                 aria-label="İlan detayları ve fotoğraflar"
-                className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:hidden"
+                className={`${ACTION_BUTTON} lg:hidden`}
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
-                  <PhotosIcon className="h-5 w-5" />
+                <span className={ACTION_ICON_BOX}>
+                  <PhotosIcon className={ACTION_ICON} />
                 </span>
-                <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                <span aria-hidden="true" className={ACTION_LABEL}>
                   Detaylar
                 </span>
               </button>
@@ -362,9 +368,13 @@ export default function VideoCard({
                 type="button"
                 onClick={handleToggleMute}
                 aria-label={muted ? "Sesi aç" : "Sesi kapat"}
-                className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/45 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:bg-[#27272A] lg:hover:bg-[#3F3F46]"
+                className="group pointer-events-auto flex h-10 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:h-11 lg:bg-[#27272A] lg:hover:bg-[#3F3F46]"
               >
-                {muted ? <SpeakerOffIcon className="h-5 w-5" /> : <SpeakerOnIcon className="h-5 w-5" />}
+                {muted ? (
+                  <SpeakerOffIcon className="h-6 w-6 drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] lg:h-5 lg:w-5 lg:drop-shadow-none" />
+                ) : (
+                  <SpeakerOnIcon className="h-6 w-6 drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] lg:h-5 lg:w-5 lg:drop-shadow-none" />
+                )}
               </button>
             </div>
           </div>
@@ -384,11 +394,15 @@ export default function VideoCard({
   );
 }
 
-// Yıl / km / yakıt / vites / şehir rozetleri: yarı saydam, ince bir kenarlıkla
-// videonun üstünde de okunur kalan küçük etiketler
-function Tag({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+// Yıl / km / şehir hapları: küçük, yarı saydam ve ince kenarlıklı; videonun
+// üstünde de okunur. Ağır hasar kırmızı hapta.
+function Tag({ icon, tone = "default", children }: { icon?: ReactNode; tone?: "default" | "danger"; children: ReactNode }) {
   return (
-    <li className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[12.5px] font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-[2px]">
+    <li
+      className={`inline-flex h-5 items-center gap-0.5 rounded-full px-1.5 text-[11.5px] font-medium leading-none text-white ring-1 ring-inset ${
+        tone === "danger" ? "bg-[#E5484D] ring-transparent" : "bg-black/30 ring-white/15 backdrop-blur-[6px]"
+      }`}
+    >
       {icon}
       {children}
     </li>

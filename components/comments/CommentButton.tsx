@@ -4,6 +4,7 @@ import { MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { DESKTOP_MEDIA_QUERY } from "../../lib/feed-navigation";
 import { formatCount } from "../../lib/showcase";
+import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "../feed/actionStyles";
 import { useFeedPanel } from "../feed/FeedPanelContext";
 import CommentsSheet from "./CommentsSheet";
 
@@ -49,12 +50,12 @@ export function CommentButtonView({ count, onClick }: { count: number; onClick: 
       onClick={onClick}
       aria-haspopup="dialog"
       aria-label={count > 0 ? `Yorumlar (${count})` : "Yorumlar"}
-      className="group pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      className={ACTION_BUTTON}
     >
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 transition-colors lg:bg-[#27272A] lg:group-hover:bg-[#3F3F46]">
-        <MessageCircle aria-hidden="true" className="h-5 w-5" strokeWidth={2.2} />
+      <span className={ACTION_ICON_BOX}>
+        <MessageCircle aria-hidden="true" className={ACTION_ICON} strokeWidth={2.2} />
       </span>
-      <span aria-hidden="true" className="text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+      <span aria-hidden="true" className={`tabular-nums ${ACTION_LABEL}`}>
         {count > 0 ? formatCount(count) : "Yorum"}
       </span>
     </button>

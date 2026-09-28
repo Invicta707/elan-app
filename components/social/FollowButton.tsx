@@ -100,22 +100,23 @@ export function FollowButtonView({
     if (following) {
       return (
         <span
-          className={`inline-flex h-7 items-center gap-1 rounded-full bg-white/15 px-2.5 text-[12.5px] font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-[2px] ${className}`}
+          className={`inline-flex h-6 items-center gap-1 rounded-full bg-black/30 px-2 text-[12px] font-medium text-white ring-1 ring-inset ring-white/15 backdrop-blur-[6px] ${className}`}
         >
-          <Check aria-hidden="true" className="h-3.5 w-3.5" />
+          <Check aria-hidden="true" className="h-3 w-3" />
           Takiptesin
         </span>
       );
     }
+    // Görünen etiket küçük; dokunma alanı dikeyde genişletilir (before: -inset-y)
     return (
       <button
         type="button"
         onClick={onClick}
         disabled={pending}
         aria-label={`${who} takip et`}
-        className={`pointer-events-auto inline-flex h-7 items-center gap-1 rounded-full bg-white px-3 text-[12.5px] font-bold text-[#15181C] transition-transform active:scale-95 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black ${className}`}
+        className={`pointer-events-auto relative inline-flex h-6 items-center gap-1 rounded-full bg-white px-2.5 text-[12px] font-semibold text-[#15181C] transition-transform before:absolute before:-inset-y-2.5 before:-inset-x-1 before:content-[''] active:scale-95 disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black ${className}`}
       >
-        <UserPlus aria-hidden="true" className="h-3.5 w-3.5" />
+        <UserPlus aria-hidden="true" className="h-3 w-3" />
         Takip et
       </button>
     );

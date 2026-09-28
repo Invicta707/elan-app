@@ -10,6 +10,7 @@ import {
   type ReportReason,
 } from "../lib/reports";
 import { supabase } from "../lib/supabase";
+import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "./feed/actionStyles";
 
 type ReportButtonProps = {
   vehicleId: string;
@@ -38,12 +39,12 @@ export default function ReportButton({ vehicleId, variant, onOpenChange }: Repor
           onClick={() => setOpenState(true)}
           aria-haspopup="dialog"
           aria-label="İlanı bildir"
-          className="group pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className={ACTION_BUTTON}
         >
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 transition-colors lg:bg-[#27272A] lg:group-hover:bg-[#3F3F46]">
-            <FlagIcon className="h-5 w-5" />
+          <span className={ACTION_ICON_BOX}>
+            <FlagIcon className={ACTION_ICON} />
           </span>
-          <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          <span aria-hidden="true" className={ACTION_LABEL}>
             Bildir
           </span>
         </button>
