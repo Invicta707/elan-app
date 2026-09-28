@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 //
 // Ana sayfanın filtre ve vitrin akışı uçtan uca (sahte veriyle): masaüstünde
-// vitrin → karta tıkla → pencere → ↑/↓ (gerekirse sonraki sayfa) → kapat ve
-// odak karta; paylaşılan ilan (?v=); adres hook'u (useSearchParams okuma,
+// vitrin → karta tıkla → Shorts oynatıcısı → ↑/↓ (gerekirse sonraki sayfa) →
+// vitrine dön ve odak karta; paylaşılan ilan (?v=); adres hook'u (useSearchParams okuma,
 // replaceState yazma, eş adların kanonik biçime çevrilmesi); mobilde filtre
 // hapı ve filtreli video akışı.
 
@@ -11,9 +11,10 @@ import type { AnchorHTMLAttributes, ImgHTMLAttributes, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/image", () => ({
-  default: (allProps: ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean }) => {
+  default: (allProps: ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; unoptimized?: boolean }) => {
     const props = { ...allProps };
     delete props.fill;
+    delete props.unoptimized;
     // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
     return <img {...props} />;
   },
@@ -35,7 +36,8 @@ vi.mock("../app/fonts", () => ({ displayFont: { variable: "" }, bodyFont: { vari
 vi.mock("./supabase", () => ({ supabase: { rpc: vi.fn(), from: vi.fn(), auth: { getSession: async () => ({ data: { session: null } }) } } }));
 vi.mock("./auth", () => ({ useSupabaseSession: () => ({ session: null, isLoading: false }) }));
 vi.mock("./use-my-profile", () => ({ useMyProfile: () => ({ profile: null, loading: false, failed: false }) }));
-vi.mock("./use-follow", () => ({ useFollowVersion: () => 0, primeSellerProfiles: vi.fn(async () => {}) }));
+vi.mock("./use-follow", () => ({ useFollowVersion: () => 0, primeSellerProfiles: vi.fn(async () => {}), useSellerProfile: () => null }));
+vi.mock("../components/FavoriteButton", () => ({ default: () => <button type="button">Beğen</button> }));
 vi.mock("../components/HeaderProfileButton", () => ({ default: () => <span data-testid="profil" /> }));
 vi.mock("../components/AuthGatedLink", () => ({
   default: ({ href, children, className }: { href: string; children: ReactNode; className: string }) => (
@@ -176,11 +178,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const counter = () => document.querySelector("[data-portal-modal] [aria-live='polite']")?.textContent;
-const panel = () => screen.queryByTestId("panel")?.textContent;
+const counter = () => document.querySelector("[data-shorts-counter]")?.textContent;
+/** Oynatıcıda gösterilen ilan: videonun sol altındaki başlık */
+const panel = () => document.querySelector("[data-shorts-slide='current'] [data-shorts-info]")?.textContent;
 
-describe("masaüstü vitrin: pencere akışı", () => {
-  it("karta tıkla → pencere; ↓/↑ listede gezinir, adres ?v= ile güncellenir; kapatınca odak son karta döner", async () => {
+describe("masaüstü vitrin: Shorts oynatıcısı akışı", () => {
+  it("karta tıkla → Shorts oynatıcısı; ↓/↑ listede gezinir, adres ?v= ile güncellenir; vitrine dönünce odak son karta", async () => {
     api.searchPortalPage.mockResolvedValue({ items: [vehicle("a"), vehicle("b"), vehicle("c")], next: 3, hasMore: false });
     const home = homeFilters();
     render(<DesktopPortal home={home} initialVehicleId={null} initialTab="explore" />);
@@ -210,8 +213,8 @@ describe("masaüstü vitrin: pencere akışı", () => {
     fireEvent.keyDown(document.body, { key: "ArrowUp" });
     expect(panel()).toContain("Model b");
 
-    fireEvent.click(screen.getByRole("button", { name: "Pencereyi kapat" }));
-    await waitFor(() => expect(document.querySelector("[data-portal-modal]")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Vitrine dön" }));
+    await waitFor(() => expect(document.querySelector("[data-shorts-viewer]")).toBeNull());
     expect(home.setVehicleParam).toHaveBeenLastCalledWith(null);
     await waitFor(() => expect(document.activeElement?.getAttribute("data-portal-card")).toBe("b"));
   });
@@ -232,7 +235,7 @@ describe("masaüstü vitrin: pencere akışı", () => {
     expect(counter()).toContain("3 / 3");
   });
 
-  it("paylaşılan ilan (?v=) pencereyle açılır; yayında değilse bilgi verilir ve ?v= kalkar", async () => {
+  it("paylaşılan ilan (?v=) oynatıcıyla açılır; yayında değilse bilgi verilir ve ?v= kalkar", async () => {
     api.searchPortalPage.mockResolvedValue({ items: [vehicle("a")], next: 1, hasMore: false });
     api.fetchPortalVehicle.mockResolvedValueOnce(vehicle("paylasilan"));
     const first = render(<DesktopPortal home={homeFilters()} initialVehicleId="paylasilan" initialTab="explore" />);
@@ -248,7 +251,7 @@ describe("masaüstü vitrin: pencere akışı", () => {
     render(<DesktopPortal home={home} initialVehicleId="silinmis" initialTab="explore" />);
     await waitFor(() => expect(screen.getByText(/artık yayında değil/)).toBeTruthy());
     expect(home.setVehicleParam).toHaveBeenCalledWith(null);
-    expect(document.querySelector("[data-portal-modal]")).toBeNull();
+    expect(document.querySelector("[data-shorts-viewer]")).toBeNull();
   });
 
   it("filtre konsolu adresi günceller; filtreye uyan ilan yoksa sıfırlama önerilir", async () => {
@@ -408,7 +411,7 @@ describe("mobil: filtre hapı ve filtreli akış", () => {
 });
 
 describe("masaüstü vitrin: görselli ilanlar ve video bölümü", () => {
-  it("görselli ilanlar klasik kartlarla (yalnızca fotoğraflılar); pencere bu bölümde gezinir, odak fotoğraf kartına döner", async () => {
+  it("görselli ilanlar klasik kartlarla (yalnızca fotoğraflılar); oynatıcı bu bölümde gezinir, odak fotoğraf kartına döner", async () => {
     api.searchPortalPage.mockResolvedValue({
       items: [vehicle("a"), vehicle("b", { photoUrl: null }), vehicle("c", { hlsUrl: null }), vehicle("d")],
       next: 4,
@@ -441,11 +444,11 @@ describe("masaüstü vitrin: görselli ilanlar ve video bölümü", () => {
     expect(panel()).toContain("Model d");
     expect(counter()).toContain("3 / 3");
 
-    fireEvent.click(screen.getByRole("button", { name: "Pencereyi kapat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Vitrine dön" }));
     await waitFor(() => expect(document.activeElement?.getAttribute("data-photo-card")).toBe("d"));
   });
 
-  it("videolar önce 10 kart; \"Daha fazla video göster\" ekler; pencerede gizli karta gidilince bölüm genişler", async () => {
+  it("videolar önce 10 kart; \"Daha fazla video göster\" ekler; oynatıcıda gizli karta gidilince bölüm genişler", async () => {
     const items = Array.from({ length: 12 }, (_, index) => vehicle(`v${index + 1}`));
     api.searchPortalPage.mockResolvedValue({ items, next: 12, hasMore: false });
     const first = render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
@@ -462,7 +465,7 @@ describe("masaüstü vitrin: görselli ilanlar ve video bölümü", () => {
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     expect(panel()).toContain("Model v11");
     expect(document.querySelector("[data-portal-card='v11']")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Pencereyi kapat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Vitrine dön" }));
     await waitFor(() => expect(document.activeElement?.getAttribute("data-portal-card")).toBe("v11"));
   });
 

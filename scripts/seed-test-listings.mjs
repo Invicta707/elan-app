@@ -3,6 +3,7 @@
 // C200, Fiat Egea, Renault Megane, Toyota Corolla).
 //
 //   node scripts/seed-test-listings.mjs --seller <kullanıcı-uuid> [--dry-run] [--force]
+//   node scripts/seed-test-listings.mjs --refresh-media [--dry-run]
 //
 // Her ilan vehicles.is_test = true: kartta, pencerede ve akışta "Test ilanı"
 // etiketiyle görünür; yönetim panelinden (Moderasyon → Test ilanları) tek
@@ -11,7 +12,10 @@
 //
 // Medya burada üretilir ve açıkça "TEST İLANI" yazar: sharp ile SVG'den kapak ve
 // 3 fotoğraf (1200×900 JPEG), ffmpeg ile kapaktan 8 sn'lik dikey video
-// (720×1280, H.264). Video Cloudflare Stream'e yüklenir; işlenince (ready)
+// (720×1280, H.264). Görseller sade: düz, ilana özgü tonda zemin ve üst
+// üçte birde yazı; ortası (vitrin kartının oynat işareti) ve altı (Shorts
+// oynatıcısının satıcı / başlık / fiyat şeridi) boş, çizim yok. Video
+// Cloudflare Stream'e yüklenir; işlenince (ready)
 // uygulamanın webhook'u bu uid'yi tanımadığı için yok sayar. İlanın video satırı
 // ancak ondan sonra (ready + WEBHOOK_GRACE_MS) yazılır, yoksa webhook ilanı
 // yeniden denetime sokardı. Sonra ilan onaylı ve yayında olur.
@@ -20,6 +24,13 @@
 // SUPABASE_SERVICE_ROLE_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN) ve
 // hiçbir yere yazdırılmaz. --dry-run yalnızca medyayı üretir (yükleme ve
 // veritabanı yok). Test ilanı zaten varsa --force verilmedikçe durur.
+//
+// --refresh-media: yayındaki test ilanlarının (marka/model ile eşleşen) videosunu
+// ve fotoğraflarını yeniden üretilen medyayla değiştirir; ilan kimlikleri, yorumlar
+// ve diğer kayıtlar kalır. Yeni video hazır olup webhook'u yok sayıldıktan sonra
+// video satırı yeni uid'ye geçer, fotoğraflar boş sıra numaralarına yüklenip
+// satırlar yeni adrese çevrilir; en son eski Cloudflare videoları ve eski
+// fotoğraf dosyaları KALICI olarak silinir.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -139,10 +150,11 @@ const GEAR = { manuel: "Manuel", otomatik: "Otomatik" };
 // ---------------------------------------------------------------
 
 function parseArgs(argv) {
-  const args = { dryRun: false, force: false, seller: null };
+  const args = { dryRun: false, force: false, refresh: false, seller: null };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--dry-run") args.dryRun = true;
     else if (argv[i] === "--force") args.force = true;
+    else if (argv[i] === "--refresh-media") args.refresh = true;
     else if (argv[i] === "--seller") args.seller = argv[++i] ?? null;
   }
   return args;
@@ -168,72 +180,38 @@ const escapeXml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
 
 const FONT = "Segoe UI, Arial, sans-serif";
 
-/** Yandan sedan silueti (200×70 kutu), ince beyaz çizgi */
-function carSilhouette(x, y, scale, stroke = 3) {
-  return `<g transform="translate(${x} ${y}) scale(${scale})" fill="none" stroke="#FFFFFF" stroke-width="${stroke / scale}" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M8 50 L8 39 Q10 31 24 29 L56 25 Q72 11 96 9 L128 9 Q150 10 167 25 L186 28 Q196 30 197 41 L197 50 Z" />
-    <path d="M64 25 L80 14 L126 14 L149 25 Z" />
-    <path d="M104 14 L104 45" />
-    <circle cx="50" cy="52" r="12" fill="#121212" />
-    <circle cx="156" cy="52" r="12" fill="#121212" />
-  </g>`;
+/** "TEST İLANI" etiketi: aralıklı büyük harf, yarı saydam beyaz (kapakta çizim ya da hap yok) */
+function testLabel(x, y, fontSize) {
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="${fontSize}" letter-spacing="${Math.round(fontSize * 0.18)}" fill="#FFFFFF" fill-opacity="0.72">TEST İLANI</text>`;
 }
 
-function testPill(cx, y, width, height, fontSize) {
-  return `<rect x="${cx - width / 2}" y="${y}" width="${width}" height="${height}" rx="${height / 2}" fill="#FFFFFF" />
-    <text x="${cx}" y="${y + height * 0.68}" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${fontSize}" fill="#121212">TEST İLANI</text>`;
-}
-
-function pricePlate(x, y, price) {
-  return `<g transform="translate(${x} ${y})">
-    <rect width="520" height="112" rx="10" fill="#FFFFFF" stroke="#000000" stroke-width="6" />
-    <rect x="3" y="3" width="74" height="106" rx="7" fill="#003399" />
-    <text x="40" y="76" text-anchor="middle" font-family="${FONT}" font-weight="700" font-size="52" fill="#FFFFFF">₺</text>
-    <text x="298" y="82" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="66" fill="#000000">${amount(price)}</text>
-  </g>`;
-}
-
+/** Dikey kapak (videonun kendisi): düz tonlu zemin, yazılar üst üçte birde */
 function posterSvg(listing) {
   const facts = `${listing.year} · ${amount(listing.mileageKm)} km · ${listing.city}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
     <rect width="1080" height="1920" fill="#121212" />
     <rect width="1080" height="1920" fill="${listing.tint}" opacity="0.35" />
-    <rect x="0" y="1290" width="1080" height="6" fill="#52525B" />
-    ${testPill(540, 190, 420, 92, 48)}
+    ${testLabel(540, 300, 40)}
     <text x="540" y="430" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="${listing.headline.length > 14 ? 88 : 112}" fill="#FFFFFF">${escapeXml(listing.headline)}</text>
-    <text x="540" y="530" text-anchor="middle" font-family="${FONT}" font-size="54" fill="#E4E4E7">${escapeXml(facts)}</text>
-    ${carSilhouette(90, 920, 4.5, 7)}
-    ${pricePlate(280, 1470, listing.price)}
-    <text x="540" y="1770" text-anchor="middle" font-family="${FONT}" font-size="38" fill="#D4D4D8">gözüyle vitrin denemesi · araç satılık değil</text>
+    <text x="540" y="520" text-anchor="middle" font-family="${FONT}" font-size="52" fill="#E4E4E7">${escapeXml(facts)}</text>
   </svg>`;
 }
 
+/** Yatay fotoğraf (4:3): düz tonlu zemin, yazılar ortada */
 function photoSvg(listing, view) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
     <rect width="1200" height="900" fill="#18181B" />
     <rect width="1200" height="900" fill="${listing.tint}" opacity="${view.tintOpacity}" />
-    <rect x="0" y="640" width="1200" height="5" fill="#52525B" />
-    ${view.interior ? interiorSketch() : carSilhouette(view.mirror ? 1060 : 140, 330, view.mirror ? -4.6 : 4.6, 6)}
-    ${testPill(600, 60, 330, 76, 40)}
-    <text x="600" y="770" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="64" fill="#FFFFFF">${escapeXml(`${listing.headline} · ${listing.year}`)}</text>
-    <text x="600" y="840" text-anchor="middle" font-family="${FONT}" font-size="36" fill="#D4D4D8">${escapeXml(view.label)} · gözüyle vitrin denemesi</text>
+    ${testLabel(600, 360, 34)}
+    <text x="600" y="460" text-anchor="middle" font-family="${FONT}" font-weight="800" font-size="68" fill="#FFFFFF">${escapeXml(`${listing.headline} · ${listing.year}`)}</text>
+    <text x="600" y="530" text-anchor="middle" font-family="${FONT}" font-size="36" fill="#D4D4D8">${escapeXml(view.label)} · gözüyle vitrin denemesi</text>
   </svg>`;
 }
 
-/** İç mekân: direksiyon ve gösterge çizgisi */
-function interiorSketch() {
-  return `<g fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round">
-    <path d="M120 470 Q600 330 1080 470" />
-    <circle cx="600" cy="470" r="150" />
-    <circle cx="600" cy="470" r="40" />
-    <path d="M460 470 L560 470 M640 470 L740 470 M600 510 L600 620" />
-  </g>`;
-}
-
 const PHOTO_VIEWS = [
-  { label: "Yan görünüm", tintOpacity: 0.35, mirror: false },
-  { label: "Diğer yan", tintOpacity: 0.22, mirror: true },
-  { label: "İç mekân", tintOpacity: 0.15, interior: true },
+  { label: "Yan görünüm", tintOpacity: 0.35 },
+  { label: "Diğer yan", tintOpacity: 0.22 },
+  { label: "İç mekân", tintOpacity: 0.15 },
 ];
 
 async function buildMedia(listing, dir) {
@@ -241,7 +219,7 @@ async function buildMedia(listing, dir) {
   await sharp(Buffer.from(posterSvg(listing))).png().toFile(poster);
 
   const video = join(dir, `${listing.slug}.mp4`);
-  // Kapaktan 8 sn: yavaş yakınlaşma ve altta ilerleyen şerit (hareketli önizleme görünsün)
+  // Kapaktan 8 sn: yavaş yakınlaşma (hareketli önizleme görünsün; ilerleme şeridi oynatıcıda)
   execFileSync(
     process.env.FFMPEG ?? "ffmpeg",
     [
@@ -251,8 +229,7 @@ async function buildMedia(listing, dir) {
       "-i",
       poster,
       "-vf",
-      "zoompan=z='min(zoom+0.0006,1.14)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=240:s=720x1280:fps=30," +
-        "drawbox=x=0:y=ih-12:w='iw*t/8':h=12:color=white@0.9:t=fill,format=yuv420p",
+      "zoompan=z='min(zoom+0.0006,1.14)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=240:s=720x1280:fps=30,format=yuv420p",
       "-c:v",
       "libx264",
       "-preset",
@@ -305,6 +282,15 @@ async function uploadVideo(env, listing, file) {
   return result.uid;
 }
 
+async function deleteVideo(env, uid) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/stream/${uid}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+  });
+  // 404: zaten yok
+  if (!response.ok && response.status !== 404) throw new Error(`Cloudflare videosu silinemedi (${response.status}): ${uid}`);
+}
+
 async function waitUntilReady(env, uid) {
   const started = Date.now();
   for (;;) {
@@ -336,12 +322,16 @@ async function main() {
     return;
   }
 
-  if (!args.seller || !/^[0-9a-f-]{36}$/i.test(args.seller)) throw new Error("--seller <kullanıcı-uuid> gerekli.");
   const env = readEnv(".env.local");
   for (const key of ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]) {
     if (!env[key]) throw new Error(`.env.local: ${key} tanımlı değil.`);
   }
   const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  if (args.refresh) {
+    await refreshMedia(env, supabase, media);
+    return;
+  }
+  if (!args.seller || !/^[0-9a-f-]{36}$/i.test(args.seller)) throw new Error("--seller <kullanıcı-uuid> gerekli.");
 
   const { count, error: countError } = await supabase.from("vehicles").select("id", { count: "exact", head: true }).eq("is_test", true);
   if (countError) throw countError;
@@ -454,6 +444,102 @@ async function main() {
   }
 
   console.log(`\n${created.length} test ilanı yayında. Silmek için: /admin/reports → Test ilanları.`);
+}
+
+// ---------------------------------------------------------------
+// Yayındaki test ilanlarının medyasını yenileme (--refresh-media)
+// ---------------------------------------------------------------
+
+/** vehicle-photos adresinden bucket içi yol: "<ilan>/<sıra>.<uzantı>" */
+function photoPath(url, vehicleId) {
+  const marker = `/${PHOTO_BUCKET}/`;
+  const at = url.indexOf(marker);
+  const path = at === -1 ? null : url.slice(at + marker.length);
+  if (!path || !path.startsWith(`${vehicleId}/`)) throw new Error(`Beklenmeyen fotoğraf adresi: ${url}`);
+  return path;
+}
+
+async function refreshMedia(env, supabase, media) {
+  const { data: rows, error } = await supabase
+    .from("vehicles")
+    .select("id, brands(slug), models(slug), videos(id, stream_uid), vehicle_images(id, image_url, display_order)")
+    .eq("is_test", true);
+  if (error) throw error;
+
+  // Her test ilanı LISTINGS'teki bir girdiyle marka/model üzerinden eşleşmeli
+  const plan = rows.map((row) => {
+    const index = LISTINGS.findIndex((item) => item.brand === row.brands?.slug && item.model === row.models?.slug);
+    if (index === -1) throw new Error(`Eşleşmeyen test ilanı: ${row.id}`);
+    if ((row.videos ?? []).length !== 1) throw new Error(`Test ilanının tek videosu olmalı: ${row.id}`);
+    const images = [...(row.vehicle_images ?? [])].sort((a, b) => a.display_order - b.display_order);
+    if (images.length !== media[index].photos.length) throw new Error(`Fotoğraf sayısı farklı: ${row.id}`);
+    return { row, index, listing: LISTINGS[index], images, oldVideo: row.videos[0] };
+  });
+  if (new Set(plan.map((item) => item.index)).size !== plan.length) throw new Error("Aynı marka/model iki test ilanında.");
+  console.log(`${plan.length} test ilanının medyası yenilenecek.`);
+
+  // 1) Yeni videolar (işlenirken fotoğraflar değişir)
+  for (const item of plan) {
+    item.newUid = await uploadVideo(env, item.listing, media[item.index].video);
+    console.log(`  ↑ video ${item.listing.headline}: ${item.newUid}`);
+  }
+
+  // 2) Fotoğraflar: boş sıra numaralarına yükle, satırları yeni adrese çevir
+  const bucket = supabase.storage.from(PHOTO_BUCKET);
+  for (const item of plan) {
+    const oldPaths = item.images.map((image) => photoPath(image.image_url, item.row.id));
+    const used = new Set(oldPaths.map((path) => Number(path.split("/")[1].split(".")[0])));
+    const free = Array.from({ length: 10 }, (_, n) => n).filter((n) => !used.has(n));
+    if (free.length < item.images.length) throw new Error(`Boş fotoğraf sırası yok: ${item.row.id}`);
+    for (const [order, image] of item.images.entries()) {
+      const path = `${item.row.id}/${free[order]}.jpeg`;
+      const { error: uploadError } = await bucket.upload(path, media[item.index].photos[order].buffer, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (uploadError) throw uploadError;
+      const { error: imageError } = await supabase
+        .from("vehicle_images")
+        .update({ image_url: bucket.getPublicUrl(path).data.publicUrl })
+        .eq("id", image.id);
+      if (imageError) throw imageError;
+    }
+    item.oldPaths = oldPaths;
+    console.log(`  + fotoğraflar ${item.listing.headline}: ${item.images.length}`);
+  }
+
+  // 3) Video hazır + webhook'un yok sayması için bekleme → video satırı yeni uid'ye
+  for (const item of plan) {
+    const video = await waitUntilReady(env, item.newUid);
+    const readyAt = Date.parse(video.readyToStreamAt ?? video.modified ?? new Date().toISOString());
+    const wait = readyAt + WEBHOOK_GRACE_MS - Date.now();
+    if (wait > 0) {
+      console.log(`  … ${item.listing.headline}: webhook için ${Math.ceil(wait / 1000)} sn bekleniyor`);
+      await sleep(wait);
+    }
+    const { error: videoError } = await supabase
+      .from("videos")
+      .update({
+        stream_uid: item.newUid,
+        hls_url: video.playback.hls,
+        thumbnail_url: video.thumbnail ?? null,
+        duration_seconds: typeof video.duration === "number" && video.duration > 0 ? Math.round(video.duration) : null,
+        status: "ready",
+      })
+      .eq("id", item.oldVideo.id);
+    if (videoError) throw videoError;
+    console.log(`  ✓ video yenilendi ${item.listing.headline}`);
+  }
+
+  // 4) Eski medya: Cloudflare videoları ve fotoğraf dosyaları kalıcı olarak silinir
+  for (const item of plan) {
+    await deleteVideo(env, item.oldVideo.stream_uid);
+    const { error: removeError } = await bucket.remove(item.oldPaths);
+    if (removeError) throw removeError;
+    console.log(`  − eski medya silindi ${item.listing.headline}: video ${item.oldVideo.stream_uid}, ${item.oldPaths.length} fotoğraf`);
+  }
+
+  console.log(`\n${plan.length} test ilanının medyası yenilendi.`);
 }
 
 main().catch((error) => {

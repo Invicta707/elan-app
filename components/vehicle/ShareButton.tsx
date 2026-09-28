@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { shareListing, shareMessage, vehiclePath, type ShareEnvironment } from "../../lib/share";
-import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "../feed/actionStyles";
+import {
+  ACTION_BUTTON,
+  ACTION_ICON,
+  ACTION_ICON_BOX,
+  ACTION_LABEL,
+  SHORTS_BUTTON,
+  SHORTS_ICON,
+  SHORTS_ICON_BOX,
+  SHORTS_LABEL,
+} from "../feed/actionStyles";
 
 type Message = { text: string; whatsappUrl: string | null };
 
@@ -41,12 +50,14 @@ export default function ShareButton({
    * pill: beyaz zeminde metinli buton (ilan sayfası, detay çekmecesi)
    * overlay: dikey videonun üstünde, sağdaki buton sütununda (etiketli)
    * icon: yuvarlak, yalnızca simge (ilan sayfasının alt çubuğu: yanında iki iletişim butonu)
+   * shorts: masaüstü Shorts oynatıcısının sütunu, videonun dışında (koyu daire, etiketli)
    */
-  variant?: "pill" | "overlay" | "icon";
+  variant?: "pill" | "overlay" | "icon" | "shorts";
   className?: string;
 }) {
   const [message, setMessage] = useState<Message | null>(null);
   const overlay = variant === "overlay";
+  const column = overlay || variant === "shorts";
 
   useEffect(() => {
     if (!message) return;
@@ -68,17 +79,12 @@ export default function ShareButton({
 
   return (
     <div className={`relative ${className}`}>
-      {overlay ? (
-        <button
-          type="button"
-          onClick={handleShare}
-          aria-label={label}
-          className={ACTION_BUTTON}
-        >
-          <span className={ACTION_ICON_BOX}>
-            <ShareIcon className={ACTION_ICON} />
+      {column ? (
+        <button type="button" onClick={handleShare} aria-label={label} className={overlay ? ACTION_BUTTON : SHORTS_BUTTON}>
+          <span className={overlay ? ACTION_ICON_BOX : SHORTS_ICON_BOX}>
+            <ShareIcon className={overlay ? ACTION_ICON : SHORTS_ICON} />
           </span>
-          <span aria-hidden="true" className={ACTION_LABEL}>
+          <span aria-hidden="true" className={overlay ? ACTION_LABEL : SHORTS_LABEL}>
             Paylaş
           </span>
         </button>
@@ -106,7 +112,7 @@ export default function ShareButton({
         role="status"
         aria-live="polite"
         className={
-          overlay
+          column
             ? "absolute right-full top-1 z-10 mr-2 w-max max-w-[13rem]"
             : "absolute inset-x-0 bottom-full mb-2 flex justify-center"
         }
@@ -114,7 +120,7 @@ export default function ShareButton({
         {message && (
           <p
             className={`pointer-events-auto rounded-md px-2.5 py-1.5 text-[12.5px] font-medium leading-snug ${
-              overlay ? "bg-[#15181C]/90 text-white" : "bg-[#15181C] text-white shadow-md"
+              column ? "bg-[#15181C]/90 text-white" : "bg-[#15181C] text-white shadow-md"
             }`}
           >
             {message.text}

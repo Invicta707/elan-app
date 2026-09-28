@@ -26,7 +26,7 @@ import {
 import { supabase } from "./supabase";
 
 // Ana sayfanın filtreli görünümleri: masaüstü vitrin (1024 px ve üstü: filtre
-// konsolu, 9:16 kart ızgarası, bölünmüş pencere) ve mobildeki filtreli video
+// konsolu, 9:16 kart ızgarası, Shorts oynatıcısı) ve mobildeki filtreli video
 // akışı. İkisi de aynı URL'i okur: ana sayfa /search ile aynı Türkçe
 // parametreleri kullanır (/?marka=bmw&minFiyat=500000), paylaşılan bağlantı
 // masaüstünde vitrini, telefonda filtreli akışı açar. UI'dan bağımsız.
@@ -366,15 +366,16 @@ export function previewLoopTime(currentTime: number): number | null {
 type ModalKeyEvent = Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "defaultPrevented" | "target">;
 
 /**
- * Penceredeki klavye gezinmesi: ↓ sonraki, ↑ önceki ilan. Yazı alanında,
- * seçim kutusunda, tam ekran fotoğrafta (iç pencere) ve değiştirici tuşla 0.
- * PageUp/PageDown ve boşluk sağ panelin kaydırmasına kalır.
+ * Shorts oynatıcısındaki klavye gezinmesi: ↓ sonraki, ↑ önceki ilan. Yazı
+ * alanında, seçim kutusunda, tam ekran fotoğrafta (iç pencere), kendi
+ * kaydırması olan alanda ("İlan detayı" çekmecesi: data-own-keys) ve
+ * değiştirici tuşla 0. PageUp/PageDown çekmecenin kaydırmasına kalır.
  */
 export function modalKeyStep(event: ModalKeyEvent): -1 | 0 | 1 {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return 0;
   if (isEditableTarget(event.target)) return 0;
   const target = event.target as Element | null;
-  if (target && typeof target.closest === "function" && target.closest("[role='dialog'][aria-modal='true']")) return 0;
+  if (target && typeof target.closest === "function" && target.closest("[role='dialog'][aria-modal='true'], [data-own-keys]")) return 0;
   if (event.key === "ArrowDown") return 1;
   if (event.key === "ArrowUp") return -1;
   return 0;

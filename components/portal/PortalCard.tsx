@@ -7,15 +7,15 @@ import { PREVIEW_DELAY_MS, PREVIEW_LOOP_SECONDS, formatListingDate, previewLoopT
 import { formatAmount } from "../../lib/search";
 import { vehiclePath } from "../../lib/share";
 import { useHlsVideo } from "../../lib/use-hls-video";
-import EyePlayMark from "../brand/EyePlayMark";
+import VideoPlayMark from "../brand/VideoPlayMark";
 import PricePlate from "../vehicle/PricePlate";
 
-// Masaüstü vitrin kartı: 9:16 kapak, ortada saydam oynat işareti, altında
+// Masaüstü vitrin kartı: 9:16 kapak, ortada saydam göz-oynat işareti, altında
 // başlık, fiyat, yıl/km, il ve eklenme günü. Fare üstünde kısa süre kalınca
 // video sessizce ilk saniyelerini döngüyle oynatır; fare çekilince video
 // öğesi kaldırılır (hls.js yok edilir, kaynak bırakılır) ve kapağa dönülür.
-// Tıklamak pencereyi açar; bağlantı ilan sayfasına gider (orta tık / Ctrl+tık
-// yeni sekmede ilan sayfası).
+// Tıklamak Shorts oynatıcısını açar; bağlantı ilan sayfasına gider (orta tık /
+// Ctrl+tık yeni sekmede ilan sayfası).
 
 export default function PortalCard({
   vehicle,
@@ -106,16 +106,14 @@ export default function PortalCard({
 
         {previewing && vehicle.hlsUrl && <PreviewVideo url={vehicle.hlsUrl} onPlaying={() => setPlaying(true)} />}
 
-        {/* Oynat işareti: yarı saydam koyu daire, ince beyaz göz-oynat çizgisi; önizleme oynarken kaybolur */}
+        {/* Oynat işareti: yalnızca yarı saydam göz hattı ve oynat üçgeni (zemin dairesi yok); önizleme oynarken kaybolur */}
         {vehicle.hlsUrl && (
           <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span
               data-play-mark={showPlaying ? "hidden" : "visible"}
-              className={`flex h-14 w-14 items-center justify-center rounded-full bg-black/35 ring-1 ring-inset ring-white/20 backdrop-blur-[6px] transition-opacity duration-200 ${
-                showPlaying ? "opacity-0" : "opacity-100"
-              }`}
+              className={`transition-opacity duration-200 ${showPlaying ? "opacity-0" : "opacity-100"}`}
             >
-              <EyePlayMark className="h-8 w-8 text-white" strokeWidth={4} />
+              <VideoPlayMark />
             </span>
           </span>
         )}

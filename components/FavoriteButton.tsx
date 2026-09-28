@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react";
 import type { ToggleOutcome } from "../lib/favorites-store";
 import { toggleFavorite, useFavorites } from "../lib/use-favorites";
-import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "./feed/actionStyles";
+import {
+  ACTION_BUTTON,
+  ACTION_ICON,
+  ACTION_ICON_BOX,
+  ACTION_LABEL,
+  SHORTS_BUTTON,
+  SHORTS_ICON,
+  SHORTS_ICON_BOX,
+  SHORTS_LABEL,
+} from "./feed/actionStyles";
 
 const MESSAGES: Partial<Record<ToggleOutcome, string>> = {
   failed: "Favoriler güncellenemedi. Tekrar dene.",
@@ -17,14 +26,16 @@ type FavoriteButtonProps = {
    * sheet: beyaz zeminde (detay çekmecesi)
    * page: açık gri zeminde (ilan sayfası)
    * card: grid kartının fotoğrafının üstünde
+   * shorts: masaüstü Shorts oynatıcısının sütunu, videonun dışında ("Beğen" etiketli)
    */
-  variant: "overlay" | "sheet" | "page" | "card";
+  variant: "overlay" | "sheet" | "page" | "card" | "shorts";
   className?: string;
 };
 
 const CIRCLE: Record<FavoriteButtonProps["variant"], string> = {
-  // Akış sütunu: mobilde saydam, masaüstünde (lg) koyu daire (feed/actionStyles.ts)
+  // Akış sütunu: saydam; Shorts sütunu: koyu daire (feed/actionStyles.ts)
   overlay: ACTION_ICON_BOX,
+  shorts: SHORTS_ICON_BOX,
   sheet: "h-10 w-10 bg-[#F2F3F5] hover:bg-[#E6E8EB]",
   page: "h-11 w-11 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] hover:bg-[#F7F8FA]",
   card: "h-9 w-9 bg-white/90 shadow-[0_1px_4px_rgba(0,0,0,0.25)]",
@@ -33,6 +44,7 @@ const CIRCLE: Record<FavoriteButtonProps["variant"], string> = {
 // Hata mesajı butonun yanında kısa süre görünür: video üstünde sola, diğerlerinde alta
 const MESSAGE_POSITION: Record<FavoriteButtonProps["variant"], string> = {
   overlay: "right-full top-1 mr-2",
+  shorts: "right-full top-2 mr-2",
   sheet: "right-0 top-full mt-1.5",
   page: "right-0 top-full mt-1.5",
   card: "right-0 top-full mt-1.5",
@@ -43,6 +55,7 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
   const isFavorite = ids.includes(vehicleId);
   const [message, setMessage] = useState<string | null>(null);
   const overlay = variant === "overlay";
+  const shorts = variant === "shorts";
 
   useEffect(() => {
     if (!message) return;
@@ -62,11 +75,14 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
         type="button"
         onClick={handleClick}
         aria-pressed={isFavorite}
-        aria-label="Favorilere ekle"
+        // Görünen etiket erişilebilir adın içinde kalır (WCAG 2.5.3)
+        aria-label={shorts ? "Beğen, favorilere ekle" : "Favorilere ekle"}
         className={
           overlay
             ? ACTION_BUTTON
-            : "group pointer-events-auto flex flex-col items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+            : shorts
+              ? SHORTS_BUTTON
+              : "group pointer-events-auto flex flex-col items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
         }
       >
         <span
@@ -74,14 +90,19 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
         >
           <HeartIcon
             filled={isFavorite}
-            className={`${variant === "card" ? "h-[18px] w-[18px]" : overlay ? ACTION_ICON : "h-5 w-5"} ${
-              isFavorite ? "text-[#E5484D]" : overlay ? "text-white" : "text-[#15181C]"
+            className={`${variant === "card" ? "h-[18px] w-[18px]" : overlay ? ACTION_ICON : shorts ? SHORTS_ICON : "h-5 w-5"} ${
+              isFavorite ? "text-[#E5484D]" : overlay || shorts ? "text-white" : "text-[#15181C]"
             }`}
           />
         </span>
         {overlay && (
           <span aria-hidden="true" className={ACTION_LABEL}>
             Favori
+          </span>
+        )}
+        {shorts && (
+          <span aria-hidden="true" className={SHORTS_LABEL}>
+            Beğen
           </span>
         )}
       </button>

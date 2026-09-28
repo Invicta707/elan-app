@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DESKTOP_MEDIA_QUERY, clampFeedIndex, feedKeyStep, feedKeyStepFor } from "./feed-navigation";
+import {
+  DESKTOP_MEDIA_QUERY,
+  WHEEL_GESTURE_GAP_MS,
+  WHEEL_STEP_COOLDOWN_MS,
+  clampFeedIndex,
+  createWheelStepper,
+  feedKeyStep,
+  feedKeyStepFor,
+} from "./feed-navigation";
 
 // Dikey akışta klavyeyle ilan ilan gezinme ve masaüstü düzeninin eşiği.
 
@@ -56,5 +64,32 @@ describe("clampFeedIndex", () => {
     expect(clampFeedIndex(3, 5)).toBe(3);
     expect(clampFeedIndex(6, 5)).toBe(5);
     expect(clampFeedIndex(1, -1)).toBe(0);
+  });
+});
+
+describe("createWheelStepper (Shorts oynatıcısı: bir hareket = bir ilan)", () => {
+  it("tekerleğin hızlı çevrilmesi ve dokunmatik yüzeyin ivmeli kuyruğu tek adım", () => {
+    const step = createWheelStepper();
+    const steps = [0, 16, 32, 48, 64, 400, 416].map((t, i) => step(0, [40, 120, 90, 30, 8, 6, 3][i], t));
+    expect(steps.filter(Boolean)).toEqual([1]);
+  });
+
+  it("aralıklı yeni hareket yeni adım; yön deltaY'den", () => {
+    const step = createWheelStepper();
+    expect(step(0, 100, 0)).toBe(1);
+    expect(step(0, -100, WHEEL_STEP_COOLDOWN_MS + WHEEL_GESTURE_GAP_MS)).toBe(-1);
+  });
+
+  it("adımdan hemen sonra (geçiş sürerken) yeni hareket sayılmaz", () => {
+    const step = createWheelStepper();
+    expect(step(0, 100, 0)).toBe(1);
+    expect(step(0, 100, WHEEL_GESTURE_GAP_MS + 10)).toBe(0);
+  });
+
+  it("yatay ve çok küçük kaydırma yok sayılır; hareketin ilk belirgin olayı adım atar", () => {
+    const step = createWheelStepper();
+    expect(step(80, 20, 0)).toBe(0);
+    expect(step(0, 2, 1000)).toBe(0);
+    expect(step(0, 50, 1010)).toBe(1);
   });
 });

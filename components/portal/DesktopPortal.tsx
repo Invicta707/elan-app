@@ -11,8 +11,8 @@ import FeedTabs, { type FeedTab } from "../social/FeedTabs";
 import FollowingEmpty from "../social/FollowingEmpty";
 import FilterConsole from "./FilterConsole";
 import PortalCard from "./PortalCard";
-import PortalModal from "./PortalModal";
 import PortalPhotoCard from "./PortalPhotoCard";
+import ShortsViewer from "./ShortsViewer";
 import { usePortalList, type PortalList } from "./usePortalList";
 import { useSupabaseSession } from "../../lib/auth";
 import type { FeedCursor } from "../../lib/feed";
@@ -28,21 +28,23 @@ import { useMyProfile } from "../../lib/use-my-profile";
 // (9:16 kartlar, 4 / xl'de 5 sütun, ilk VIDEO_PAGE kart, "Daha fazla video
 // göster") ve altında "Görselli ilanlar" (llex.az gibi 4:3 fotoğraflı klasik
 // ilan kartları, sonsuz kaydırma). İkisi aynı aramanın sonuçlarıdır (videolu /
-// fotoğraflı olanlar). Karta tıklamak sayfayı yenilemeden bölünmüş pencereyi
-// açar; ↑/↓ kartın bölümünde gezinir, kapatınca vitrin olduğu yerde kalır ve
-// odak son izlenen karta döner. Filtreler ve açık ilan adreste (?marka=…&v=…).
+// fotoğraflı olanlar). Karta tıklamak sayfayı yenilemeden tam ekran Shorts
+// oynatıcısını açar (ShortsViewer); ↑/↓ ve fare tekerleği kartın bölümünde
+// gezinir, kapatınca vitrin olduğu yerde kalır ve odak son izlenen karta
+// döner. Filtreler ve açık ilan adreste (?marka=…&v=…).
 
 const PANEL_IDS: Record<FeedTab, string> = { following: "portal-panel-following", explore: "portal-panel-explore" };
-// Sona bu kadar kala sonraki sayfa istenir (ızgarada ve pencerede)
+// Sona bu kadar kala sonraki sayfa istenir (ızgarada ve oynatıcıda)
 const PREFETCH_DISTANCE = 4;
 /** Yapışkan başlığın yüksekliği (h-16): altında kalan kart görünmüyor sayılır */
 const HEADER_HEIGHT = 64;
 /** "Sizin için videolar" bölümü önce bu kadar kart (xl'de iki satır) gösterir; düğme bu kadar ekler */
 export const VIDEO_PAGE = 10;
 
-/** Pencerenin açıldığı liste: ↑/↓ onun içinde gezinir */
+/** Oynatıcının açıldığı liste: ↑/↓ onun içinde gezinir */
 type ModalSource = "videos" | "photos" | "following";
-type ModalState = { source: ModalSource; vehicle: PortalVehicle };
+/** direction: ilana hangi adımla gelindi (oynatıcıda kayarak geçişin yönü; 0 ilk açılış) */
+type ModalState = { source: ModalSource; vehicle: PortalVehicle; direction: -1 | 0 | 1 };
 
 const hasVideo = (vehicle: PortalVehicle) => Boolean(vehicle.hlsUrl);
 const hasPhoto = (vehicle: PortalVehicle) => Boolean(vehicle.photoUrl);
@@ -108,7 +110,7 @@ export default function DesktopPortal({
   const videoLimit = videoLimitState.key === filterKey ? videoLimitState.limit : VIDEO_PAGE;
   const showVideos = (limit: number) => setVideoLimitState({ key: filterKey, limit });
 
-  // /?v=<ilan> bağlantısı: vitrin o ilanın penceresiyle açılır
+  // /?v=<ilan> bağlantısı: vitrin o ilanın Shorts oynatıcısıyla açılır
   const pinnedRef = useRef(initialVehicleId);
   useEffect(() => {
     const id = pinnedRef.current;
@@ -118,7 +120,7 @@ export default function DesktopPortal({
     fetchPortalVehicle(id)
       .then((vehicle) => {
         if (!active) return;
-        if (vehicle) setModal({ source: initialTab === "following" ? "following" : "videos", vehicle });
+        if (vehicle) setModal({ source: initialTab === "following" ? "following" : "videos", vehicle, direction: 0 });
         else {
           setVehicleParam(null);
           setNotice("Açmak istediğin ilan artık yayında değil. Vitrindeki diğer ilanları gösteriyoruz.");
@@ -145,7 +147,7 @@ export default function DesktopPortal({
   }
 
   function openVehicle(vehicle: PortalVehicle, source: ModalSource) {
-    setModal({ source, vehicle });
+    setModal({ source, vehicle, direction: 0 });
     setVehicleParam(vehicle.id);
   }
 
@@ -153,8 +155,8 @@ export default function DesktopPortal({
     const last = modal ? cardKey(modal.source, modal.vehicle.id) : null;
     setModal(null);
     setVehicleParam(null);
-    // Pencere kalktıktan sonra: son izlenen karta odak. Vitrin kaldığı yerde
-    // kalır; yalnızca pencerede ↑/↓ ile gidilen kart tamamen ekran dışındaysa oraya kaydırılır
+    // Oynatıcı kalktıktan sonra: son izlenen karta odak. Vitrin kaldığı yerde
+    // kalır; yalnızca oynatıcıda ↑/↓ ile gidilen kart tamamen ekran dışındaysa oraya kaydırılır
     window.setTimeout(() => {
       const card = last ? cardRefs.current.get(last) : undefined;
       if (!card) return;
@@ -171,7 +173,7 @@ export default function DesktopPortal({
     if (!modal || !modalList) return;
     const items = modalList.items;
     const go = (vehicle: PortalVehicle) => {
-      setModal({ source: modal.source, vehicle });
+      setModal({ source: modal.source, vehicle, direction: step });
       setVehicleParam(vehicle.id);
       // Video bölümünde gizli kalan karta gidildiyse bölüm genişler (kapanınca odak ona döner)
       if (modal.source === "videos") {
@@ -194,7 +196,7 @@ export default function DesktopPortal({
     if (modalList.hasMore) {
       const from = modal.vehicle.id;
       void modalList.loadMore().then((fresh) => {
-        // Bu arada başka ilana geçildiyse ya da pencere kapandıysa atla
+        // Bu arada başka ilana geçildiyse ya da oynatıcı kapandıysa atla
         if (fresh[0] && modalRef.current?.vehicle.id === from) go(fresh[0]);
       });
     }
@@ -419,18 +421,19 @@ export default function DesktopPortal({
       </div>
 
       {modal && modalList && (
-        <PortalModal
+        <ShortsViewer
           vehicle={modal.vehicle}
+          direction={modal.direction}
           position={modalIndex === -1 ? null : modalIndex + 1}
           total={modalList.items.length}
           moreAvailable={modalList.hasMore}
           hasPrev={modalIndex > 0}
           hasNext={modalIndex === -1 ? modalList.items.length > 0 : modalIndex < modalList.items.length - 1 || modalList.hasMore}
           loadingNext={modalList.more === "loading"}
-          neighborSellerIds={[
-            modalList.items[modalIndex - 1]?.sellerId ?? null,
-            modalList.items[modalIndex + 1]?.sellerId ?? null,
-          ]}
+          neighbors={{
+            prev: modalIndex > 0 ? modalList.items[modalIndex - 1] : null,
+            next: modalList.items[modalIndex + 1] ?? null,
+          }}
           muted={muted}
           onMutedChange={setMuted}
           onStep={stepModal}
@@ -482,7 +485,7 @@ function PortalGrid({
   paging: Paging;
   /** Aynı listenin ikinci ızgarası hata şeridini tekrarlamaz */
   showErrors?: boolean;
-  /** Pencere bu bölümden açılır (↑/↓ bu bölümde gezinir) */
+  /** Oynatıcı bu bölümden açılır (↑/↓ bu bölümde gezinir) */
   source: ModalSource;
   empty: ReactNode;
   now: Date;

@@ -53,3 +53,23 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* Masaüstü Shorts oynatıcısında ilandan ilana dikey geçiş (YouTube Shorts gibi):
+   gelen video alttan (sonraki) ya da üstten (önceki) kayarak girer, giden
+   ters yöne çıkar. Hareket azaltma tercihinde uygulanmaz (motion-safe:). */
+@keyframes shorts-enter-next {
+  from { transform: translate3d(0, 100%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+@keyframes shorts-leave-next {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, -100%, 0); }
+}
+@keyframes shorts-enter-prev {
+  from { transform: translate3d(0, -100%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+@keyframes shorts-leave-prev {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 100%, 0); }
+}

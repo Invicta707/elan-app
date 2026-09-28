@@ -19,11 +19,12 @@ import ConditionList from "../vehicle/ConditionList";
 import MessageSellerButton from "../vehicle/MessageSellerButton";
 import PhotoGallery from "../vehicle/PhotoGallery";
 import PricePlate from "../vehicle/PricePlate";
+import WhatsAppIcon from "../vehicle/WhatsAppIcon";
 import { useSellerContact } from "../vehicle/useSellerContact";
 import { useSellerPhone } from "../vehicle/useSellerPhone";
 
-// İlanın koyu ayrıntı paneli (masaüstü, 1024 px ve üstü): vitrin penceresinin
-// sağ yarısı (components/portal/PortalModal.tsx). İlanın fiyatı, özellikleri,
+// İlanın koyu ayrıntı paneli (masaüstü, 1024 px ve üstü): Shorts oynatıcısının
+// "İlan detayı" çekmecesi (components/portal/ShortsViewer.tsx). İlanın fiyatı, özellikleri,
 // ekspertizi, açıklaması, fotoğrafları, satıcı kartı, WhatsApp / Ara / Mesaj
 // düğmeleri ve yorumları; yorum yazma alanı panelin altında sabit.
 
@@ -37,20 +38,39 @@ const panelScroll = "[scrollbar-color:#3F3F46_transparent] [scrollbar-width:thin
 export default function DesktopFeedPanel({
   vehicle,
   lightboxContainer,
+  commentsRequest = 0,
 }: {
   vehicle: PanelVehicle;
   /**
-   * Tam ekran fotoğrafın çizileceği yer: varsayılan document.body. Vitrin
-   * penceresinde (modal <dialog>) pencerenin kendisi; dışındaki her şey inert.
+   * Tam ekran fotoğrafın çizileceği yer: varsayılan document.body. Shorts
+   * oynatıcısında (modal <dialog>) oynatıcının kendisi; dışındaki her şey inert.
    */
   lightboxContainer?: Element | null;
+  /**
+   * Oynatıcıdaki "Yorum" düğmesine her basışta artar (0: istek yok): yorumlara
+   * kaydırılır, yazma alanına (misafirde giriş düğmesine) odaklanılır
+   */
+  commentsRequest?: number;
 }) {
-  // İlan değişince (pencerede ↑/↓) panel sıfırdan kurulur: detaylar ve yorumlar yeniden istenir
-  return <VehiclePanel key={vehicle.id} vehicle={vehicle} lightboxContainer={lightboxContainer} />;
+  // İlan değişince (↑/↓) panel sıfırdan kurulur: detaylar ve yorumlar yeniden istenir
+  return (
+    <VehiclePanel key={vehicle.id} vehicle={vehicle} lightboxContainer={lightboxContainer} commentsRequest={commentsRequest} />
+  );
 }
 
-function VehiclePanel({ vehicle, lightboxContainer }: { vehicle: PanelVehicle; lightboxContainer?: Element | null }) {
+function VehiclePanel({
+  vehicle,
+  lightboxContainer,
+  commentsRequest,
+}: {
+  vehicle: PanelVehicle;
+  lightboxContainer?: Element | null;
+  commentsRequest: number;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const commentsRef = useRef<HTMLElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const guestButtonRef = useRef<HTMLButtonElement>(null);
   const [load, setLoad] = useState<DetailsLoad>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -74,6 +94,14 @@ function VehiclePanel({ vehicle, lightboxContainer }: { vehicle: PanelVehicle; l
       active = false;
     };
   }, [vehicleId, reloadKey]);
+
+  // "Yorum" düğmesi: yorumlara kaydır, yazma alanına (misafirde giriş düğmesine) odaklan
+  useEffect(() => {
+    if (commentsRequest === 0) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    commentsRef.current?.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+    (composerRef.current ?? guestButtonRef.current)?.focus({ preventScroll: true });
+  }, [commentsRequest]);
 
   const details = load.status === "ready" ? load.details : null;
   const title = `${vehicle.brandName} ${vehicle.modelName}`;
@@ -178,7 +206,7 @@ function VehiclePanel({ vehicle, lightboxContainer }: { vehicle: PanelVehicle; l
           </div>
         )}
 
-        <section aria-labelledby="panel-comments-title" className="mt-6 border-t border-[#27272A] pt-4">
+        <section ref={commentsRef} aria-labelledby="panel-comments-title" className="mt-6 scroll-mt-2 border-t border-[#27272A] pt-4">
           <h3 id="panel-comments-title" className="px-4 text-[15px] font-semibold">
             Yorumlar{thread.total > 0 ? <span className="font-normal text-[#A1A1AA]"> · {thread.total.toLocaleString("tr-TR")}</span> : null}
           </h3>
@@ -187,7 +215,7 @@ function VehiclePanel({ vehicle, lightboxContainer }: { vehicle: PanelVehicle; l
         </section>
       </div>
 
-      <CommentComposerArea thread={thread} tone="dark" />
+      <CommentComposerArea thread={thread} tone="dark" textareaRef={composerRef} guestButtonRef={guestButtonRef} />
       <CommentThreadDialogs thread={thread} />
     </>
   );
@@ -346,22 +374,5 @@ function PanelContact({ vehicle }: { vehicle: PanelVehicle }) {
         {shownNotice && <p className="mt-2 text-[13px] text-[#FCA5A5]">{shownNotice}</p>}
       </div>
     </section>
-  );
-}
-
-function WhatsAppIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M20.5 11.5a8.5 8.5 0 0 1-12.4 7.55L3.5 20.5l1.45-4.35A8.5 8.5 0 1 1 20.5 11.5Z" />
-    </svg>
   );
 }

@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
 // Masaüstü vitrinin parçaları: filtre konsolu (esnek, anında uygulanan
-// arama; sıfırlama, rozet), kartın fareyle önizlemesi (hls.js'in kurulup
-// bırakılması), bölünmüş pencere (↑/↓, kapatma yolları, iç pencereler) ve
-// sayfalı liste deposu.
+// arama; sıfırlama, rozet), kartın sade oynat işareti ve fareyle önizlemesi
+// (hls.js'in kurulup bırakılması) ve sayfalı liste deposu. Shorts oynatıcısı
+// lib/shorts-viewer.test.tsx'te.
 
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import type { ImgHTMLAttributes } from "react";
@@ -19,15 +19,6 @@ vi.mock("next/image", () => ({
 }));
 vi.mock("../app/fonts", () => ({ displayFont: { variable: "" }, bodyFont: { variable: "" } }));
 vi.mock("./supabase", () => ({ supabase: { rpc: vi.fn(), from: vi.fn() } }));
-vi.mock("./use-follow", () => ({ primeSellerProfiles: vi.fn(async () => {}) }));
-vi.mock("../components/feed/DesktopFeedPanel", () => ({
-  default: ({ vehicle, lightboxContainer }: { vehicle: { brandName: string; modelName: string }; lightboxContainer?: Element | null }) => (
-    <div data-testid="panel" data-has-container={String(Boolean(lightboxContainer))}>
-      {vehicle.brandName} {vehicle.modelName}
-      <textarea aria-label="Yorum yaz" />
-    </div>
-  ),
-}));
 
 type FakeHlsInstance = {
   config: Record<string, unknown>;
@@ -58,7 +49,6 @@ vi.mock("hls.js", () => {
 
 import FilterConsole, { TEXT_APPLY_DELAY_MS } from "../components/portal/FilterConsole";
 import PortalCard from "../components/portal/PortalCard";
-import PortalModal from "../components/portal/PortalModal";
 import { usePortalList } from "../components/portal/usePortalList";
 import { PREVIEW_DELAY_MS, type PortalPage, type PortalVehicle } from "./portal";
 import { EMPTY_FILTERS, type Catalog, type SearchFilters } from "./search";
@@ -268,6 +258,20 @@ describe("PortalCard", () => {
     expect(link.querySelector("[data-play-mark='visible']")).not.toBeNull();
   });
 
+  it("oynat işareti sade: zemin dairesi ve kenarlık yok, yalnızca yarı saydam göz hattı ve oynat üçgeni", () => {
+    const { link } = renderCard();
+    const mark = link.querySelector("[data-play-mark]")!;
+    // İşaretin kendisi ve kapsayıcısı: daire, koyu zemin, halka ya da buzlu cam yok
+    for (const element of [mark, mark.parentElement!]) {
+      expect(element.className).not.toMatch(/rounded-full|bg-black|ring-|backdrop-blur/);
+    }
+    const svg = mark.querySelector("svg")!;
+    expect(svg.getAttribute("class")).toContain("text-white/85");
+    expect(svg.querySelector("path")?.getAttribute("fill")).toBeNull(); // göz yalnızca çizgi
+    expect(svg.querySelectorAll("polygon")).toHaveLength(1); // ortada oynat üçgeni
+    expect(svg.querySelectorAll("circle, rect")).toHaveLength(0);
+  });
+
   it("fare üstünde kalınca video sessiz oynar; çekilince hls.js yok edilir, video kalkar, kapak döner", async () => {
     const { link, container } = renderCard();
     fireEvent.pointerEnter(link, { pointerType: "mouse" });
@@ -328,97 +332,6 @@ describe("PortalCard", () => {
     const plain = fireEvent.click(link, { button: 0 });
     expect(plain).toBe(false); // preventDefault: gezinme yok
     expect(onOpen).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ---------------------------------------------------------------
-// Bölünmüş pencere
-// ---------------------------------------------------------------
-
-function renderModal(overrides: Partial<Parameters<typeof PortalModal>[0]> = {}) {
-  const props = {
-    vehicle: vehicle("b"),
-    position: 2 as number | null,
-    total: 5,
-    moreAvailable: true,
-    hasPrev: true,
-    hasNext: true,
-    loadingNext: false,
-    neighborSellerIds: ["seller-a", "seller-c"],
-    muted: false,
-    onMutedChange: vi.fn(),
-    onStep: vi.fn(),
-    onClose: vi.fn(),
-    ...overrides,
-  };
-  const view = render(<PortalModal {...props} />);
-  return { ...view, props, dialog: document.querySelector<HTMLDialogElement>("[data-portal-modal]")! };
-}
-
-describe("PortalModal", () => {
-  it("modal pencere: solda video, sağda panel (fotoğraf görüntüleyici pencerenin içinde), sayaç", async () => {
-    const { dialog } = renderModal();
-    expect(dialog.open).toBe(true);
-    expect(dialog.getAttribute("aria-label")).toBe("2019 BMW Model b ilanı");
-    expect(dialog.querySelector("video")?.getAttribute("aria-label")).toBe("2019 BMW Model b videosu");
-    expect(screen.getByTestId("panel").textContent).toContain("BMW Model b");
-    await waitFor(() => expect(screen.getByTestId("panel").dataset.hasContainer).toBe("true"));
-    expect(dialog.textContent).toContain("2 / 5+");
-    await waitFor(() => expect(hls.instances[0]?.loadSource).toHaveBeenCalledWith("https://video/b.m3u8"));
-    expect(document.documentElement.style.overflow).toBe("hidden");
-  });
-
-  it("↓ sonraki, ↑ önceki; yazı alanında ok tuşu yazıya kalır", () => {
-    const { props } = renderModal();
-    fireEvent.keyDown(document.body, { key: "ArrowDown" });
-    expect(props.onStep).toHaveBeenLastCalledWith(1);
-    fireEvent.keyDown(document.body, { key: "ArrowUp" });
-    expect(props.onStep).toHaveBeenLastCalledWith(-1);
-    fireEvent.keyDown(screen.getByLabelText("Yorum yaz"), { key: "ArrowDown" });
-    expect(props.onStep).toHaveBeenCalledTimes(2);
-  });
-
-  it("önceki/sonraki düğmeleri; listenin başında önceki kapalı; paylaşılan ilanda sayaç yok", () => {
-    const { props } = renderModal({ hasPrev: false, position: 1 });
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Önceki ilan" }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Sonraki ilan" }));
-    expect(props.onStep).toHaveBeenCalledWith(1);
-    cleanup();
-    renderModal({ position: null });
-    expect(screen.getByText("Paylaşılan ilan")).toBeTruthy();
-  });
-
-  it("X ve karartılmış alana tıklamak kapatır; kaydırma kilidi kalkar", async () => {
-    const first = renderModal();
-    fireEvent.click(screen.getByRole("button", { name: "Pencereyi kapat" }));
-    await waitFor(() => expect(first.props.onClose).toHaveBeenCalledTimes(1));
-    first.unmount();
-    expect(document.documentElement.style.overflow).toBe("");
-
-    const second = renderModal();
-    fireEvent.click(second.dialog);
-    await waitFor(() => expect(second.props.onClose).toHaveBeenCalledTimes(1));
-  });
-
-  it("içteki pencerenin close olayı dış pencereyi kapatmaz; içteyken ok tuşu gezinmez", () => {
-    const { props, dialog } = renderModal();
-    const inner = document.createElement("dialog");
-    document.body.appendChild(inner);
-    inner.showModal();
-    fireEvent.keyDown(document.body, { key: "ArrowDown" });
-    expect(props.onStep).not.toHaveBeenCalled();
-    inner.close();
-    inner.remove();
-
-    // React, içteki pencerenin close olayını bileşen ağacında dışa da iletir
-    fireEvent(dialog.querySelector("textarea")!, new Event("close", { bubbles: true }));
-    expect(props.onClose).not.toHaveBeenCalled();
-  });
-
-  it("gösterilen ve komşu ilanların satıcıları önceden istenir", async () => {
-    const { primeSellerProfiles } = await import("./use-follow");
-    renderModal();
-    await waitFor(() => expect(primeSellerProfiles).toHaveBeenCalledWith(["seller-b", "seller-a", "seller-c"]));
   });
 });
 
