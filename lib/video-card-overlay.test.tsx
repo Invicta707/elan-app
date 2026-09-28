@@ -83,12 +83,11 @@ describe("mobil bilgi şeridi", () => {
     const title = screen.getByRole("heading", { name: "BMW 5 Serisi" });
     expect(within(title).getByRole("button").className).toContain("truncate");
     const facts = screen.getByRole("list", { name: "Fiyat ve araç özellikleri" });
-    expect(within(facts).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "₺2.000.000 TL",
-      "2013",
-      "100.000 km",
-      "Isparta",
-    ]);
+    const items = within(facts).getAllByRole("listitem");
+    expect(items.slice(0, 4).map((item) => item.textContent)).toEqual(["₺2.000.000 TL", "2013", "100.000 km", "Isparta"]);
+    // İl'in yanında izlenme rozeti (masaüstüyle aynı)
+    expect(items[4].querySelector("[data-view-count]")).not.toBeNull();
+    expect(items).toHaveLength(5);
   });
 
   it("yakıt, vites ve ekspertiz kartta yok (detaylarda); ağır hasar küçük kırmızı hapta", () => {

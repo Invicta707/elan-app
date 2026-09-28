@@ -57,6 +57,8 @@ export type PortalVehicle = {
   photoUrl: string | null;
   /** Deneme ilanı (vehicles.is_test): "Test ilanı" etiketiyle görünür */
   isTest: boolean;
+  /** vehicles.views_count: kartta, akışta ve oynatıcıda izlenme rozeti (yoksa 0) */
+  viewsCount?: number;
   /** İlanın eklenme zamanı (kartta "Bugün", "3 gün önce"…) */
   createdAt: string | null;
 };
@@ -101,6 +103,7 @@ export function portalVehicleFromSearch(row: VehicleSearchResult, meta?: Listing
       : (row.coverImageUrl ?? row.videoThumbnailUrl),
     photoUrl: row.coverImageUrl,
     isTest: meta?.isTest ?? false,
+    viewsCount: row.viewsCount ?? 0,
     createdAt: row.createdAt,
   };
 }
@@ -128,6 +131,7 @@ export function portalVehicleFromFeed(vehicle: FeedVehicle): PortalVehicle {
     // Akış sorgusu fotoğrafları taşımaz (takip akışı yalnızca video ızgarasında)
     photoUrl: null,
     isTest: vehicle.isTest ?? false,
+    viewsCount: vehicle.viewsCount,
     createdAt: vehicle.createdAt ?? null,
   };
 }
@@ -155,6 +159,7 @@ export function feedVehicleFromPortal(vehicle: PortalVehicle): FeedVehicle | nul
     hlsUrl: vehicle.hlsUrl,
     thumbnailUrl: vehicle.posterUrl,
     isTest: vehicle.isTest,
+    ...(vehicle.viewsCount !== undefined ? { viewsCount: vehicle.viewsCount } : {}),
     ...(vehicle.createdAt ? { createdAt: vehicle.createdAt } : {}),
   };
 }

@@ -9,6 +9,7 @@ import { vehiclePath } from "../../lib/share";
 import { useHlsVideo } from "../../lib/use-hls-video";
 import VideoPlayMark from "../brand/VideoPlayMark";
 import PricePlate from "../vehicle/PricePlate";
+import ViewCountBadge from "../vehicle/ViewCountBadge";
 
 // Masaüstü vitrin kartı: 9:16 kapak, ortada saydam göz-oynat işareti, altında
 // başlık, fiyat, yıl/km, il ve eklenme günü. Fare üstünde kısa süre kalınca
@@ -118,7 +119,7 @@ export default function PortalCard({
           </span>
         )}
 
-        <ListingBadges isTest={vehicle.isTest} hasHeavyDamage={vehicle.hasHeavyDamage} />
+        <ListingBadges vehicle={vehicle} />
       </span>
 
       <span className="mt-2.5 block px-0.5">
@@ -182,9 +183,9 @@ function PreviewVideo({ url, onPlaying }: { url: string; onPlaying: () => void }
   );
 }
 
-/** Kapağın sol üstünde: deneme ilanı ve ağır hasar etiketleri (görselli ilan kartı da kullanır) */
-export function ListingBadges({ isTest, hasHeavyDamage }: { isTest: boolean; hasHeavyDamage: boolean }) {
-  if (!isTest && !hasHeavyDamage) return null;
+/** Kapağın sol üstünde: deneme ilanı ve ağır hasar etiketleri, altında izlenme rozeti (görselli ilan kartı da kullanır) */
+export function ListingBadges({ vehicle }: { vehicle: Pick<PortalVehicle, "id" | "isTest" | "hasHeavyDamage" | "viewsCount"> }) {
+  const { isTest, hasHeavyDamage } = vehicle;
   return (
     <span className="pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1">
       {isTest && (
@@ -193,6 +194,7 @@ export function ListingBadges({ isTest, hasHeavyDamage }: { isTest: boolean; has
         </span>
       )}
       {hasHeavyDamage && <span className="rounded-md bg-[#E5484D] px-1.5 py-0.5 text-[12px] font-semibold text-white">Ağır hasar</span>}
+      <ViewCountBadge vehicleId={vehicle.id} count={vehicle.viewsCount ?? 0} />
     </span>
   );
 }

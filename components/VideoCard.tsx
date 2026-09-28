@@ -7,13 +7,15 @@ import FavoriteButton from "./FavoriteButton";
 import ReportButton from "./ReportButton";
 import ShareButton from "./vehicle/ShareButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
-import EyePlayMark from "./brand/EyePlayMark";
+import VideoPlayMark from "./brand/VideoPlayMark";
 import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "./feed/actionStyles";
 import SellerRow from "./social/SellerRow";
 import PricePlate from "./vehicle/PricePlate";
+import ViewCountBadge from "./vehicle/ViewCountBadge";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
 import { setCommentCount, useCommentCount } from "../lib/use-comment-counts";
+import { MOBILE_VIEW_THRESHOLD_MS, recordVehicleView } from "../lib/vehicle-views";
 import { buildVehicleShareText } from "../lib/vehicle-page";
 
 type VideoCardProps = {
@@ -44,6 +46,9 @@ export default function VideoCard({
   const usingNativeHlsRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  // Video gerçekten ilerliyor (playing); duraklatma, tampon beklemesi ya da
+  // kaynak bırakılınca false: izlenme bu sürenin kesintisiz olmasına bakar
+  const [isRunning, setIsRunning] = useState(false);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const { contact: handleContact, isContacting, notice } = useSellerContact(vehicle);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
@@ -169,6 +174,15 @@ export default function VideoCard({
     }
   }, [isActive, isOverlayOpen, tryPlay]);
 
+  // İzlenme: ekrandaki video MOBILE_VIEW_THRESHOLD_MS kesintisiz oynayınca
+  // sayılır (oturumda ilan başına bir kez; kaydırınca, duraklatınca ya da
+  // tampon beklerken süre baştan başlar)
+  useEffect(() => {
+    if (!isActive || !isRunning) return;
+    const timer = window.setTimeout(() => void recordVehicleView(vehicle.id), MOBILE_VIEW_THRESHOLD_MS);
+    return () => window.clearTimeout(timer);
+  }, [isActive, isRunning, vehicle.id]);
+
   // 3) Ortak ses durumunu bu karta uygula
   useEffect(() => {
     const video = videoRef.current;
@@ -222,7 +236,13 @@ export default function VideoCard({
           playsInline
           preload={shouldLoad ? "auto" : "none"}
           onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          onPause={() => {
+            setIsPlaying(false);
+            setIsRunning(false);
+          }}
+          onPlaying={() => setIsRunning(true)}
+          onWaiting={() => setIsRunning(false)}
+          onEmptied={() => setIsRunning(false)}
           onError={handleVideoError}
         />
 
@@ -234,19 +254,20 @@ export default function VideoCard({
           className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
         />
 
-        {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür: marka
-            işareti (göz hattı, göz bebeğinde oynat üçgeni), yarı saydam koyu buzlu
-            zeminde ince beyaz çizgi; parlama yok. Solarak ve hafifçe büyüyerek
-            belirir, oynatınca solarak kaybolur. Kısa gecikme, normal oynatma
-            başlarken simgenin yanıp sönmesini önler. */}
+        {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür:
+            masaüstü vitrin ve Shorts oynatıcısıyla aynı sade işaret (yarı saydam
+            göz hattı, göz bebeğinde oynat üçgeni; daire, kenarlık ve buzlu zemin
+            yok). Solarak ve hafifçe büyüyerek belirir, oynatınca solarak
+            kaybolur. Kısa gecikme, normal oynatma başlarken simgenin yanıp
+            sönmesini önler. */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <span
             data-paused-mark={showPlayHint ? "visible" : "hidden"}
-            className={`flex h-[84px] w-[84px] items-center justify-center rounded-full bg-black/35 ring-1 ring-inset ring-white/15 backdrop-blur-[6px] transition-[opacity,transform] ease-out motion-reduce:scale-100 ${
+            className={`transition-[opacity,transform] ease-out motion-reduce:scale-100 ${
               showPlayHint ? "scale-100 opacity-100 delay-150 duration-200" : "scale-90 opacity-0 duration-150"
             }`}
           >
-            <EyePlayMark className="h-12 w-12 text-white" strokeWidth={4} />
+            <VideoPlayMark className="h-20 w-20" />
           </span>
         </div>
 
@@ -296,6 +317,9 @@ export default function VideoCard({
                 <Tag>{vehicle.year}</Tag>
                 <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
                 {vehicle.city && <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>}
+                <li>
+                  <ViewCountBadge vehicleId={vehicle.id} count={vehicle.viewsCount ?? 0} />
+                </li>
                 {vehicle.hasHeavyDamage && <Tag tone="danger">Ağır hasar</Tag>}
                 {vehicle.isTest && <Tag>Test ilanı</Tag>}
               </ul>

@@ -20,6 +20,7 @@ import { SHORTS_BUTTON, SHORTS_ICON, SHORTS_ICON_BOX, SHORTS_LABEL } from "../fe
 import Avatar from "../ui/Avatar";
 import PricePlate from "../vehicle/PricePlate";
 import ShareButton from "../vehicle/ShareButton";
+import ViewCountBadge from "../vehicle/ViewCountBadge";
 import WhatsAppIcon from "../vehicle/WhatsAppIcon";
 import { useSellerContact } from "../vehicle/useSellerContact";
 import ShortsPlayer, { type ShortsPlayerControl } from "./ShortsPlayer";
@@ -357,7 +358,7 @@ function SlideFrame({
   );
 }
 
-/** Videonun sol altı: satıcı, başlık, fiyat (sade; künye çekmecede) */
+/** Videonun sol altı: satıcı, başlık, fiyat ve izlenme (sade; künye çekmecede) */
 function InfoOverlay({ vehicle, onOpenDetails }: { vehicle: PortalVehicle; onOpenDetails?: () => void }) {
   const title = `${vehicle.brandName} ${vehicle.modelName}`;
   return (
@@ -382,6 +383,7 @@ function InfoOverlay({ vehicle, onOpenDetails }: { vehicle: PortalVehicle; onOpe
       </h2>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <PricePlate price={vehicle.price} currency={vehicle.currency} size="sm" />
+        <ViewCountBadge vehicleId={vehicle.id} count={vehicle.viewsCount ?? 0} />
         {vehicle.isTest && (
           <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[12px] font-semibold ring-1 ring-inset ring-white/20">Test ilanı</span>
         )}

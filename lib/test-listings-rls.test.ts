@@ -89,9 +89,9 @@ afterAll(async () => {
 });
 
 describe("test ilanı işareti", () => {
-  it("migration en son: yorum şikayetlerinden sonra uygulanır", () => {
+  it("migration yorum şikayetlerinden sonra uygulanır", () => {
     const migrations = readdirSync("supabase/migrations").sort();
-    expect(migrations.at(-1)).toBe("20260928200000_test_listings.sql");
+    expect(migrations).toContain("20260928200000_test_listings.sql");
     expect(migrations.indexOf("20260928200000_test_listings.sql")).toBeGreaterThan(migrations.indexOf("20260928180000_comment_reports.sql"));
   });
 

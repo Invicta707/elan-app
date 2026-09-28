@@ -33,6 +33,8 @@ export type FeedVehicle = {
   createdAt?: string;
   /** Deneme ilanı (vehicles.is_test): kartta ve panelde "Test ilanı" etiketi */
   isTest?: boolean;
+  /** vehicles.views_count: izlenme rozeti (yalnızca increment_vehicle_view artırır) */
+  viewsCount?: number;
 };
 
 export type FeedCursor = { createdAt: string; id: string };
@@ -61,6 +63,7 @@ type FeedRow = {
   changed_parts_count: number;
   comments_count?: number | null;
   is_test?: boolean | null;
+  views_count?: number | null;
   brand: { name: string } | null;
   model: { name: string } | null;
   videos: { hls_url: string | null; thumbnail_url: string | null; order_index: number }[];
@@ -71,7 +74,7 @@ type FeedRow = {
 // videosuz bir ilan feed'e sızmaz.
 const FEED_COLUMNS = `
   id, seller_id, created_at, year, price, currency, mileage_km, fuel_type, transmission, city,
-  tramer_amount, has_heavy_damage, painted_parts_count, changed_parts_count, comments_count, is_test,
+  tramer_amount, has_heavy_damage, painted_parts_count, changed_parts_count, comments_count, is_test, views_count,
   brand:brands(name),
   model:models(name),
   videos!inner(hls_url, thumbnail_url, order_index)
@@ -180,6 +183,7 @@ function toFeedVehicle(row: FeedRow): FeedVehicle | null {
     commentsCount: Math.max(0, Number(row.comments_count ?? 0)),
     createdAt: row.created_at,
     isTest: row.is_test === true,
+    viewsCount: Math.max(0, Number(row.views_count ?? 0)),
   };
 }
 

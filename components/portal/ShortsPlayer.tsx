@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { PortalVehicle } from "../../lib/portal";
 import { useHlsVideo } from "../../lib/use-hls-video";
+import { recordVehicleView } from "../../lib/vehicle-views";
 import VideoPlayMark from "../brand/VideoPlayMark";
 
 // Shorts oynatıcısının 9:16 videosu: çerçevenin tamamı. İlan değişince
@@ -12,7 +13,8 @@ import VideoPlayMark from "../brand/VideoPlayMark";
 // Oynatıcı bir tıklamayla açıldığı için sesli başlamayı dener; tarayıcı
 // engellerse sessize alıp oynatır. Videoya tıklamak durdurur/oynatır;
 // duraklatınca ortada yarı saydam göz-oynat işareti belirir. Sağ üstte ses,
-// en altta ince, sürüklenebilir ilerleme çubuğu.
+// en altta ince, sürüklenebilir ilerleme çubuğu. Video oynamaya başlayınca
+// izlenme sayılır (oturumda ilan başına bir kez, lib/vehicle-views.ts).
 
 /** Boşluk tuşu (ShortsViewer) oynatmayı buradan değiştirir */
 export type ShortsPlayerControl = { togglePlay: () => void };
@@ -120,6 +122,7 @@ export default function ShortsPlayer({
         aria-label={`${title} videosu`}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        onPlaying={() => void recordVehicleView(vehicle.id)}
         onCanPlay={(event) => {
           if (event.currentTarget.paused && !userPausedRef.current) void tryPlay(event.currentTarget);
         }}

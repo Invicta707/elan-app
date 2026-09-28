@@ -66,7 +66,7 @@ export default function PortalPhotoCard({
             className="object-cover transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.03]"
           />
         )}
-        <ListingBadges isTest={vehicle.isTest} hasHeavyDamage={vehicle.hasHeavyDamage} />
+        <ListingBadges vehicle={vehicle} />
         {vehicle.hlsUrl && (
           <span className="pointer-events-none absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-black/60 py-0.5 pr-2 pl-1.5 text-[12px] font-semibold text-white ring-1 ring-inset ring-white/15">
             <Play aria-hidden="true" className="h-3 w-3 fill-current" />
