@@ -370,6 +370,9 @@ const PARAM = {
   sort: "sirala",
 } as const;
 
+/** Filtrelerin URL'de kullandığı bütün parametre adları (ana sayfa bağlantısını kurarken ayıklanır) */
+export const FILTER_PARAM_KEYS: readonly string[] = Object.values(PARAM);
+
 // Varsayılan sıra (en yeni) URL'e yazılmaz
 const SORT_SLUGS: Record<Exclude<SortOrder, "newest">, string> = {
   price_asc: "fiyat-artan",

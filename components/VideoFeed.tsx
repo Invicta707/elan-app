@@ -5,6 +5,8 @@ import VideoCard from "./VideoCard";
 import { useSupabaseSession } from "../lib/auth";
 import { fetchFeedPage, fetchFeedVehicle, type FeedCursor, type FeedSource, type FeedVehicle } from "../lib/feed";
 import { clampFeedIndex, createWheelStepper, feedKeyStepFor } from "../lib/feed-navigation";
+import { fetchFilteredFeedPage } from "../lib/portal";
+import type { SearchFilters } from "../lib/search";
 import { primeSellerProfiles } from "../lib/use-follow";
 
 const PAGE_SIZE = 8;
@@ -20,9 +22,9 @@ const PINNED_MISSING_NOTICE =
 
 // Akış sayfası ve (varsa) arama sayfasından seçilen ilan paralel istenir.
 // Seçilen ilan bulunamazsa akış normal şekilde devam eder.
-async function fetchFeedBatch(cursor: FeedCursor | null, pinnedId: string | null, source: FeedSource) {
+async function fetchFeedBatch<P>(fetchPage: () => Promise<P>, pinnedId: string | null) {
   const [page, pinned] = await Promise.all([
-    fetchFeedPage(cursor, PAGE_SIZE, source),
+    fetchPage(),
     pinnedId ? fetchFeedVehicle(pinnedId).catch(() => null) : Promise.resolve(null),
   ]);
   return { page, pinned };
@@ -33,6 +35,12 @@ type VideoFeedProps = {
   initialVehicleId?: string | null;
   /** "explore": bütün yayındaki ilanlar; "following": takip edilen satıcılarınki */
   source?: FeedSource;
+  /**
+   * Ana sayfada filtre uygulandıysa (hap düğmesi, /?marka=…): akış bu
+   * filtreye uyan videolu ilanlardan kurulur. Filtre değişince akış yeniden
+   * kurulur (key); bileşen ilk değeri kullanır.
+   */
+  filters?: SearchFilters | null;
   /**
    * Akış ekranda mı: sekme değişince gizlenen akış silinmez (yeri korunur) ama
    * hiçbir videosu oynamaz ve yalnızca aktif kartın videosu bağlı kalır
@@ -58,6 +66,7 @@ const PENDING_TARGET_MS = 900;
 export default function VideoFeed({
   initialVehicleId = null,
   source = "explore",
+  filters = null,
   visible = true,
   muted,
   onMutedChange,
@@ -68,6 +77,9 @@ export default function VideoFeed({
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cursorRef = useRef<FeedCursor | null>(null);
+  // Filtreli akış: arama offset'le sayfalanır
+  const offsetRef = useRef(0);
+  const filtersRef = useRef(filters);
   const isFetchingRef = useRef(false);
   // İlk başarılı yüklemede bir kez kullanılır
   const pinnedIdRef = useRef<string | null>(initialVehicleId);
@@ -91,7 +103,21 @@ export default function VideoFeed({
 
     try {
       const pinnedId = pinnedIdRef.current;
-      const { page, pinned } = await fetchFeedBatch(cursorRef.current, pinnedId, source);
+      const activeFilters = filtersRef.current;
+      let items: FeedVehicle[];
+      let more: boolean;
+      let pinned: FeedVehicle | null;
+      if (activeFilters) {
+        const batch = await fetchFeedBatch(() => fetchFilteredFeedPage(activeFilters, offsetRef.current, PAGE_SIZE), pinnedId);
+        offsetRef.current = batch.page.nextOffset;
+        ({ items, hasMore: more } = batch.page);
+        pinned = batch.pinned;
+      } else {
+        const batch = await fetchFeedBatch(() => fetchFeedPage(cursorRef.current, PAGE_SIZE, source), pinnedId);
+        cursorRef.current = batch.page.nextCursor;
+        ({ items, hasMore: more } = batch.page);
+        pinned = batch.pinned;
+      }
 
       // Aranan ilan artık yayında değilse kısa bir bilgi göster. (if bloğuna alınmadı:
       // react-hooks lint kuralı iç bloktaki setState'i senkron sayıp hata veriyor.)
@@ -99,19 +125,18 @@ export default function VideoFeed({
       pinnedIdRef.current = null;
       setNotice((current) => (pinnedMissing ? PINNED_MISSING_NOTICE : current));
 
-      cursorRef.current = page.nextCursor;
       setVehicles((current) => {
         // Seçilen ilan başa; akışta sonradan tekrar gelirse atlanır
         const seen = new Set(current.map((v) => v.id));
         const next = [...current];
-        for (const vehicle of pinned ? [pinned, ...page.items] : page.items) {
+        for (const vehicle of pinned ? [pinned, ...items] : items) {
           if (seen.has(vehicle.id)) continue;
           seen.add(vehicle.id);
           next.push(vehicle);
         }
         return next;
       });
-      setHasMore(page.hasMore);
+      setHasMore(more);
       setPagesLoaded((count) => count + 1);
     } catch (error) {
       console.error("Feed yüklenemedi:", error);

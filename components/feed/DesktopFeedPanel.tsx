@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ExternalLink, Heart, LoaderCircle, MessageCircle, Phone, Plus, Search } from "lucide-react";
+import { ChevronRight, ExternalLink, LoaderCircle, MessageCircle, Phone } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { fetchVehicleDetails, type FeedVehicle, type VehicleDetails } from "../../lib/feed";
@@ -11,8 +11,6 @@ import { getCommentCount, setCommentCount } from "../../lib/use-comment-counts";
 import { useSellerProfile } from "../../lib/use-follow";
 import { profilePath } from "../../lib/username";
 import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/vehicle-labels";
-import AuthGatedLink from "../AuthGatedLink";
-import HeaderProfileButton from "../HeaderProfileButton";
 import { CommentComposerArea, CommentList, CommentListError, CommentThreadDialogs } from "../comments/CommentThreadView";
 import { useCommentThread } from "../comments/useCommentThread";
 import FollowButton from "../social/FollowButton";
@@ -24,65 +22,48 @@ import PricePlate from "../vehicle/PricePlate";
 import { useSellerContact } from "../vehicle/useSellerContact";
 import { useSellerPhone } from "../vehicle/useSellerPhone";
 
-// Masaüstü düzeni (1024 px ve üstü, TikTok Web modeli): video sütununun
-// sağındaki kalıcı, koyu panel. Ekrandaki (aktif) ilanın fiyatı, özellikleri,
-// satıcı kartı, WhatsApp / Ara / Mesaj düğmeleri ve yorumları; yorum yazma
-// alanı panelin altında sabit. Üstte, akış başlığının sağındaki düğmeler
-// (ara, favoriler, İlan Ver, profil). Panelde ↑/↓ panelin kendisini kaydırır
-// (data-feed-keys="off"); akışta ise bir sonraki ilana geçer.
+// İlanın koyu ayrıntı paneli (masaüstü, 1024 px ve üstü): vitrin penceresinin
+// sağ yarısı (components/portal/PortalModal.tsx). İlanın fiyatı, özellikleri,
+// ekspertizi, açıklaması, fotoğrafları, satıcı kartı, WhatsApp / Ara / Mesaj
+// düğmeleri ve yorumları; yorum yazma alanı panelin altında sabit.
 
 type DetailsLoad = { status: "loading" } | { status: "error" } | { status: "ready"; details: VehicleDetails };
+
+/** Panelin çizdiği ilan: akış ilanı ya da vitrin ilanı (video alanları panelde kullanılmaz) */
+export type PanelVehicle = Omit<FeedVehicle, "hlsUrl" | "thumbnailUrl" | "createdAt">;
 
 const panelScroll = "[scrollbar-color:#3F3F46_transparent] [scrollbar-width:thin]";
 
 export default function DesktopFeedPanel({
   vehicle,
   focusRequest,
+  lightboxContainer,
 }: {
   /** undefined: akış yükleniyor; null: gösterilecek ilan yok (akış boş ya da sonu) */
-  vehicle: FeedVehicle | null | undefined;
+  vehicle: PanelVehicle | null | undefined;
   /** Akıştaki "Yorum" düğmesine her basışta artar: yorumlara kaydırılır, yazma alanına odaklanılır */
   focusRequest: number;
+  /**
+   * Tam ekran fotoğrafın çizileceği yer: varsayılan document.body. Vitrin
+   * penceresinde (modal <dialog>) pencerenin kendisi; dışındaki her şey inert.
+   */
+  lightboxContainer?: Element | null;
 }) {
-  if (vehicle) return <VehiclePanel key={vehicle.id} vehicle={vehicle} focusRequest={focusRequest} />;
+  if (vehicle) {
+    return <VehiclePanel key={vehicle.id} vehicle={vehicle} focusRequest={focusRequest} lightboxContainer={lightboxContainer} />;
+  }
   return vehicle === undefined ? <PanelSkeleton /> : <PanelEmpty />;
 }
 
-/**
- * Akış başlığının masaüstündeki sağ düğmeleri (FeedHeader actionsInPanel):
- * panelin üst çubuğu. Veri istemez; sunucuda da çizilir (başlık boş kalmaz).
- */
-export function PanelToolbar() {
-  return (
-    <div className="flex h-16 shrink-0 items-center gap-2 border-b border-[#27272A] px-4">
-      <Link
-        href="/search"
-        className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-[#18181B] px-3.5 text-[14.5px] text-[#A1A1AA] ring-1 ring-inset ring-[#27272A] transition-colors hover:bg-[#27272A] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-      >
-        <Search aria-hidden="true" className="h-4 w-4 shrink-0" />
-        <span className="truncate">Marka, model ara</span>
-      </Link>
-      <Link
-        href="/favorites"
-        aria-label="Favorilerim"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-      >
-        <Heart aria-hidden="true" className="h-5 w-5" />
-      </Link>
-      <AuthGatedLink
-        href="/sell"
-        aria-label="İlan Ver"
-        className="flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-white/40 px-3 text-[14.5px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white xl:px-3.5"
-      >
-        <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2.5} />
-        <span className="hidden xl:inline">İlan Ver</span>
-      </AuthGatedLink>
-      <HeaderProfileButton overlay />
-    </div>
-  );
-}
-
-function VehiclePanel({ vehicle, focusRequest }: { vehicle: FeedVehicle; focusRequest: number }) {
+function VehiclePanel({
+  vehicle,
+  focusRequest,
+  lightboxContainer,
+}: {
+  vehicle: PanelVehicle;
+  focusRequest: number;
+  lightboxContainer?: Element | null;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const commentsRef = useRef<HTMLElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -208,7 +189,12 @@ function VehiclePanel({ vehicle, focusRequest }: { vehicle: FeedVehicle; focusRe
         )}
         {details && details.photoUrls.length > 0 && (
           <div className="mt-5 px-4">
-            <PhotoGallery photos={details.photoUrls} title={title} lightboxContainer={document.body} tone="dark" />
+            <PhotoGallery
+              photos={details.photoUrls}
+              title={title}
+              lightboxContainer={lightboxContainer ?? document.body}
+              tone="dark"
+            />
           </div>
         )}
 
@@ -314,7 +300,7 @@ function PanelSeller({ sellerId }: { sellerId: string | null }) {
 }
 
 /** WhatsApp, Ara (numara gösterilir, arama bağlantısı) ve gözüyle'den mesaj */
-function PanelContact({ vehicle }: { vehicle: FeedVehicle }) {
+function PanelContact({ vehicle }: { vehicle: PanelVehicle }) {
   const { contact, isContacting, notice } = useSellerContact(vehicle);
   const phone = useSellerPhone(vehicle.id);
   const [messageNotice, setMessageNotice] = useState<string | null>(null);

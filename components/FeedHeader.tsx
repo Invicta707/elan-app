@@ -19,18 +19,12 @@ type FeedHeaderProps = {
    * "Vitrinim"de; 320 px'te ikisi birden sığmaz.
    */
   center?: ReactNode;
-  /**
-   * Ana sayfanın masaüstü düzeni (lg, 1024 px ve üstü): başlık yalnızca video
-   * sütununun üstünde; sağdaki düğmeler (ara, favoriler, İlan Ver, profil)
-   * sağdaki kalıcı panelin üst çubuğunda (components/feed/DesktopFeedPanel.tsx).
-   */
-  actionsInPanel?: boolean;
 };
 
 // Kancasız (hook'suz) bir bileşen: hem sunucu hem istemci bileşenlerinin içinde
 // kullanılabilir. Oturuma bakan parçalar (profil, "+ İlan Ver") kendi istemci
 // bileşenlerindedir.
-export default function FeedHeader({ activeTab = "feed", tone = "overlay", center, actionsInPanel = false }: FeedHeaderProps) {
+export default function FeedHeader({ activeTab = "feed", tone = "overlay", center }: FeedHeaderProps) {
   const overlay = tone === "overlay";
 
   return (
@@ -74,7 +68,7 @@ export default function FeedHeader({ activeTab = "feed", tone = "overlay", cente
             ikonuna döner, daha darda kalp ve "+" gizlenir. Profil her zaman
             görünür (ana sayfada mobilde yerini büyüteç alır); butonlar asla alt
             satıra kırılmaz. Mobilde kalp ve "+" alt gezinme çubuğunda. */}
-        <div className={`flex items-center justify-self-end gap-2 ${actionsInPanel ? "lg:hidden" : ""}`}>
+        <div className="flex items-center justify-self-end gap-2">
           {center && (
             <Link
               href="/search"

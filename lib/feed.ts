@@ -29,6 +29,8 @@ export type FeedVehicle = {
   thumbnailUrl: string | null;
   /** vehicles.comments_count (tetikleyiciyle tutulur) */
   commentsCount: number;
+  /** İlanın eklenme zamanı (vitrin kartındaki tarih); akış satırından gelir */
+  createdAt?: string;
 };
 
 export type FeedCursor = { createdAt: string; id: string };
@@ -173,6 +175,7 @@ function toFeedVehicle(row: FeedRow): FeedVehicle | null {
     hlsUrl: video.hls_url,
     thumbnailUrl: video.thumbnail_url,
     commentsCount: Math.max(0, Number(row.comments_count ?? 0)),
+    createdAt: row.created_at,
   };
 }
 
