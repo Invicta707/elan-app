@@ -2,22 +2,25 @@
 
 import { Volume2, VolumeX } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import type { PortalVehicle } from "../../lib/portal";
+import { isUnlockEvent, markSoundBlocked, registerSoundTarget, useSound } from "../../lib/sound";
 import { useHlsVideo } from "../../lib/use-hls-video";
 import { recordVehicleView } from "../../lib/vehicle-views";
 import VideoPlayMark from "../brand/VideoPlayMark";
 
 // Shorts oynatıcısının 9:16 videosu: çerçevenin tamamı. İlan değişince
 // yeniden kurulur (ShortsViewer'da key): önceki videonun kaynağı bırakılır.
-// Oynatıcı bir tıklamayla açıldığı için sesli başlamayı dener; tarayıcı
-// engellerse sessize alıp oynatır. Videoya tıklamak durdurur/oynatır;
+// Ses mobil akışla ortak, kalıcı tercihtir (lib/sound.ts). Oynatıcı bir
+// tıklamayla açıldığı için sesli başlar; bağlantıyla doğrudan gelindiyse ve
+// tarayıcı sesli oynatmayı reddederse sessiz oynar, sol üstte "Sesi aç" rozeti
+// çıkar ve sayfadaki ilk tıklama ya da tuş sesi açar. Videoya tıklamak durdurur/oynatır;
 // duraklatınca ortada yarı saydam göz-oynat işareti belirir. Sağ üstte ses,
 // en altta ince, sürüklenebilir ilerleme çubuğu. Video oynamaya başlayınca
 // izlenme sayılır (oturumda ilan başına bir kez, lib/vehicle-views.ts).
 
 /** Boşluk tuşu (ShortsViewer) oynatmayı buradan değiştirir */
-export type ShortsPlayerControl = { togglePlay: () => void };
+export type ShortsPlayerControl = { togglePlay: (event?: Event) => void };
 
 const timeText = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
@@ -26,17 +29,13 @@ const timeText = (seconds: number) => {
 
 export default function ShortsPlayer({
   vehicle,
-  muted,
-  onMutedChange,
   controlRef,
 }: {
   vehicle: PortalVehicle;
-  /** Ses durumu oynatıcıda ilandan ilana taşınır */
-  muted: boolean;
-  onMutedChange: (muted: boolean) => void;
   controlRef?: RefObject<ShortsPlayerControl | null>;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { muted, blocked: soundBlocked, setMuted } = useSound();
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState({ current: 0, duration: 0 });
   const mutedRef = useRef(muted);
@@ -57,20 +56,33 @@ export default function ShortsPlayer({
         // AbortError: oynatma bir duraklatma ya da kaynak değişimiyle kesildi
         if (!(error instanceof DOMException) || error.name !== "NotAllowedError" || video.muted) return;
         video.muted = true;
-        onMutedChange(true);
+        markSoundBlocked();
         await video.play().catch(() => {});
       }
     },
-    [onMutedChange],
+    [],
   );
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) video.muted = muted;
+  }, [muted]);
+
+  // Ses engeli kalkınca ilk tıklamanın içinde bu videonun sesi açılır
+  useEffect(() => {
+    const video = videoRef.current;
+    return video ? registerSoundTarget(video) : undefined;
+  }, []);
 
   // Büyük çerçeve: hls.js çerçeveye (ve ekranın piksel yoğunluğuna) uyan en
   // yüksek kaliteyi seçer; akıcı geçiş için biraz daha uzun tampon
   const { failed } = useHlsVideo(videoRef, vehicle.hlsUrl, { maxBufferLength: 20, onAttached: (video) => void tryPlay(video) });
 
-  const togglePlay = useCallback(() => {
+  const togglePlay = useCallback((event?: Event) => {
     const video = videoRef.current;
     if (!video) return;
+    // Bu tıklama/tuş sesi açtı (engel vardı): video durmasın
+    if (isUnlockEvent(event)) return;
     userPausedRef.current = !video.paused;
     if (video.paused) void tryPlay(video);
     else video.pause();
@@ -91,7 +103,14 @@ export default function ShortsPlayer({
       video.muted = next;
       if (!next && video.paused) void tryPlay(video);
     }
-    onMutedChange(next);
+    setMuted(next);
+  }
+
+  function unmute(event: MouseEvent<HTMLButtonElement>) {
+    if (isUnlockEvent(event.nativeEvent)) return;
+    const video = videoRef.current;
+    if (video) video.muted = false;
+    setMuted(false);
   }
 
   const title = `${vehicle.year} ${vehicle.brandName} ${vehicle.modelName}`;
@@ -134,7 +153,7 @@ export default function ShortsPlayer({
 
       <button
         type="button"
-        onClick={togglePlay}
+        onClick={(event) => togglePlay(event.nativeEvent)}
         aria-label={playing ? "Videoyu duraklat" : "Videoyu oynat"}
         title={playing ? "Duraklat (boşluk)" : "Oynat (boşluk)"}
         className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
@@ -157,6 +176,18 @@ export default function ShortsPlayer({
         <p role="status" className="pointer-events-none absolute inset-x-8 top-1/3 z-10 text-center text-[15px] leading-snug text-white/90">
           Bu video şu an oynatılamıyor.
         </p>
+      )}
+
+      {soundBlocked && (
+        <button
+          type="button"
+          onClick={unmute}
+          data-unmute-pill=""
+          className="absolute top-3 left-3 z-30 flex h-9 items-center gap-1.5 rounded-full bg-black/55 pr-3.5 pl-3 text-[13.5px] font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-[6px] transition-colors hover:bg-black/70 motion-safe:animate-[fade-in_200ms_ease-out] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <VolumeX aria-hidden="true" className="h-4 w-4" />
+          Sesi aç
+        </button>
       )}
 
       <button

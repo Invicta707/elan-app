@@ -46,9 +46,6 @@ type VideoFeedProps = {
    * hiçbir videosu oynamaz ve yalnızca aktif kartın videosu bağlı kalır
    */
   visible?: boolean;
-  /** Ses durumu iki akışta ortak, ana sayfada tutulur */
-  muted: boolean;
-  onMutedChange: (muted: boolean) => void;
   /** Hiç ilan yoksa gösterilecek içerik (varsayılan: "Yayında ilan yok.") */
   emptyState?: ReactNode;
 };
@@ -61,8 +58,6 @@ export default function VideoFeed({
   source = "explore",
   filters = null,
   visible = true,
-  muted,
-  onMutedChange,
   emptyState,
 }: VideoFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -265,8 +260,6 @@ export default function VideoFeed({
                   vehicle={vehicle}
                   isActive={visible && index === activeIndex}
                   shouldLoad={visible ? distance <= 1 : distance === 0}
-                  muted={muted}
-                  onMutedChange={onMutedChange}
                 />
               )}
             </div>

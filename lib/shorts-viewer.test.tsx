@@ -128,8 +128,6 @@ function props(overrides: Partial<Props> = {}): Props {
     hasNext: true,
     loadingNext: false,
     neighbors: { prev: vehicle("a"), next: vehicle("c") },
-    muted: false,
-    onMutedChange: vi.fn(),
     onStep: vi.fn(),
     onClose: vi.fn(),
     ...overrides,

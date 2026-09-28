@@ -67,8 +67,6 @@ export default function ShortsViewer({
   hasNext,
   loadingNext,
   neighbors,
-  muted,
-  onMutedChange,
   onStep,
   onClose,
 }: {
@@ -86,8 +84,6 @@ export default function ShortsViewer({
   loadingNext: boolean;
   /** Önceki/sonraki ilan: kapakları ve satıcıları geçişi beklemesin diye önceden istenir */
   neighbors: { prev: PortalVehicle | null; next: PortalVehicle | null };
-  muted: boolean;
-  onMutedChange: (muted: boolean) => void;
   onStep: (step: -1 | 1) => void;
   onClose: () => void;
 }) {
@@ -147,7 +143,7 @@ export default function ShortsViewer({
       if (openDialogs[openDialogs.length - 1] !== dialog) return;
       if (event.key === " " && isPlainTarget(event)) {
         event.preventDefault();
-        playerRef.current?.togglePlay();
+        playerRef.current?.togglePlay(event);
         return;
       }
       const step = modalKeyStep(event);
@@ -244,7 +240,7 @@ export default function ShortsViewer({
                 className="relative shrink-0 overflow-hidden rounded-2xl bg-black"
                 style={{ height: FRAME_HEIGHT, aspectRatio: "9 / 16" }}
               >
-                <ShortsPlayer vehicle={vehicle} muted={muted} onMutedChange={onMutedChange} controlRef={playerRef} />
+                <ShortsPlayer vehicle={vehicle} controlRef={playerRef} />
                 <InfoOverlay vehicle={vehicle} onOpenDetails={() => setDrawerOpen(true)} />
               </div>
               <ActionColumn

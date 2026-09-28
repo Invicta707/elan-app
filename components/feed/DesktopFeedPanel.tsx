@@ -15,6 +15,7 @@ import { CommentComposerArea, CommentList, CommentListError, CommentThreadDialog
 import { useCommentThread } from "../comments/useCommentThread";
 import FollowButton from "../social/FollowButton";
 import Avatar from "../ui/Avatar";
+import BodyDiagram from "../vehicle/BodyDiagram";
 import ConditionList from "../vehicle/ConditionList";
 import MessageSellerButton from "../vehicle/MessageSellerButton";
 import PhotoGallery from "../vehicle/PhotoGallery";
@@ -158,12 +159,10 @@ function VehiclePanel({
             />
             <SpecTile label="Şehir" value={vehicle.city ?? "—"} />
           </dl>
-          <div className="mt-3 rounded-xl bg-[#18181B] px-3 py-2.5">
+          <div className="mt-3 rounded-xl bg-[#18181B] px-3 pt-2.5 pb-3">
             <p className="text-[12px] font-medium text-[#A1A1AA]">Ekspertiz</p>
-            <ConditionList vehicle={vehicle} className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5 text-[13.5px] font-medium text-white" />
-            <p className="mt-1.5 text-[13.5px] font-medium">
-              {vehicle.hasHeavyDamage ? <span className="text-[#FCA5A5]">Ağır hasar kayıtlı</span> : "Ağır hasar kaydı yok"}
-            </p>
+            <ConditionList vehicle={vehicle} tone="dark" className="mt-2" />
+            <BodyDiagram counts={vehicle} parts={details?.bodyParts} tone="dark" className="mt-4" />
           </div>
         </PanelSection>
 

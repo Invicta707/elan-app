@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type Hls from "hls.js";
 import CommentButton from "./comments/CommentButton";
 import FavoriteButton from "./FavoriteButton";
@@ -14,6 +14,7 @@ import PricePlate from "./vehicle/PricePlate";
 import ViewCountBadge from "./vehicle/ViewCountBadge";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
+import { isUnlockEvent, markSoundBlocked, registerSoundTarget, useSound } from "../lib/sound";
 import { setCommentCount, useCommentCount } from "../lib/use-comment-counts";
 import { MOBILE_VIEW_THRESHOLD_MS, recordVehicleView } from "../lib/vehicle-views";
 import { buildVehicleShareText } from "../lib/vehicle-page";
@@ -24,9 +25,6 @@ type VideoCardProps = {
   isActive: boolean;
   /** Aktif kart ve hemen önceki/sonraki kart: HLS kaynağı bağlanır (ön yükleme) */
   shouldLoad: boolean;
-  /** Ses durumu tüm kartlarda ortak, VideoFeed'de tutulur */
-  muted: boolean;
-  onMutedChange: (muted: boolean) => void;
 };
 
 // Kalıcı ağ/medya hatalarında sonsuz yeniden deneme döngüsüne girmemek için
@@ -34,14 +32,11 @@ const MAX_RECOVERY_ATTEMPTS = 2;
 
 const amountFormatter = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 
-export default function VideoCard({
-  vehicle,
-  isActive,
-  shouldLoad,
-  muted,
-  onMutedChange,
-}: VideoCardProps) {
+export default function VideoCard({ vehicle, isActive, shouldLoad }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Ses bütün kartlarda ve masaüstü oynatıcıda ortak, kalıcı tercih (lib/sound.ts);
+  // blocked: tarayıcı sesli otomatik oynatmayı reddetti, ilk dokunuş sesi açar
+  const { muted, blocked: soundBlocked, setMuted } = useSound();
   const isActiveRef = useRef(isActive);
   const usingNativeHlsRef = useRef(false);
 
@@ -78,16 +73,17 @@ export default function VideoCard({
       // oynat simgesi görünür, kullanıcı dokununca başlar
       if (video.muted || !isActiveRef.current) return;
 
-      // Tarayıcı sesli otomatik oynatmayı engelledi: sessize alıp tekrar dene
+      // Tarayıcı sesli otomatik oynatmayı engelledi: sessiz oynat, "Sesi aç"
+      // rozeti görünür; tercih (ses açık) değişmez, ilk dokunuş sesi açar
       video.muted = true;
-      onMutedChange(true);
+      markSoundBlocked();
       try {
         await video.play();
       } catch {
         // Kullanıcı dokunduğunda tekrar denenecek
       }
     }
-  }, [onMutedChange]);
+  }, []);
 
   // 1) HLS kaynağını bağla / serbest bırak
   useEffect(() => {
@@ -189,12 +185,31 @@ export default function VideoCard({
     if (video) video.muted = muted;
   }, [muted]);
 
-  function handleTogglePlay() {
+  // Ekrandaki kartın videosu: ses engeli kalkınca ilk dokunuşun içinde sesi açılır
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!isActive || !video) return;
+    return registerSoundTarget(video);
+  }, [isActive]);
+
+  function handleTogglePlay(event: MouseEvent<HTMLButtonElement>) {
     const video = videoRef.current;
     if (!video) return;
+    // Bu dokunuş sesi açtı (engel vardı): video durmasın
+    if (isUnlockEvent(event.nativeEvent)) return;
 
     if (video.paused) void tryPlay();
     else video.pause();
+  }
+
+  function handleUnmute(event: MouseEvent<HTMLButtonElement>) {
+    if (isUnlockEvent(event.nativeEvent)) return;
+    const video = videoRef.current;
+    if (video) {
+      video.muted = false;
+      if (video.paused && isActive) void tryPlay();
+    }
+    setMuted(false);
   }
 
   function handleToggleMute() {
@@ -207,7 +222,7 @@ export default function VideoCard({
       video.muted = nextMuted;
       if (!nextMuted && video.paused && isActive) void tryPlay();
     }
-    onMutedChange(nextMuted);
+    setMuted(nextMuted);
   }
 
   function handleVideoError() {
@@ -277,6 +292,20 @@ export default function VideoCard({
           </p>
         )}
 
+        {/* Tarayıcı sesli oynatmayı engelledi: video sessiz oynuyor. Ekrana ilk
+            dokunuş (bu rozet dahil) sesi açar; "Filtrele" hapının sağında, üstte. */}
+        {isActive && soundBlocked && (
+          <button
+            type="button"
+            onClick={handleUnmute}
+            data-unmute-pill=""
+            className="absolute top-[calc(env(safe-area-inset-top)+3.9rem)] left-1/2 z-30 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 pr-3 pl-2.5 text-[13px] font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-[6px] motion-safe:animate-[fade-in_200ms_ease-out] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            <SpeakerOffIcon className="h-4 w-4" />
+            Sesi aç
+          </button>
+        )}
+
         {/* Videonun alt şeridinde hafif gölge; yazılar onun üstünde okunur */}
         <div
           aria-hidden="true"
@@ -291,7 +320,10 @@ export default function VideoCard({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pr-1.5 pb-3 pl-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1 pb-0.5">
-              <SellerRow sellerId={vehicle.sellerId} />
+              <SellerRow
+                sellerId={vehicle.sellerId}
+                badge={<ViewCountBadge vehicleId={vehicle.id} count={vehicle.viewsCount ?? 0} />}
+              />
 
               <h2 className="text-[20px] font-semibold leading-6 [font-family:var(--font-display)] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
                 <button
@@ -317,9 +349,6 @@ export default function VideoCard({
                 <Tag>{vehicle.year}</Tag>
                 <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
                 {vehicle.city && <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>}
-                <li>
-                  <ViewCountBadge vehicleId={vehicle.id} count={vehicle.viewsCount ?? 0} />
-                </li>
                 {vehicle.hasHeavyDamage && <Tag tone="danger">Ağır hasar</Tag>}
                 {vehicle.isTest && <Tag>Test ilanı</Tag>}
               </ul>

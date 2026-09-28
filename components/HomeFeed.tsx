@@ -65,7 +65,6 @@ function MobileHome({
   initialTab: FeedTab;
 }) {
   const [tab, setTab] = useState<FeedTab>(initialTab);
-  const [muted, setMuted] = useState(true);
   const { session, isLoading } = useSupabaseSession();
   const { profile } = useMyProfile();
   const followVersion = useFollowVersion();
@@ -104,8 +103,6 @@ function MobileHome({
             initialVehicleId={pinnedId}
             filters={filtered}
             visible={!followingVisible}
-            muted={muted}
-            onMutedChange={setMuted}
             emptyState={
               filtered ? (
                 <FilteredFeedEmpty onClear={() => applyFilters({ ...EMPTY_FILTERS, sort: filtered.sort })} />
@@ -136,8 +133,6 @@ function MobileHome({
               key={`${session.user.id}:${followingKey}`}
               source="following"
               visible={followingVisible}
-              muted={muted}
-              onMutedChange={setMuted}
               emptyState={
                 <FollowingEmpty kind={profile && profile.followingCount > 0 ? "quiet" : "none"} onExplore={() => selectTab("explore")} />
               }

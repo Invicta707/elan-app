@@ -33,6 +33,8 @@ export type VehiclePageData = VehicleSpecs & {
   /** Fotoğraf yoksa paylaşım kartında kullanılan video kapağı */
   videoThumbnailUrl: string | null;
   hasPlayableVideo: boolean;
+  /** Deneme ilanı (paylaşım afişinde "TEST İLANI"); yalnızca true iken yazılır */
+  isTest?: boolean;
 };
 
 export type VehiclePageRow = {
@@ -49,6 +51,7 @@ export type VehiclePageRow = {
   city: string | null;
   has_heavy_damage: boolean;
   description: string | null;
+  is_test?: boolean | null;
   brand: { name: string } | null;
   model: { name: string } | null;
   images: { image_url: string | null; is_primary: boolean; display_order: number }[] | null;
@@ -82,6 +85,7 @@ export function toVehiclePage(row: VehiclePageRow): VehiclePageData {
     photoUrls,
     videoThumbnailUrl: readyVideo?.thumbnail_url ?? videos.find((v) => v.thumbnail_url)?.thumbnail_url ?? null,
     hasPlayableVideo: Boolean(readyVideo),
+    ...(row.is_test === true ? { isTest: true } : {}),
   };
 }
 
@@ -96,7 +100,7 @@ export async function fetchVehiclePage(id: string): Promise<VehiclePageData | nu
     .from("vehicles")
     .select(
       `id, seller_id, status, year, price, currency, mileage_km, fuel_type, transmission, body_type,
-       city, has_heavy_damage, description,
+       city, has_heavy_damage, description, is_test,
        brand:brands(name),
        model:models(name),
        images:vehicle_images(image_url, is_primary, display_order),
@@ -141,6 +145,11 @@ export function buildVehicleDescription(
 /** Paylaşım menüsünde bağlantının yanında giden kısa metin */
 export function buildVehicleShareText(v: TitleInput): string {
   return `gözüyle'de ${buildVehicleTitle(v)}`;
+}
+
+/** Paylaşım afişi (1200×630, app/api/og/vehicle/[id]/route.tsx); ilan fiyatı değişince adres de değişir */
+export function vehicleOgImagePath(v: Pick<VehiclePageData, "id" | "price">): string {
+  return `/api/og/vehicle/${v.id}?v=${encodeURIComponent(String(v.price))}`;
 }
 
 /** Paylaşım kartı görseli: kapak fotoğrafı, yoksa video kapağı */

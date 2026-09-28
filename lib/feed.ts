@@ -1,3 +1,4 @@
+import { parseBodyParts, type BodyPartMap } from "./body-parts";
 import { normalizeTurkishPhone } from "./phone";
 import type { BodyType } from "./search";
 import { supabase } from "./supabase";
@@ -191,6 +192,8 @@ export type VehicleDetails = {
   bodyType: BodyType | null;
   description: string | null;
   photoUrls: string[];
+  /** Boya / değişen şeması: expertise_summary.parts (girilmemişse null) */
+  bodyParts?: BodyPartMap | null;
 };
 
 // Detay çekmecesi açılınca istenir: akış sorgusunun taşımadığı alanlar (kasa
@@ -198,7 +201,7 @@ export type VehicleDetails = {
 // display_order sırasıyla gelir.
 export async function fetchVehicleDetails(vehicleId: string): Promise<VehicleDetails> {
   const [vehicleResult, photosResult] = await Promise.all([
-    supabase.from("vehicles").select("body_type, description").eq("id", vehicleId).maybeSingle(),
+    supabase.from("vehicles").select("body_type, description, expertise_summary").eq("id", vehicleId).maybeSingle(),
     supabase
       .from("vehicle_images")
       .select("image_url")
@@ -210,13 +213,14 @@ export async function fetchVehicleDetails(vehicleId: string): Promise<VehicleDet
   if (vehicleResult.error) throw vehicleResult.error;
   if (photosResult.error) throw photosResult.error;
 
-  const row = vehicleResult.data as { body_type: BodyType | null; description: string | null } | null;
+  const row = vehicleResult.data as { body_type: BodyType | null; description: string | null; expertise_summary?: unknown } | null;
   const photos = (photosResult.data ?? []) as { image_url: string | null }[];
 
   return {
     bodyType: row?.body_type ?? null,
     description: row?.description?.trim() || null,
     photoUrls: photos.map((p) => p.image_url).filter((url): url is string => Boolean(url)),
+    bodyParts: parseBodyParts(row?.expertise_summary),
   };
 }
 

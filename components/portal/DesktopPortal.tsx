@@ -84,7 +84,6 @@ export default function DesktopPortal({
   const followVersion = useFollowVersion();
   const [now] = useState(() => new Date());
   const [modal, setModal] = useState<ModalState | null>(null);
-  const [muted, setMuted] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -434,8 +433,6 @@ export default function DesktopPortal({
             prev: modalIndex > 0 ? modalList.items[modalIndex - 1] : null,
             next: modalList.items[modalIndex + 1] ?? null,
           }}
-          muted={muted}
-          onMutedChange={setMuted}
           onStep={stepModal}
           onClose={closeModal}
         />

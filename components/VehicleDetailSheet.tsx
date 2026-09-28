@@ -6,6 +6,7 @@ import { bodyFont, displayFont } from "../app/fonts";
 import { fetchVehicleDetails, type FeedVehicle, type VehicleDetails } from "../lib/feed";
 import { buildVehicleShareText } from "../lib/vehicle-page";
 import FavoriteButton from "./FavoriteButton";
+import BodyDiagram from "./vehicle/BodyDiagram";
 import ConditionList from "./vehicle/ConditionList";
 import MessageSellerButton from "./vehicle/MessageSellerButton";
 import PhotoGallery, { GallerySkeleton } from "./vehicle/PhotoGallery";
@@ -313,10 +314,10 @@ function Sheet({ vehicle, onClose, onContact, isContacting, notice }: VehicleDet
             <h3 id={`${titleId}-condition`} className="mb-2 text-[15px] font-semibold">
               Ekspertiz
             </h3>
-            <ConditionList
-              vehicle={vehicle}
-              className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg border border-[#E3E6EA] bg-white px-3 py-2.5 text-[14px] font-medium text-[#15181C]"
-            />
+            <div className="rounded-lg border border-[#E3E6EA] bg-white px-3 pt-2.5 pb-3">
+              <ConditionList vehicle={vehicle} tone="light" />
+              <BodyDiagram counts={vehicle} parts={details?.bodyParts} tone="light" className="mt-4" />
+            </div>
           </section>
 
           {details?.description && (

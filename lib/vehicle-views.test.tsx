@@ -261,8 +261,6 @@ describe("Shorts oynatıcısı: oynayınca sayar", () => {
         hasNext={false}
         loadingNext={false}
         neighbors={{ prev: null, next: null }}
-        muted
-        onMutedChange={vi.fn()}
         onStep={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -300,7 +298,7 @@ describe("Shorts oynatıcısı: oynayınca sayar", () => {
 
 describe("mobil akış kartı: 2 sn kesintisiz oynayınca sayar", () => {
   function renderCard(isActive = true) {
-    const view = render(<VideoCard vehicle={feedVehicle} isActive={isActive} shouldLoad={false} muted onMutedChange={vi.fn()} />);
+    const view = render(<VideoCard vehicle={feedVehicle} isActive={isActive} shouldLoad={false} />);
     return { ...view, video: view.container.querySelector("video")! };
   }
 
@@ -372,19 +370,21 @@ describe("mobil akış kartı: 2 sn kesintisiz oynayınca sayar", () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    view.rerender(<VideoCard vehicle={feedVehicle} isActive={false} shouldLoad={false} muted onMutedChange={vi.fn()} />);
+    view.rerender(<VideoCard vehicle={feedVehicle} isActive={false} shouldLoad={false} />);
     act(() => {
       vi.advanceTimersByTime(5000);
     });
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("bilgi şeridinde İl'in yanında izlenme rozeti (masaüstüyle aynı rozet)", () => {
+  it("izlenme rozeti @kullanıcı_adı etiketinin hemen sağında; alt satırda (fiyat, Yıl / KM / İl) yok", () => {
     renderCard(false);
     const facts = screen.getByRole("list", { name: "Fiyat ve araç özellikleri" });
-    const badge = facts.querySelector<HTMLElement>("[data-view-count]")!;
+    expect(facts.querySelector("[data-view-count]")).toBeNull();
+    const seller = screen.getByRole("link", { name: "@nihad vitrini" });
+    const badge = seller.nextElementSibling as HTMLElement;
+    expect(badge.dataset.viewCount).toBe("1250");
     expect(badge.textContent).toContain("1,2B");
-    expect(badge.closest("li")?.previousElementSibling?.textContent).toBe("Isparta");
   });
 
   it("duraklatma işareti masaüstüyle aynı sade göz: daire, kenarlık, buzlu zemin yok", () => {

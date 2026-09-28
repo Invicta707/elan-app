@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useSellerProfile } from "../../lib/use-follow";
 import { profilePath } from "../../lib/username";
 import Avatar from "../ui/Avatar";
 import FollowButton from "./FollowButton";
 
 // Akış kartında (mobil) satıcı: videonun alt şeridinin en üstünde küçük, yarı
-// saydam bir etiket (avatar + @kullanıcı_adı, vitrine gider) ve "Takip et".
-// Satıcının kısa profili akışa gelen sayfalarla birlikte toplu istenir
-// (primeSellerProfiles); gelene kadar satır çizilmez, kart kaymaz diye yer tutulmaz.
-export default function SellerRow({ sellerId }: { sellerId: string | null }) {
+// saydam bir etiket (avatar + @kullanıcı_adı, vitrine gider), hemen sağında
+// isteğe bağlı rozet (izlenme) ve "Takip et". Satıcının kısa profili akışa
+// gelen sayfalarla birlikte toplu istenir (primeSellerProfiles); gelene kadar
+// yalnızca rozet çizilir.
+export default function SellerRow({ sellerId, badge }: { sellerId: string | null; badge?: ReactNode }) {
   const seller = useSellerProfile(sellerId);
-  if (!seller) return null;
+  if (!seller) {
+    return badge ? <div className="mb-1.5 flex items-center">{badge}</div> : null;
+  }
 
   // Akışta TikTok gibi @kullanıcı_adı; yoksa görünen ad, o da yoksa "Satıcı"
   const label = seller.username ? `@${seller.username}` : (seller.displayName ?? "Satıcı");
@@ -39,6 +43,7 @@ export default function SellerRow({ sellerId }: { sellerId: string | null }) {
       ) : (
         <span className={pill}>{identity}</span>
       )}
+      {badge}
       <FollowButton userId={seller.id} variant="overlay" name={label} />
     </div>
   );

@@ -42,6 +42,7 @@ vi.mock("./feed", () => feedApi);
 
 import VideoCard from "../components/VideoCard";
 import type { FeedVehicle } from "./feed";
+import { resetSound, setSoundMuted } from "./sound";
 
 const vehicle: FeedVehicle = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -65,15 +66,19 @@ const vehicle: FeedVehicle = {
 };
 
 function renderCard(overrides: Partial<FeedVehicle> = {}) {
-  return render(<VideoCard vehicle={{ ...vehicle, ...overrides }} isActive={false} shouldLoad={false} muted onMutedChange={vi.fn()} />);
+  return render(<VideoCard vehicle={{ ...vehicle, ...overrides }} isActive={false} shouldLoad={false} />);
 }
 
 beforeEach(() => {
   feedApi.getSellerWhatsAppUrl.mockReset().mockResolvedValue(null);
+  // Kartlar sessiz (ses düğmesi "Sesi aç"): ses tercihi kapalı
+  setSoundMuted(true);
 });
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
+  resetSound();
 });
 
 describe("mobil bilgi şeridi", () => {
@@ -83,11 +88,13 @@ describe("mobil bilgi şeridi", () => {
     const title = screen.getByRole("heading", { name: "BMW 5 Serisi" });
     expect(within(title).getByRole("button").className).toContain("truncate");
     const facts = screen.getByRole("list", { name: "Fiyat ve araç özellikleri" });
-    const items = within(facts).getAllByRole("listitem");
-    expect(items.slice(0, 4).map((item) => item.textContent)).toEqual(["₺2.000.000 TL", "2013", "100.000 km", "Isparta"]);
-    // İl'in yanında izlenme rozeti (masaüstüyle aynı)
-    expect(items[4].querySelector("[data-view-count]")).not.toBeNull();
-    expect(items).toHaveLength(5);
+    // Alt satır tek satır: fiyat + Yıl / KM / İl (izlenme rozeti satıcı etiketinin yanında)
+    expect(within(facts).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "₺2.000.000 TL",
+      "2013",
+      "100.000 km",
+      "Isparta",
+    ]);
   });
 
   it("yakıt, vites ve ekspertiz kartta yok (detaylarda); ağır hasar küçük kırmızı hapta", () => {

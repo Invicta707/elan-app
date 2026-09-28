@@ -16,7 +16,7 @@ import {
   buildVehicleShareText,
   buildVehicleTitle,
   fetchVehiclePage,
-  vehicleOgImage,
+  vehicleOgImagePath,
 } from "../../../lib/vehicle-page";
 import { bodyFont, displayFont } from "../../fonts";
 
@@ -36,14 +36,16 @@ export async function generateMetadata({ params }: VehiclePageProps): Promise<Me
 
   const title = buildVehicleTitle(vehicle);
   const description = buildVehicleDescription(vehicle);
-  const image = vehicleOgImage(vehicle);
   const path = vehiclePath(vehicle.id);
+  // Araca özel afiş (fiyat plakası, başlık, Yıl / KM / İl, dikey video kartı); yayında olmayan ilanda yok
+  const image = vehicle.status === "active" ? vehicleOgImagePath(vehicle) : null;
+  const alt = `${vehicle.year} ${vehicle.brandName} ${vehicle.modelName}`;
 
   return {
     title,
     description,
     alternates: { canonical: path },
-    // WhatsApp ve sosyal medyada link, aracın fotoğrafıyla kart olarak görünür
+    // WhatsApp ve sosyal medyada link, araca özel afişle kart olarak görünür
     openGraph: {
       type: "website",
       siteName: "gözüyle",
@@ -51,13 +53,13 @@ export async function generateMetadata({ params }: VehiclePageProps): Promise<Me
       url: path,
       title,
       description,
-      images: image ? [{ url: image, alt: `${vehicle.brandName} ${vehicle.modelName}` }] : undefined,
+      images: image ? [{ url: image, width: 1200, height: 630, alt, type: "image/png" }] : undefined,
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",
       title,
       description,
-      images: image ? [image] : undefined,
+      images: image ? [{ url: image, alt }] : undefined,
     },
   };
 }

@@ -126,6 +126,24 @@ afterEach(() => {
 });
 
 describe("DesktopFeedPanel", () => {
+  it("Ekspertiz: durum rozetleri ve parça bilgisi gelince boya/değişen şeması", async () => {
+    feedApi.fetchVehicleDetails.mockResolvedValue({
+      bodyType: "sedan",
+      description: null,
+      photoUrls: [],
+      bodyParts: { hood: "painted", left_front_door: "painted" },
+    });
+    const { container } = render(<DesktopFeedPanel vehicle={vehicle} />);
+    const summary = screen.getByRole("list", { name: "Ekspertiz özeti" });
+    expect(summary.querySelectorAll("[data-condition]")).toHaveLength(4);
+    // Parça bilgisi gelmeden sayılar sıfır değil: belirtilmemiş
+    expect(container.querySelector("[data-part='hood']")?.getAttribute("data-state")).toBe("unknown");
+    await screen.findByText("Sedan");
+    expect(container.querySelector("[data-part='hood']")?.getAttribute("data-state")).toBe("painted");
+    expect(container.querySelector("[data-part='left_front_door']")?.getAttribute("data-state")).toBe("painted");
+    expect(container.querySelector("[data-part='roof']")?.getAttribute("data-state")).toBe("original");
+  });
+
   it("fiyat, özellikler, satıcı, açıklama ve yorumlar doğrudan listelenir", async () => {
     render(<DesktopFeedPanel vehicle={vehicle} />);
     expect(screen.getByRole("heading", { name: "BMW 5 Serisi" })).toBeTruthy();

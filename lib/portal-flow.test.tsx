@@ -391,20 +391,20 @@ describe("mobil: filtre hapı ve filtreli akış", () => {
       nextOffset: 1,
       hasMore: false,
     });
-    const first = render(<VideoFeed filters={filters} muted onMutedChange={vi.fn()} />);
+    const first = render(<VideoFeed filters={filters} />);
     await waitFor(() => expect(document.querySelector("[data-card='f1']")).not.toBeNull());
     expect(api.fetchFilteredFeedPage).toHaveBeenCalledWith(filters, 0, 8);
     expect(api.fetchFeedPage).not.toHaveBeenCalled();
     first.unmount();
 
     api.fetchFilteredFeedPage.mockResolvedValueOnce({ items: [], nextOffset: 0, hasMore: false });
-    render(<VideoFeed filters={filters} muted onMutedChange={vi.fn()} emptyState={<p>filtre boş</p>} />);
+    render(<VideoFeed filters={filters} emptyState={<p>filtre boş</p>} />);
     await waitFor(() => expect(screen.getByText("filtre boş")).toBeTruthy());
   });
 
   it("filtre yoksa akış eskisi gibi (Keşfet sorgusu)", async () => {
     api.fetchFeedPage.mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
-    render(<VideoFeed muted onMutedChange={vi.fn()} />);
+    render(<VideoFeed />);
     await waitFor(() => expect(api.fetchFeedPage).toHaveBeenCalledWith(null, 8, "explore"));
     expect(api.fetchFilteredFeedPage).not.toHaveBeenCalled();
   });
