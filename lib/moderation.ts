@@ -127,7 +127,7 @@ async function callModerationApi<T>(
   payload: object | null,
   accessToken: string,
   fetchImpl: typeof fetch,
-  path: "/api/admin/reports" | "/api/admin/listings" | "/api/admin/status" | "/api/admin/comment-reports" = "/api/admin/reports",
+  path: "/api/admin/reports" | "/api/admin/listings" | "/api/admin/status" | "/api/admin/comment-reports" | "/api/admin/test-listings" = "/api/admin/reports",
 ): Promise<{ ok: true; body: T } | ModerationFailure> {
   let response: Response;
   try {
@@ -512,4 +512,97 @@ export function nextReviewId(items: readonly PendingListing[], decidedId: string
   const index = items.findIndex((item) => item.vehicle.id === decidedId);
   if (index === -1) return items[0]?.vehicle.id ?? null;
   return items[index + 1]?.vehicle.id ?? items[index - 1]?.vehicle.id ?? null;
+}
+
+// ---------------------------------------------------------------
+// Test ilanları (/api/admin/test-listings)
+// ---------------------------------------------------------------
+//
+// scripts/seed-test-listings.mjs'nin açtığı deneme ilanları (vehicles.is_test):
+// vitrin ve pencere gerçek veriyle denensin diye. Panelde listelenir ve tek
+// düğmeyle videoları, fotoğrafları ve bütün bağlı kayıtlarıyla silinir.
+
+export type TestListing = {
+  id: string;
+  title: string;
+  year: number;
+  price: number;
+  currency: string;
+  city: string | null;
+  status: string;
+  createdAt: string;
+  coverUrl: string | null;
+  hasVideo: boolean;
+};
+
+export type TestListingRow = {
+  id: string;
+  status: string;
+  year: number;
+  price: number | string;
+  currency: string;
+  city: string | null;
+  created_at: string;
+  brand: { name: string } | null;
+  model: { name: string } | null;
+  videos: { stream_uid: string; thumbnail_url: string | null; status: string }[] | null;
+  vehicle_images: { image_url: string; is_primary: boolean; display_order: number }[] | null;
+};
+
+export function toTestListing(row: TestListingRow): TestListing {
+  const photos = [...(row.vehicle_images ?? [])].sort(
+    (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.display_order - b.display_order,
+  );
+  const video = (row.videos ?? []).find((item) => item.status === "ready") ?? row.videos?.[0];
+  return {
+    id: row.id,
+    title: [row.brand?.name, row.model?.name].filter(Boolean).join(" "),
+    year: row.year,
+    price: Number(row.price),
+    currency: row.currency,
+    city: row.city,
+    status: row.status,
+    createdAt: row.created_at,
+    coverUrl: video?.thumbnail_url ?? photos[0]?.image_url ?? null,
+    hasVideo: Boolean(video && video.status === "ready"),
+  };
+}
+
+export type TestListingAction = { action: "delete_all" };
+
+export function parseTestListingAction(
+  body: unknown,
+): { ok: true; value: TestListingAction } | { ok: false; code: "invalid_action"; message: string } {
+  if (body && typeof body === "object" && (body as { action?: unknown }).action === "delete_all") {
+    return { ok: true, value: { action: "delete_all" } };
+  }
+  return { ok: false, code: "invalid_action", message: "Geçersiz işlem." };
+}
+
+export type TestListingDeletion = {
+  /** Silinen ilan sayısı */
+  deleted: number;
+  /** Medyası silinemediği için kalan ilanlar ve nedenleri (tekrar denenebilir) */
+  failures: string[];
+};
+
+export async function fetchTestListings(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: true; items: TestListing[] } | ModerationFailure> {
+  const result = await callModerationApi<{ items: TestListing[] }>(null, accessToken, fetchImpl, "/api/admin/test-listings");
+  return result.ok ? { ok: true, items: result.body.items } : result;
+}
+
+export async function deleteAllTestListings(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<({ ok: true } & TestListingDeletion) | ModerationFailure> {
+  const result = await callModerationApi<TestListingDeletion>(
+    { action: "delete_all" },
+    accessToken,
+    fetchImpl,
+    "/api/admin/test-listings",
+  );
+  return result.ok ? { ok: true, deleted: result.body.deleted, failures: result.body.failures } : result;
 }

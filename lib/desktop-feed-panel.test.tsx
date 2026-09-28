@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 //
-// Masaüstü yan panel (1024 px ve üstü): ekrandaki ilanın fiyatı, özellikleri,
-// satıcı kartı, WhatsApp / Ara / Mesaj ve yorumlar; iskelet ve boş durum;
-// akıştaki "Yorum" düğmesiyle yorumlara odaklanma.
+// İlanın koyu ayrıntı paneli (masaüstü vitrin penceresinin sağ yarısı): fiyat,
+// özellikler, satıcı kartı, WhatsApp / Ara / Mesaj ve yorumlar; ilan değişince
+// panelin sıfırdan kurulması.
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ImgHTMLAttributes } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -127,7 +127,7 @@ afterEach(() => {
 
 describe("DesktopFeedPanel", () => {
   it("fiyat, özellikler, satıcı, açıklama ve yorumlar doğrudan listelenir", async () => {
-    render(<DesktopFeedPanel vehicle={vehicle} focusRequest={0} />);
+    render(<DesktopFeedPanel vehicle={vehicle} />);
     expect(screen.getByRole("heading", { name: "BMW 5 Serisi" })).toBeTruthy();
     expect(screen.getByText("2013 · 100.000 km · Isparta")).toBeTruthy();
     expect(screen.getByText(/2\.000\.000/)).toBeTruthy();
@@ -150,7 +150,7 @@ describe("DesktopFeedPanel", () => {
   });
 
   it("Ara: numara yalnızca basınca istenir, arama bağlantısıyla gösterilir", async () => {
-    render(<DesktopFeedPanel vehicle={vehicle} focusRequest={0} />);
+    render(<DesktopFeedPanel vehicle={vehicle} />);
     expect(feedApi.getSellerPhone).not.toHaveBeenCalled();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Satıcıyı ara: numarayı göster" }));
@@ -162,7 +162,7 @@ describe("DesktopFeedPanel", () => {
 
   it("numara yoksa ya da alınamazsa açıklama", async () => {
     feedApi.getSellerPhone.mockResolvedValueOnce(null);
-    render(<DesktopFeedPanel vehicle={vehicle} focusRequest={0} />);
+    render(<DesktopFeedPanel vehicle={vehicle} />);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Satıcıyı ara: numarayı göster" }));
     });
@@ -171,35 +171,32 @@ describe("DesktopFeedPanel", () => {
 
   it("yorum sayısı ortak depodan başlar ve panelde yazılan sayıyla güncellenir", async () => {
     setCommentCount(vehicle.id, 5);
-    render(<DesktopFeedPanel vehicle={vehicle} focusRequest={0} />);
+    render(<DesktopFeedPanel vehicle={vehicle} />);
     expect(screen.getByRole("heading", { name: /Yorumlar/ }).textContent).toContain("5");
     // Sunucudaki gerçek sayı gelince (1) depo da güncellenir
     await screen.findByText("Takas olur mu?");
     expect(screen.getByRole("heading", { name: /Yorumlar/ }).textContent).toContain("1");
   });
 
-  it("akıştaki Yorum düğmesi: yorumlara kaydırır, (misafirde) giriş düğmesine odaklanır", async () => {
-    const original = Element.prototype.scrollIntoView;
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-    try {
-      const { rerender } = render(<DesktopFeedPanel vehicle={vehicle} focusRequest={0} />);
-      await screen.findByText("Takas olur mu?");
-      expect(scrollIntoView).not.toHaveBeenCalled();
-      rerender(<DesktopFeedPanel vehicle={vehicle} focusRequest={1} />);
-      expect(scrollIntoView).toHaveBeenCalled();
-      expect(document.activeElement?.textContent).toBe("Yorum yapmak için giriş yap");
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
+  it("başka ilana geçince (pencerede ↑/↓) panel sıfırdan kurulur, o ilanın detayları istenir", async () => {
+    const { rerender } = render(<DesktopFeedPanel vehicle={vehicle} />);
+    await screen.findByText("Hasar boya yok.");
+    const next = { ...vehicle, id: "22222222-2222-4222-8222-222222222222", modelName: "3 Serisi" };
+    rerender(<DesktopFeedPanel vehicle={next} />);
+    expect(screen.getByRole("heading", { name: "BMW 3 Serisi" })).toBeTruthy();
+    expect(feedApi.fetchVehicleDetails).toHaveBeenLastCalledWith(next.id);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`/api/vehicles/${next.id}/comments`))).toBe(true),
+    );
   });
+});
 
-  it("akış yüklenirken iskelet, gösterilecek ilan yoksa boş durum; veri istenmez", () => {
-    const { rerender } = render(<DesktopFeedPanel vehicle={undefined} focusRequest={0} />);
-    expect(screen.queryByRole("heading")).toBeNull();
-    rerender(<DesktopFeedPanel vehicle={null} focusRequest={0} />);
-    expect(screen.getByText("İlan ayrıntıları burada")).toBeTruthy();
-    expect(feedApi.fetchVehicleDetails).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+describe("test ilanı", () => {
+  it("panelde başlığın altında \"Test ilanı · araç satılık değil\"", () => {
+    render(<DesktopFeedPanel vehicle={{ ...vehicle, isTest: true }} />);
+    expect(screen.getByText("Test ilanı · araç satılık değil")).toBeTruthy();
+    cleanup();
+    render(<DesktopFeedPanel vehicle={vehicle} />);
+    expect(screen.queryByText(/Test ilanı/)).toBeNull();
   });
 });

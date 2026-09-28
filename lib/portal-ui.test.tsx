@@ -93,6 +93,8 @@ const vehicle = (id: string, overrides: Partial<PortalVehicle> = {}): PortalVehi
   commentsCount: 0,
   hlsUrl: `https://video/${id}.m3u8`,
   posterUrl: `https://video/${id}.jpg`,
+  photoUrl: `https://photo/${id}.jpeg`,
+  isTest: false,
   createdAt: "2026-09-27T10:00:00+00:00",
   ...overrides,
 });

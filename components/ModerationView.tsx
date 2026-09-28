@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import FeedHeader from "./FeedHeader";
 import CommentReportsSection from "./moderation/CommentReportsSection";
 import PendingListingsSection from "./moderation/PendingListingsSection";
+import TestListingsSection from "./moderation/TestListingsSection";
 import { useSupabaseSession } from "../lib/auth";
 import { STATUS_LABELS } from "../lib/listing-status";
 import {
@@ -22,7 +23,7 @@ import { supabase } from "../lib/supabase";
 
 // /admin/reports: içerik denetimi kuyruğu (components/moderation/PendingListingsSection.tsx),
 // açık ilan bildirimleri, yorum şikayetleri (components/moderation/CommentReportsSection.tsx)
-// ve moderasyon işlemleri.
+// test (deneme) ilanları (components/moderation/TestListingsSection.tsx) ve moderasyon işlemleri.
 // Yetkiyi /api/admin/reports denetler. Oturum yoksa ya da API 401/403
 // dönerse kullanıcı ana sayfaya gönderilir; o ana kadar sadece iskelet görünür.
 export default function ModerationView() {
@@ -57,6 +58,7 @@ export default function ModerationView() {
             <h2 className="mt-8 text-[20px] font-semibold [font-family:var(--font-display)]">Bildirimler</h2>
             <ModerationQueue />
             <CommentReportsSection getAccessToken={currentAccessToken} onUnauthorized={goHome} />
+            <TestListingsSection getAccessToken={currentAccessToken} onUnauthorized={goHome} />
           </div>
         ) : (
           <QueueSkeleton />

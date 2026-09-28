@@ -130,6 +130,8 @@ const vehicle = (id: string, overrides: Partial<PortalVehicle> = {}): PortalVehi
   commentsCount: 0,
   hlsUrl: `https://video/${id}.m3u8`,
   posterUrl: `https://video/${id}.jpg`,
+  photoUrl: `https://photo/${id}.jpeg`,
+  isTest: false,
   createdAt: "2026-09-27T10:00:00+00:00",
   ...overrides,
 });
@@ -185,10 +187,10 @@ describe("masaüstü vitrin: pencere akışı", () => {
 
     await waitFor(() => expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(3));
     expect(api.searchPortalPage).toHaveBeenCalledWith(EMPTY_FILTERS, 0);
-    expect(screen.getByText("3 ilan")).toBeTruthy();
+    expect(screen.getByText("3 videolu ilan")).toBeTruthy();
     // Vitrin: grid-cols-4, xl'de 5 sütun
-    expect(screen.getByRole("list", { name: "İlanlar" }).className).toContain("grid-cols-4");
-    expect(screen.getByRole("list", { name: "İlanlar" }).className).toContain("xl:grid-cols-5");
+    expect(screen.getByRole("list", { name: "Videolu ilanlar" }).className).toContain("grid-cols-4");
+    expect(screen.getByRole("list", { name: "Videolu ilanlar" }).className).toContain("xl:grid-cols-5");
 
     fireEvent.click(document.querySelector("[data-portal-card='a']")!, { button: 0 });
     expect(home.setVehicleParam).toHaveBeenLastCalledWith("a");
@@ -220,7 +222,7 @@ describe("masaüstü vitrin: pencere akışı", () => {
       .mockResolvedValueOnce({ items: [vehicle("c")], next: 3, hasMore: false });
     render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
     await waitFor(() => expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(2));
-    expect(screen.getByText("2+ ilan")).toBeTruthy();
+    expect(screen.getByText("2+ videolu ilan")).toBeTruthy();
 
     fireEvent.click(document.querySelector("[data-portal-card='b']")!, { button: 0 });
     expect(counter()).toContain("2 / 2+");
@@ -257,7 +259,7 @@ describe("masaüstü vitrin: pencere akışı", () => {
 
     await waitFor(() => expect(screen.getByText("Bu filtrelere uyan ilan yok.")).toBeTruthy());
     expect(api.searchPortalPage).toHaveBeenCalledWith(filters, 0);
-    expect(screen.getByText("Filtreye uyan ilanlar")).toBeTruthy();
+    expect(screen.getByText("Filtreye uyan videolar")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Şehir"), { target: { value: "Bursa" } });
     expect(home.apply).toHaveBeenLastCalledWith({ ...filters, city: "Bursa" });
@@ -402,5 +404,85 @@ describe("mobil: filtre hapı ve filtreli akış", () => {
     render(<VideoFeed muted onMutedChange={vi.fn()} />);
     await waitFor(() => expect(api.fetchFeedPage).toHaveBeenCalledWith(null, 8, "explore"));
     expect(api.fetchFilteredFeedPage).not.toHaveBeenCalled();
+  });
+});
+
+describe("masaüstü vitrin: görselli ilanlar ve video bölümü", () => {
+  it("görselli ilanlar klasik kartlarla (yalnızca fotoğraflılar); pencere bu bölümde gezinir, odak fotoğraf kartına döner", async () => {
+    api.searchPortalPage.mockResolvedValue({
+      items: [vehicle("a"), vehicle("b", { photoUrl: null }), vehicle("c", { hlsUrl: null }), vehicle("d")],
+      next: 4,
+      hasMore: false,
+    });
+    render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
+
+    await waitFor(() => expect(document.querySelectorAll("[data-photo-card]")).toHaveLength(3));
+    expect([...document.querySelectorAll("[data-portal-card]")].map((el) => el.getAttribute("data-portal-card"))).toEqual(["a", "b", "d"]);
+    expect([...document.querySelectorAll("[data-photo-card]")].map((el) => el.getAttribute("data-photo-card"))).toEqual(["a", "c", "d"]);
+    expect(screen.getByRole("heading", { name: "Sizin için videolar" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Görselli ilanlar" })).toBeTruthy();
+    expect(screen.getByText("3 fotoğraflı ilan · tüm ilanlar")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Görselli ilanlar" }).className).toContain("xl:grid-cols-5");
+
+    const photoC = document.querySelector("[data-photo-card='c']")!;
+    expect(photoC.querySelector("img")?.getAttribute("src")).toBe("https://photo/c.jpeg");
+    expect(photoC.textContent).toContain("1.000.000 TL");
+    expect(photoC.textContent).toContain("BMW Model c");
+    expect(photoC.textContent).toContain("2019 · 50.000 km · Dizel · Otomatik");
+    expect(photoC.textContent).toMatch(/Ankara · \S/);
+    expect(photoC.textContent).not.toContain("Video");
+    expect(document.querySelector("[data-photo-card='a']")!.textContent).toContain("Video");
+
+    fireEvent.click(document.querySelector("[data-photo-card='a']")!, { button: 0 });
+    expect(counter()).toContain("1 / 3");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(panel()).toContain("Model c");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(panel()).toContain("Model d");
+    expect(counter()).toContain("3 / 3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pencereyi kapat" }));
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-photo-card")).toBe("d"));
+  });
+
+  it("videolar önce 10 kart; \"Daha fazla video göster\" ekler; pencerede gizli karta gidilince bölüm genişler", async () => {
+    const items = Array.from({ length: 12 }, (_, index) => vehicle(`v${index + 1}`));
+    api.searchPortalPage.mockResolvedValue({ items, next: 12, hasMore: false });
+    const first = render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
+    await waitFor(() => expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(10));
+    expect(document.querySelectorAll("[data-photo-card]")).toHaveLength(12);
+    fireEvent.click(screen.getByRole("button", { name: "Daha fazla video göster" }));
+    expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(12);
+    expect(screen.queryByRole("button", { name: "Daha fazla video göster" })).toBeNull();
+    first.unmount();
+
+    render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
+    await waitFor(() => expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(10));
+    fireEvent.click(document.querySelector("[data-portal-card='v10']")!, { button: 0 });
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(panel()).toContain("Model v11");
+    expect(document.querySelector("[data-portal-card='v11']")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Pencereyi kapat" }));
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-portal-card")).toBe("v11"));
+  });
+
+  it("\"Daha fazla video göster\" gerekirse sonraki sayfayı ister", async () => {
+    api.searchPortalPage
+      .mockResolvedValueOnce({ items: Array.from({ length: 10 }, (_, index) => vehicle(`p${index}`)), next: 10, hasMore: true })
+      .mockResolvedValueOnce({ items: [vehicle("p10"), vehicle("p11")], next: 12, hasMore: false });
+    render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
+    await waitFor(() => expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(10));
+    fireEvent.click(screen.getByRole("button", { name: "Daha fazla video göster" }));
+    await waitFor(() => expect(document.querySelectorAll("[data-portal-card]")).toHaveLength(12));
+    expect(api.searchPortalPage).toHaveBeenLastCalledWith(EMPTY_FILTERS, 10);
+  });
+
+  it("deneme ilanı iki kartta da \"Test ilanı\" etiketiyle", async () => {
+    api.searchPortalPage.mockResolvedValue({ items: [vehicle("t", { isTest: true }), vehicle("r")], next: 2, hasMore: false });
+    render(<DesktopPortal home={homeFilters()} initialVehicleId={null} initialTab="explore" />);
+    await waitFor(() => expect(document.querySelectorAll("[data-photo-card]")).toHaveLength(2));
+    expect(document.querySelector("[data-portal-card='t']")!.textContent).toContain("Test ilanı");
+    expect(document.querySelector("[data-photo-card='t']")!.textContent).toContain("Test ilanı");
+    expect(document.querySelector("[data-portal-card='r']")!.textContent).not.toContain("Test ilanı");
   });
 });

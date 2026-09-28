@@ -234,12 +234,12 @@ afterAll(async () => {
 });
 
 describe("migration", () => {
-  it("sırası: yorum migration'ından sonra, en son", () => {
+  it("sırası: yorum migration'ından sonra", () => {
     const migrations = readdirSync(MIGRATIONS_DIR).sort();
     const positions = MIGRATIONS.map((name) => migrations.indexOf(name));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    expect(migrations.at(-1)).toBe(COMMENT_REPORTS_MIGRATION);
+    expect(migrations.indexOf(COMMENT_REPORTS_MIGRATION)).toBeGreaterThan(migrations.indexOf("20260928160000_vehicle_comments.sql"));
   });
 
   it("mevcut ilan bildirimleri kısıtlara uyar: migration eski satırlarla da uygulanır", async () => {

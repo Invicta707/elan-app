@@ -120,11 +120,7 @@ export default function PortalCard({
           </span>
         )}
 
-        {vehicle.hasHeavyDamage && (
-          <span className="absolute left-2 top-2 rounded-md bg-[#E5484D] px-1.5 py-0.5 text-[12px] font-semibold text-white">
-            Ağır hasar
-          </span>
-        )}
+        <ListingBadges isTest={vehicle.isTest} hasHeavyDamage={vehicle.hasHeavyDamage} />
       </span>
 
       <span className="mt-2.5 block px-0.5">
@@ -185,5 +181,20 @@ function PreviewVideo({ url, onPlaying }: { url: string; onPlaying: () => void }
         visible ? "opacity-100" : "opacity-0"
       }`}
     />
+  );
+}
+
+/** Kapağın sol üstünde: deneme ilanı ve ağır hasar etiketleri (görselli ilan kartı da kullanır) */
+export function ListingBadges({ isTest, hasHeavyDamage }: { isTest: boolean; hasHeavyDamage: boolean }) {
+  if (!isTest && !hasHeavyDamage) return null;
+  return (
+    <span className="pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1">
+      {isTest && (
+        <span className="rounded-md bg-black/70 px-1.5 py-0.5 text-[12px] font-semibold text-white ring-1 ring-inset ring-white/20">
+          Test ilanı
+        </span>
+      )}
+      {hasHeavyDamage && <span className="rounded-md bg-[#E5484D] px-1.5 py-0.5 text-[12px] font-semibold text-white">Ağır hasar</span>}
+    </span>
   );
 }

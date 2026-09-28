@@ -129,3 +129,14 @@ describe("sağ sütun", () => {
     expect(await screen.findByText("Bu ilan için WhatsApp numarası bulunamadı.")).toBeTruthy();
   });
 });
+
+describe("test ilanı", () => {
+  it("deneme ilanında bilgi şeridinde \"Test ilanı\" hapı; gerçek ilanda yok", () => {
+    renderCard({ isTest: true });
+    const facts = screen.getByRole("list", { name: "Fiyat ve araç özellikleri" });
+    expect(within(facts).getAllByRole("listitem").map((item) => item.textContent)).toContain("Test ilanı");
+    cleanup();
+    renderCard();
+    expect(screen.queryByText("Test ilanı")).toBeNull();
+  });
+});

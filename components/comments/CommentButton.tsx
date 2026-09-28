@@ -2,16 +2,13 @@
 
 import { MessageCircle } from "lucide-react";
 import { useState } from "react";
-import { DESKTOP_MEDIA_QUERY } from "../../lib/feed-navigation";
 import { formatCount } from "../../lib/showcase";
 import { ACTION_BUTTON, ACTION_ICON, ACTION_ICON_BOX, ACTION_LABEL } from "../feed/actionStyles";
-import { useFeedPanel } from "../feed/FeedPanelContext";
 import CommentsSheet from "./CommentsSheet";
 
 // Akışın sağ sütununda Favori ile Paylaş arasında: yorum simgesi ve sayısı.
-// Mobilde dokununca yorum penceresi alttan açılır; video arkada oynamaya devam
-// eder. Masaüstünde (1024 px ve üstü) yorumlar sağdaki kalıcı panelde:
-// düğme oraya kaydırır ve yazma alanına odaklanır.
+// Dokununca yorum penceresi alttan açılır; video arkada oynamaya devam eder.
+// (Masaüstünde yorumlar vitrin penceresinin sağ panelinde.)
 export default function CommentButton({
   vehicleId,
   count,
@@ -22,19 +19,10 @@ export default function CommentButton({
   onCountChange: (count: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const panel = useFeedPanel();
-
-  function handleClick() {
-    if (panel && window.matchMedia(DESKTOP_MEDIA_QUERY).matches) {
-      panel.focusComments(vehicleId);
-      return;
-    }
-    setOpen(true);
-  }
 
   return (
     <>
-      <CommentButtonView count={count} onClick={handleClick} />
+      <CommentButtonView count={count} onClick={() => setOpen(true)} />
       {open && (
         <CommentsSheet vehicleId={vehicleId} initialTotal={count} onTotalChange={onCountChange} onClose={() => setOpen(false)} />
       )}

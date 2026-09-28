@@ -53,6 +53,10 @@ export type PortalVehicle = {
   hlsUrl: string | null;
   /** Dikey kart kapağı: videonun karesi (9:16), yoksa ilk fotoğraf */
   posterUrl: string | null;
+  /** İlanın kapak fotoğrafı (görselli ilanlar ızgarası); fotoğrafsız ilanda null */
+  photoUrl: string | null;
+  /** Deneme ilanı (vehicles.is_test): "Test ilanı" etiketiyle görünür */
+  isTest: boolean;
   /** İlanın eklenme zamanı (kartta "Bugün", "3 gün önce"…) */
   createdAt: string | null;
 };
@@ -70,7 +74,7 @@ export const PORTAL_PAGE_SIZE = 20;
 // Dönüşümler
 // ---------------------------------------------------------------
 
-type ListingMeta = { sellerId: string | null; commentsCount: number };
+type ListingMeta = { sellerId: string | null; commentsCount: number; isTest: boolean };
 
 export function portalVehicleFromSearch(row: VehicleSearchResult, meta?: ListingMeta): PortalVehicle {
   return {
@@ -95,6 +99,8 @@ export function portalVehicleFromSearch(row: VehicleSearchResult, meta?: Listing
     posterUrl: row.hasPlayableVideo
       ? (row.videoThumbnailUrl ?? row.coverImageUrl)
       : (row.coverImageUrl ?? row.videoThumbnailUrl),
+    photoUrl: row.coverImageUrl,
+    isTest: meta?.isTest ?? false,
     createdAt: row.createdAt,
   };
 }
@@ -119,6 +125,9 @@ export function portalVehicleFromFeed(vehicle: FeedVehicle): PortalVehicle {
     commentsCount: vehicle.commentsCount,
     hlsUrl: vehicle.hlsUrl,
     posterUrl: vehicle.thumbnailUrl,
+    // Akış sorgusu fotoğrafları taşımaz (takip akışı yalnızca video ızgarasında)
+    photoUrl: null,
+    isTest: vehicle.isTest ?? false,
     createdAt: vehicle.createdAt ?? null,
   };
 }
@@ -126,8 +135,28 @@ export function portalVehicleFromFeed(vehicle: FeedVehicle): PortalVehicle {
 /** Mobil akış kartı oynatılabilir video ister: videosuz ilan null */
 export function feedVehicleFromPortal(vehicle: PortalVehicle): FeedVehicle | null {
   if (!vehicle.hlsUrl) return null;
-  const { hlsUrl, posterUrl, createdAt, ...rest } = vehicle;
-  return { ...rest, hlsUrl, thumbnailUrl: posterUrl, ...(createdAt ? { createdAt } : {}) };
+  return {
+    id: vehicle.id,
+    sellerId: vehicle.sellerId,
+    brandName: vehicle.brandName,
+    modelName: vehicle.modelName,
+    year: vehicle.year,
+    price: vehicle.price,
+    currency: vehicle.currency,
+    mileageKm: vehicle.mileageKm,
+    fuelType: vehicle.fuelType,
+    transmission: vehicle.transmission,
+    city: vehicle.city,
+    tramerAmount: vehicle.tramerAmount,
+    hasHeavyDamage: vehicle.hasHeavyDamage,
+    paintedPartsCount: vehicle.paintedPartsCount,
+    changedPartsCount: vehicle.changedPartsCount,
+    commentsCount: vehicle.commentsCount,
+    hlsUrl: vehicle.hlsUrl,
+    thumbnailUrl: vehicle.posterUrl,
+    isTest: vehicle.isTest,
+    ...(vehicle.createdAt ? { createdAt: vehicle.createdAt } : {}),
+  };
 }
 
 // ---------------------------------------------------------------
@@ -135,18 +164,22 @@ export function feedVehicleFromPortal(vehicle: PortalVehicle): FeedVehicle | nul
 // ---------------------------------------------------------------
 
 /**
- * search_vehicles satıcı kimliğini ve yorum sayısını döndürmüyor (RPC'yi
- * değiştirmek migration ister). Sayfanın ilanları için ikisi tek istekte
- * vehicles'tan okunur; akış sorgusu da aynı sütunları misafir olarak okuyor.
+ * search_vehicles satıcı kimliğini, yorum sayısını ve test işaretini
+ * döndürmüyor (RPC'yi değiştirmek migration ister). Sayfanın ilanları için
+ * üçü tek istekte vehicles'tan okunur; akış sorgusu da aynı sütunları misafir
+ * olarak okuyor.
  */
 async function fetchListingMeta(ids: string[]): Promise<Map<string, ListingMeta>> {
   if (ids.length === 0) return new Map();
-  const { data, error } = await supabase.from("vehicles").select("id, seller_id, comments_count").in("id", ids);
+  const { data, error } = await supabase.from("vehicles").select("id, seller_id, comments_count, is_test").in("id", ids);
   if (error) throw error;
 
-  const rows = (data ?? []) as { id: string; seller_id: string | null; comments_count: number | null }[];
+  const rows = (data ?? []) as { id: string; seller_id: string | null; comments_count: number | null; is_test: boolean | null }[];
   return new Map(
-    rows.map((row) => [row.id, { sellerId: row.seller_id ?? null, commentsCount: Math.max(0, Number(row.comments_count ?? 0)) }]),
+    rows.map((row) => [
+      row.id,
+      { sellerId: row.seller_id ?? null, commentsCount: Math.max(0, Number(row.comments_count ?? 0)), isTest: row.is_test === true },
+    ]),
   );
 }
 

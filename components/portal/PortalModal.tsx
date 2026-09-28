@@ -173,7 +173,7 @@ export default function PortalModal({
             </button>
           </div>
 
-          <DesktopFeedPanel vehicle={vehicle} focusRequest={0} lightboxContainer={dialogElement} />
+          <DesktopFeedPanel vehicle={vehicle} lightboxContainer={dialogElement} />
         </section>
       </div>
     </dialog>,

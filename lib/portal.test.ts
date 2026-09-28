@@ -144,6 +144,7 @@ const feedVehicle: FeedVehicle = {
   hlsUrl: "https://video/9.m3u8",
   thumbnailUrl: "https://video/9.jpg",
   commentsCount: 4,
+  isTest: false,
   createdAt: "2026-09-26T08:00:00+00:00",
 };
 
@@ -154,13 +155,15 @@ beforeEach(() => {
 
 describe("dönüşümler", () => {
   it("videolu ilanın kapağı videonun (dikey) karesi, satıcı ve yorum sayısı eklenir", () => {
-    const vehicle = portalVehicleFromSearch(searchResult(), { sellerId: "s-1", commentsCount: 3 });
+    const vehicle = portalVehicleFromSearch(searchResult(), { sellerId: "s-1", commentsCount: 3, isTest: true });
     expect(vehicle).toMatchObject({
       id: "veh-1",
       sellerId: "s-1",
       commentsCount: 3,
       hlsUrl: "https://video/v.m3u8",
       posterUrl: "https://video/thumb.jpg",
+      photoUrl: "https://photo/cover.jpeg",
+      isTest: true,
       createdAt: "2026-09-27T10:00:00+00:00",
     });
   });
@@ -169,7 +172,7 @@ describe("dönüşümler", () => {
     const vehicle = portalVehicleFromSearch(
       searchResult({ hasPlayableVideo: false, videoStatus: "processing", videoHlsUrl: null }),
     );
-    expect(vehicle).toMatchObject({ hlsUrl: null, posterUrl: "https://photo/cover.jpeg", sellerId: null, commentsCount: 0 });
+    expect(vehicle).toMatchObject({ hlsUrl: null, posterUrl: "https://photo/cover.jpeg", sellerId: null, commentsCount: 0, isTest: false });
   });
 
   it("akış ilanı ↔ vitrin ilanı gidiş dönüş aynı kalır; videosuz ilan akışa çevrilmez", () => {
@@ -181,12 +184,12 @@ describe("dönüşümler", () => {
 });
 
 describe("searchPortalPage", () => {
-  it("search_vehicles sonucuna satıcı kimliği ve yorum sayısını tek sorguyla ekler", async () => {
+  it("search_vehicles sonucuna satıcı kimliği, yorum sayısı ve test işaretini tek sorguyla ekler", async () => {
     rpc.mockResolvedValue({ data: [searchRow("a"), searchRow("b")], error: null } as never);
     const meta = queryChain({
       data: [
-        { id: "a", seller_id: "seller-a", comments_count: 5 },
-        { id: "b", seller_id: null, comments_count: null },
+        { id: "a", seller_id: "seller-a", comments_count: 5, is_test: true },
+        { id: "b", seller_id: null, comments_count: null, is_test: null },
       ],
       error: null,
     });
@@ -196,11 +199,11 @@ describe("searchPortalPage", () => {
 
     expect(rpc).toHaveBeenCalledWith("search_vehicles", expect.objectContaining({ p_brand_id: "b-bmw", p_offset: 0, p_limit: 21 }));
     expect(from).toHaveBeenCalledWith("vehicles");
-    expect(meta.calls).toContainEqual(["select", "id, seller_id, comments_count"]);
+    expect(meta.calls).toContainEqual(["select", "id, seller_id, comments_count, is_test"]);
     expect(meta.calls).toContainEqual(["in", "id", ["a", "b"]]);
-    expect(page.items.map((item) => [item.id, item.sellerId, item.commentsCount])).toEqual([
-      ["a", "seller-a", 5],
-      ["b", null, 0],
+    expect(page.items.map((item) => [item.id, item.sellerId, item.commentsCount, item.isTest])).toEqual([
+      ["a", "seller-a", 5, true],
+      ["b", null, 0, false],
     ]);
     expect(page).toMatchObject({ next: 2, hasMore: false });
   });

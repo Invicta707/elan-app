@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ExternalLink, LoaderCircle, MessageCircle, Phone } from "lucide-react";
+import { ChevronRight, ExternalLink, LoaderCircle, Phone } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { fetchVehicleDetails, type FeedVehicle, type VehicleDetails } from "../../lib/feed";
@@ -36,38 +36,21 @@ const panelScroll = "[scrollbar-color:#3F3F46_transparent] [scrollbar-width:thin
 
 export default function DesktopFeedPanel({
   vehicle,
-  focusRequest,
   lightboxContainer,
 }: {
-  /** undefined: akış yükleniyor; null: gösterilecek ilan yok (akış boş ya da sonu) */
-  vehicle: PanelVehicle | null | undefined;
-  /** Akıştaki "Yorum" düğmesine her basışta artar: yorumlara kaydırılır, yazma alanına odaklanılır */
-  focusRequest: number;
+  vehicle: PanelVehicle;
   /**
    * Tam ekran fotoğrafın çizileceği yer: varsayılan document.body. Vitrin
    * penceresinde (modal <dialog>) pencerenin kendisi; dışındaki her şey inert.
    */
   lightboxContainer?: Element | null;
 }) {
-  if (vehicle) {
-    return <VehiclePanel key={vehicle.id} vehicle={vehicle} focusRequest={focusRequest} lightboxContainer={lightboxContainer} />;
-  }
-  return vehicle === undefined ? <PanelSkeleton /> : <PanelEmpty />;
+  // İlan değişince (pencerede ↑/↓) panel sıfırdan kurulur: detaylar ve yorumlar yeniden istenir
+  return <VehiclePanel key={vehicle.id} vehicle={vehicle} lightboxContainer={lightboxContainer} />;
 }
 
-function VehiclePanel({
-  vehicle,
-  focusRequest,
-  lightboxContainer,
-}: {
-  vehicle: PanelVehicle;
-  focusRequest: number;
-  lightboxContainer?: Element | null;
-}) {
+function VehiclePanel({ vehicle, lightboxContainer }: { vehicle: PanelVehicle; lightboxContainer?: Element | null }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const commentsRef = useRef<HTMLElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
-  const guestButtonRef = useRef<HTMLButtonElement>(null);
   const [load, setLoad] = useState<DetailsLoad>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -91,16 +74,6 @@ function VehiclePanel({
       active = false;
     };
   }, [vehicleId, reloadKey]);
-
-  // Akıştaki "Yorum" düğmesi: yorumlara kaydır, yazma alanına (misafirde giriş düğmesine) odaklan
-  const handledFocus = useRef(focusRequest);
-  useEffect(() => {
-    if (focusRequest === handledFocus.current) return;
-    handledFocus.current = focusRequest;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    commentsRef.current?.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
-    (composerRef.current ?? guestButtonRef.current)?.focus({ preventScroll: true });
-  }, [focusRequest]);
 
   const details = load.status === "ready" ? load.details : null;
   const title = `${vehicle.brandName} ${vehicle.modelName}`;
@@ -128,6 +101,13 @@ function VehiclePanel({
             </Link>
           </div>
           <p className="mt-0.5 text-[14px] text-[#A1A1AA]">{meta}</p>
+          {vehicle.isTest && (
+            <p className="mt-2">
+              <span className="inline-flex rounded-md bg-[#27272A] px-2 py-0.5 text-[13px] font-semibold text-[#E4E4E7]">
+                Test ilanı · araç satılık değil
+              </span>
+            </p>
+          )}
           <PricePlate price={vehicle.price} currency={vehicle.currency} className="mt-3" />
           {vehicle.hasHeavyDamage && (
             <p className="mt-3 inline-flex rounded-md bg-[#E5484D] px-2 py-0.5 text-[13px] font-semibold text-white">
@@ -198,7 +178,7 @@ function VehiclePanel({
           </div>
         )}
 
-        <section ref={commentsRef} aria-labelledby="panel-comments-title" className="mt-6 scroll-mt-2 border-t border-[#27272A] pt-4">
+        <section aria-labelledby="panel-comments-title" className="mt-6 border-t border-[#27272A] pt-4">
           <h3 id="panel-comments-title" className="px-4 text-[15px] font-semibold">
             Yorumlar{thread.total > 0 ? <span className="font-normal text-[#A1A1AA]"> · {thread.total.toLocaleString("tr-TR")}</span> : null}
           </h3>
@@ -207,7 +187,7 @@ function VehiclePanel({
         </section>
       </div>
 
-      <CommentComposerArea thread={thread} tone="dark" textareaRef={composerRef} guestButtonRef={guestButtonRef} />
+      <CommentComposerArea thread={thread} tone="dark" />
       <CommentThreadDialogs thread={thread} />
     </>
   );
@@ -366,42 +346,6 @@ function PanelContact({ vehicle }: { vehicle: PanelVehicle }) {
         {shownNotice && <p className="mt-2 text-[13px] text-[#FCA5A5]">{shownNotice}</p>}
       </div>
     </section>
-  );
-}
-
-function PanelSkeleton() {
-  return (
-    <div aria-hidden="true" className="flex-1 space-y-4 overflow-hidden px-4 pt-4 motion-safe:animate-pulse">
-      <div className="flex items-center gap-3">
-        <span className="h-11 w-11 rounded-full bg-[#27272A]" />
-        <span className="h-3.5 w-32 rounded bg-[#27272A]" />
-      </div>
-      <div className="h-7 w-3/4 rounded bg-[#27272A]" />
-      <div className="h-11 w-44 rounded bg-[#27272A]" />
-      <div className="flex gap-2">
-        <div className="h-12 flex-1 rounded-full bg-[#27272A]" />
-        <div className="h-12 flex-1 rounded-full bg-[#27272A]" />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-14 rounded-xl bg-[#27272A]" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PanelEmpty() {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#27272A] text-[#A1A1AA]">
-        <MessageCircle aria-hidden="true" className="h-6 w-6" />
-      </span>
-      <p className="text-[15.5px] font-semibold">İlan ayrıntıları burada</p>
-      <p className="max-w-[18rem] text-[14px] text-[#A1A1AA]">
-        Akışta bir ilan izlediğinde fiyatı, özellikleri, satıcısı ve yorumları bu panelde görünür.
-      </p>
-    </div>
   );
 }
 

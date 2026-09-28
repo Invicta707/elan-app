@@ -39,7 +39,6 @@ vi.mock("../components/profile/UsernameSheet", () => ({ default: () => <div>kull
 
 import CommentButton from "../components/comments/CommentButton";
 import CommentsSheet from "../components/comments/CommentsSheet";
-import { FeedPanelContext } from "../components/feed/FeedPanelContext";
 import { CommentReportCard } from "../components/moderation/CommentReportsSection";
 import type { VehicleComment } from "./comments";
 import type { CommentReportItem } from "./moderation";
@@ -177,26 +176,9 @@ describe("yorum satırı: Şikayet et", () => {
   });
 });
 
-describe("masaüstü: akıştaki Yorum düğmesi yan panele yönlenir", () => {
-  it("1024 px ve üstünde pencere açılmaz, panel yorumlara odaklanır", () => {
-    stubMatchMedia(true);
-    const focusComments = vi.fn();
-    render(
-      <FeedPanelContext.Provider value={{ focusComments }}>
-        <CommentButton vehicleId={VEHICLE} count={2} onCountChange={vi.fn()} />
-      </FeedPanelContext.Provider>,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Yorumlar (2)" }));
-    expect(focusComments).toHaveBeenCalledWith(VEHICLE);
-    expect(document.querySelector("dialog")).toBeNull();
-  });
-
-  it("mobilde (ya da panel yoksa) alttan pencere açılır", async () => {
-    render(
-      <FeedPanelContext.Provider value={{ focusComments: vi.fn() }}>
-        <CommentButton vehicleId={VEHICLE} count={0} onCountChange={vi.fn()} />
-      </FeedPanelContext.Provider>,
-    );
+describe("akıştaki Yorum düğmesi", () => {
+  it("alttan yorum penceresini açar", async () => {
+    render(<CommentButton vehicleId={VEHICLE} count={0} onCountChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Yorumlar" }));
     expect(document.querySelector("dialog")).toBeTruthy();
     expect(await screen.findByText("Henüz yorum yok")).toBeTruthy();

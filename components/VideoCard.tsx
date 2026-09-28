@@ -48,8 +48,8 @@ export default function VideoCard({
   const { contact: handleContact, isContacting, notice } = useSellerContact(vehicle);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
   const [isReportOpen, setReportOpen] = useState(false);
-  // Yorum penceresi açıkken video durmaz; sayaç pencereyle (masaüstünde yan
-  // panelle) birlikte değişir: ortak depo (lib/use-comment-counts.ts)
+  // Yorum penceresi açıkken video durmaz; sayaç pencereyle (ve masaüstü vitrin
+  // penceresiyle) birlikte değişir: ortak depo (lib/use-comment-counts.ts)
   const commentsCount = useCommentCount(vehicle.id, vehicle.commentsCount);
   const handleCommentsCount = useCallback((count: number) => setCommentCount(vehicle.id, count), [vehicle.id]);
 
@@ -209,16 +209,13 @@ export default function VideoCard({
   return (
     <article
       aria-label={`${vehicle.year} ${title}`}
-      // Masaüstünde (lg) kart sütunun tamamı: video üst çubuğun altında, ortada
-      // 9:16 çerçevede; sağ sütun (Favori, Yorum…) çerçevenin dışında, sağında
-      className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden bg-[#121212] text-white lg:flex lg:max-w-none lg:items-center lg:justify-center lg:px-6 lg:pt-16 lg:pb-6"
+      className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden bg-[#121212] text-white"
     >
-      {/* Video çerçevesi: mobilde kartın tamamı; masaüstünde 9:16, yuvarlak köşeli
-          (sağda düğme sütununa yer kalır) */}
-      <div className="relative h-full w-full lg:aspect-[9/16] lg:w-auto lg:max-w-[calc(100%-9rem)]">
+      {/* Video çerçevesi: kartın tamamı */}
+      <div className="relative h-full w-full">
         <video
           ref={videoRef}
-          className="absolute inset-0 h-full w-full object-cover lg:rounded-2xl lg:bg-black"
+          className="absolute inset-0 h-full w-full object-cover"
           poster={vehicle.thumbnailUrl ?? undefined}
           muted={muted}
           loop
@@ -234,7 +231,7 @@ export default function VideoCard({
           type="button"
           onClick={handleTogglePlay}
           aria-label={isPlaying ? "Videoyu duraklat" : "Videoyu oynat"}
-          className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white lg:rounded-2xl"
+          className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
         />
 
         {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür: marka
@@ -259,23 +256,20 @@ export default function VideoCard({
           </p>
         )}
 
-        {/* Mobil: videonun alt şeridinde hafif gölge; yazılar onun üstünde okunur.
-            Masaüstünde (lg) bilgiler sağdaki kalıcı panelde */}
+        {/* Videonun alt şeridinde hafif gölge; yazılar onun üstünde okunur */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-[24%] min-h-36 bg-[linear-gradient(to_top,rgba(0,0,0,0.62)_0%,rgba(0,0,0,0.3)_55%,rgba(0,0,0,0)_100%)] lg:hidden"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-[24%] min-h-36 bg-[linear-gradient(to_top,rgba(0,0,0,0.62)_0%,rgba(0,0,0,0.3)_55%,rgba(0,0,0,0)_100%)]"
         />
 
         {/* Bilgi katmanı: metne yapılan dokunuşlar alttaki oynat/duraklat
             butonuna geçer, sadece bu katmandaki butonlar tıklanabilir.
-            Mobilde (< 1024 px) yalnızca alt şerit: satıcı etiketi, tek satır
-            başlık, fiyat ve Yıl / KM / İl hapları; videonun ortası boş kalır.
-            Ekranın altındaki güvenli alanı alt gezinme çubuğu karşılar.
-            Masaüstünde (lg) yalnızca düğme sütunu kalır ve çerçevenin sağına,
-            alta hizalı geçer */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pr-1.5 pb-3 pl-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:top-0 lg:right-auto lg:left-full lg:flex lg:items-end lg:p-0 lg:pl-4">
+            Yalnızca alt şerit: satıcı etiketi, tek satır başlık, fiyat ve
+            Yıl / KM / İl hapları; videonun ortası boş kalır. Ekranın altındaki
+            güvenli alanı alt gezinme çubuğu karşılar. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pr-1.5 pb-3 pl-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex items-end gap-2">
-            <div className="min-w-0 flex-1 pb-0.5 lg:hidden">
+            <div className="min-w-0 flex-1 pb-0.5">
               <SellerRow sellerId={vehicle.sellerId} />
 
               <h2 className="text-[20px] font-semibold leading-6 [font-family:var(--font-display)] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
@@ -303,6 +297,7 @@ export default function VideoCard({
                 <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
                 {vehicle.city && <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>}
                 {vehicle.hasHeavyDamage && <Tag tone="danger">Ağır hasar</Tag>}
+                {vehicle.isTest && <Tag>Test ilanı</Tag>}
               </ul>
 
               <div role="status" aria-live="polite">
@@ -314,10 +309,9 @@ export default function VideoCard({
               </div>
             </div>
 
-            {/* Mobilde TikTok / Reels gibi arka plansız 26 px simgeler (feed/actionStyles.ts);
-                kısa ekranda (320×568) aralık daralır, sütun başlığa değmez.
-                Masaüstünde "WhatsApp" ve "Detaylar" yok (yan panelde) */}
-            <div className="flex shrink-0 flex-col items-center gap-2.5 [@media(max-height:620px)]:gap-1 lg:gap-4">
+            {/* TikTok / Reels gibi arka plansız 26 px simgeler (feed/actionStyles.ts);
+                kısa ekranda (320×568) aralık daralır, sütun başlığa değmez */}
+            <div className="flex shrink-0 flex-col items-center gap-2.5 [@media(max-height:620px)]:gap-1">
               <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
 
               <CommentButton vehicleId={vehicle.id} count={commentsCount} onCountChange={handleCommentsCount} />
@@ -335,7 +329,7 @@ export default function VideoCard({
                 disabled={isContacting}
                 aria-busy={isContacting}
                 aria-label="WhatsApp'tan yaz"
-                className={`${ACTION_BUTTON} disabled:opacity-70 lg:hidden`}
+                className={`${ACTION_BUTTON} disabled:opacity-70`}
               >
                 <span className="flex h-10 w-11 items-center justify-center">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-[#062612] shadow-[0_1px_4px_rgba(0,0,0,0.35)] motion-safe:transition-transform motion-safe:group-active:scale-90">
@@ -352,7 +346,7 @@ export default function VideoCard({
                 onClick={() => setDetailsOpen(true)}
                 aria-haspopup="dialog"
                 aria-label="İlan detayları ve fotoğraflar"
-                className={`${ACTION_BUTTON} lg:hidden`}
+                className={`${ACTION_BUTTON}`}
               >
                 <span className={ACTION_ICON_BOX}>
                   <PhotosIcon className={ACTION_ICON} />
@@ -368,12 +362,12 @@ export default function VideoCard({
                 type="button"
                 onClick={handleToggleMute}
                 aria-label={muted ? "Sesi aç" : "Sesi kapat"}
-                className="group pointer-events-auto flex h-10 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:h-11 lg:bg-[#27272A] lg:hover:bg-[#3F3F46]"
+                className="group pointer-events-auto flex h-10 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 {muted ? (
-                  <SpeakerOffIcon className="h-6 w-6 drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] lg:h-5 lg:w-5 lg:drop-shadow-none" />
+                  <SpeakerOffIcon className="h-6 w-6 drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]" />
                 ) : (
-                  <SpeakerOnIcon className="h-6 w-6 drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] lg:h-5 lg:w-5 lg:drop-shadow-none" />
+                  <SpeakerOnIcon className="h-6 w-6 drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]" />
                 )}
               </button>
             </div>
