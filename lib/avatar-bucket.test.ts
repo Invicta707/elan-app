@@ -57,5 +57,6 @@ describe("avatars bucket'ı", () => {
     } finally {
       await empty.close();
     }
-  });
+    // Yeni bir PGlite kurulur: paralel test yükünde 5 sn'lik varsayılan süre yetmeyebiliyor
+  }, 60_000);
 });

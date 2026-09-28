@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import VideoCard from "./VideoCard";
 import { useSupabaseSession } from "../lib/auth";
 import { fetchFeedPage, fetchFeedVehicle, type FeedCursor, type FeedSource, type FeedVehicle } from "../lib/feed";
+import { clampFeedIndex, createWheelStepper, feedKeyStepFor } from "../lib/feed-navigation";
 import { primeSellerProfiles } from "../lib/use-follow";
 
 const PAGE_SIZE = 8;
@@ -42,7 +43,17 @@ type VideoFeedProps = {
   onMutedChange: (muted: boolean) => void;
   /** Hiç ilan yoksa gösterilecek içerik (varsayılan: "Yayında ilan yok.") */
   emptyState?: ReactNode;
+  /** Ekrandaki (aktif) ilan değişince: masaüstü yan panel onu gösterir; akış sonundaysa null */
+  onActiveVehicleChange?: (vehicle: FeedVehicle | null) => void;
+  /**
+   * Masaüstü: fare tekerleğinin ya da dokunmatik yüzeyin bir hareketi bir ilan
+   * (TikTok Web gibi). Mobilde dokunmatik kaydırma tarayıcının (snap).
+   */
+  wheelNavigation?: boolean;
 };
+
+/** Programla başlatılan kaydırmanın hedefi bu süreden sonra bırakılır (kullanıcı araya girdiyse) */
+const PENDING_TARGET_MS = 900;
 
 export default function VideoFeed({
   initialVehicleId = null,
@@ -51,6 +62,8 @@ export default function VideoFeed({
   muted,
   onMutedChange,
   emptyState,
+  onActiveVehicleChange,
+  wheelNavigation = false,
 }: VideoFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -61,6 +74,10 @@ export default function VideoFeed({
 
   const [vehicles, setVehicles] = useState<FeedVehicle[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Klavye ve tekerlek gezinmesi: son aktif kart ve (kaydırma sürerken) gidilen kart
+  const activeIndexRef = useRef(0);
+  const pendingTargetRef = useRef<{ index: number; at: number } | null>(null);
+  const lastIndexRef = useRef(-1);
   const [hasMore, setHasMore] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [pagesLoaded, setPagesLoaded] = useState(0);
@@ -158,6 +175,68 @@ export default function VideoFeed({
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  // Aktif ilan: yan panel (masaüstü) ekrandaki ilanı gösterir
+  const onActiveChangeRef = useRef(onActiveVehicleChange);
+  useEffect(() => {
+    onActiveChangeRef.current = onActiveVehicleChange;
+  });
+  const activeVehicle = vehicles[activeIndex] ?? null;
+  // İlk sayfa gelene kadar bildirilmez: panel o sırada iskelet gösterir
+  const settled = pagesLoaded > 0 || loadFailed;
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+    if (pendingTargetRef.current?.index === activeIndex) pendingTargetRef.current = null;
+  }, [activeIndex]);
+  useEffect(() => {
+    if (settled) onActiveChangeRef.current?.(activeVehicle);
+  }, [activeVehicle, settled]);
+
+  /** Karta git (klavye, tekerlek): sınırda durur; art arda basışlar hedeften sayılır */
+  const goToStep = useCallback((step: -1 | 1) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const pending = pendingTargetRef.current;
+    const base = pending && performance.now() - pending.at < PENDING_TARGET_MS ? pending.index : activeIndexRef.current;
+    const target = clampFeedIndex(base + step, lastIndexRef.current);
+    if (target === base) return;
+    pendingTargetRef.current = { index: target, at: performance.now() };
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    container.scrollTo({ top: target * container.clientHeight, behavior: reduceMotion ? "auto" : "smooth" });
+  }, []);
+
+  // Klavye: ↑/↓ ve PageUp/PageDown bir ilan (yazı alanında, açık pencerede ve
+  // kendi kaydırması olan yan panelde değil). Görünmeyen akış dinlemez.
+  useEffect(() => {
+    if (!visible) return;
+    function onKeyDown(event: KeyboardEvent) {
+      // Açık pencere (yorumlar, detaylar, giriş) ya da tam ekran fotoğraf: tuşlar onundur
+      const dialogOpen = Boolean(document.querySelector("dialog[open], [role='dialog'][aria-modal='true']"));
+      const step = feedKeyStepFor(event, dialogOpen);
+      if (!step) return;
+      event.preventDefault();
+      goToStep(step);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible, goToStep]);
+
+  // Masaüstü: tekerlek / dokunmatik yüzey hareketi başına bir ilan
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !visible || !wheelNavigation) return;
+    const step = createWheelStepper();
+    function onWheel(event: WheelEvent) {
+      // Ctrl + tekerlek: tarayıcı yakınlaştırması
+      if (event.ctrlKey) return;
+      event.preventDefault();
+      const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container!.clientHeight : 1;
+      const direction = step(event.deltaX * scale, event.deltaY * scale, event.timeStamp);
+      if (direction) goToStep(direction);
+    }
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, [visible, wheelNavigation, goToStep]);
+
   function handleRetry() {
     // loadFailed false olunca yukarıdaki efekt tekrar çalışıp sayfayı ister
     setLoadFailed(false);
@@ -174,6 +253,10 @@ export default function VideoFeed({
   // şeridi bir durak olsaydı yeni kartlar gelse de kullanıcı şeritte kalırdı.
   const tailIsStop = loadFailed || !hasMore;
   const tailIsFullScreen = tailIsStop || vehicles.length === 0;
+  // Klavye ve tekerlekle gidilebilecek son kart: akış sonu bir duraksa o
+  useEffect(() => {
+    lastIndexRef.current = tailIsStop ? vehicles.length : vehicles.length - 1;
+  }, [tailIsStop, vehicles.length]);
 
   return (
     <div className="relative h-full w-full">

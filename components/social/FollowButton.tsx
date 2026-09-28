@@ -7,7 +7,8 @@ import { supabase } from "../../lib/supabase";
 import { useFollow } from "../../lib/use-follow";
 import { AuthModalPortal } from "../AuthGatedLink";
 
-export type FollowButtonVariant = "profile" | "compact" | "overlay";
+/** panel: masaüstü yan panelin koyu zemininde (compact boyutunda) */
+export type FollowButtonVariant = "profile" | "compact" | "overlay" | "panel";
 
 // Takip Et / Takibi Bırak. İyimserdir: dokunulduğu an değişir, sunucu
 // reddederse geri döner ve hata metni gösterilir. Misafirde önce giriş
@@ -70,9 +71,9 @@ export default function FollowButton({
 }
 
 function errorClass(variant: FollowButtonVariant) {
-  return variant === "overlay"
-    ? "mt-1 basis-full rounded-md bg-black/75 px-2 py-1 text-[12px] leading-snug text-white"
-    : "mt-2 basis-full text-center text-[13px] font-medium text-[#D92D20]";
+  if (variant === "overlay") return "mt-1 basis-full rounded-md bg-black/75 px-2 py-1 text-[12px] leading-snug text-white";
+  if (variant === "panel") return "mt-2 basis-full text-[13px] font-medium text-[#FCA5A5]";
+  return "mt-2 basis-full text-center text-[13px] font-medium text-[#D92D20]";
 }
 
 /** Görünüm (test edilebilir): akışta takip edilen için yalnızca bir işaret, diğerlerinde aç/kapa düğmesi */
@@ -122,9 +123,13 @@ export function FollowButtonView({
 
   // Profilde yanında Mesaj ve Paylaş var: genişliği satır belirler (320 px'e sığar)
   const size = variant === "profile" ? "h-12 min-w-0 px-4 text-[15px]" : "h-9 px-4 text-[14px]";
+  const dark = variant === "panel";
   const tone = following
-    ? "bg-[#E9ECEF] text-[#15181C] hover:bg-[#DDE1E6]"
+    ? dark
+      ? "bg-[#27272A] text-white hover:bg-[#3F3F46]"
+      : "bg-[#E9ECEF] text-[#15181C] hover:bg-[#DDE1E6]"
     : "bg-[#003399] text-white hover:bg-[#002B80]";
+  const ring = dark ? "focus-visible:ring-2 focus-visible:ring-white" : "focus-visible:ring-4 focus-visible:ring-[#003399]/30";
 
   return (
     <button
@@ -133,7 +138,7 @@ export function FollowButtonView({
       aria-pressed={following}
       aria-busy={pending || undefined}
       aria-label={following ? `${who} takibi bırak` : `${who} takip et`}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-[transform,background-color] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#003399]/30 ${size} ${tone} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-[transform,background-color] duration-150 active:scale-[0.97] focus-visible:outline-none ${ring} ${size} ${tone} ${className}`}
     >
       {!following && <UserPlus aria-hidden="true" className="h-4 w-4" />}
       {following ? "Takibi Bırak" : "Takip Et"}

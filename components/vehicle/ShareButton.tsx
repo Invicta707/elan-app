@@ -72,9 +72,9 @@ export default function ShareButton({
           type="button"
           onClick={handleShare}
           aria-label={label}
-          className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="group pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 transition-colors lg:bg-[#27272A] lg:group-hover:bg-[#3F3F46]">
             <ShareIcon className="h-5 w-5" />
           </span>
           <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">

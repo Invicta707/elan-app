@@ -15,6 +15,7 @@ export default function MessageSellerButton({
   sellerId,
   onNotice,
   className = "",
+  appearance = "default",
 }: {
   vehicleId: string;
   /** Biliniyorsa: kendi ilanında buton gizlenir (bilinmiyorsa sunucu reddeder) */
@@ -22,6 +23,11 @@ export default function MessageSellerButton({
   /** Hata metni, çağıranın durum alanında gösterilir */
   onNotice: (message: string | null) => void;
   className?: string;
+  /**
+   * default: koyu dolgulu, etiket satır genişliğine göre kısalır
+   * panel: masaüstü yan panelin koyu zemininde çerçeveli, tam etiket
+   */
+  appearance?: "default" | "panel";
 }) {
   const router = useRouter();
   const { session } = useSupabaseSession();
@@ -50,24 +56,34 @@ export default function MessageSellerButton({
         aria-busy={busy}
         aria-label="gözüyle'den mesaj gönder"
         onClick={() => (session ? void open() : setShowAuth(true))}
-        className={`flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#15181C] px-2.5 text-[15px] font-semibold text-white transition-transform disabled:opacity-70 motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 ${className}`}
+        className={`flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-full px-2.5 text-[15px] font-semibold text-white transition-[transform,background-color] disabled:opacity-70 motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 ${
+          appearance === "panel"
+            ? "border border-[#3F3F46] bg-transparent hover:bg-white/5 focus-visible:ring-white"
+            : "bg-[#15181C] focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+        } ${className}`}
       >
         {busy ? (
           <LoaderCircle aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin" />
         ) : (
           <MessageCircle aria-hidden="true" className="h-5 w-5 shrink-0" />
         )}
-        {/* Etiket, butonların satırının genişliğine göre (satır bir @container):
-            dar telefonda kısa, genişte tam ad. Ölçüm: 320, 375, 414 px ve masaüstü */}
-        <span aria-hidden="true" className="@[26rem]:hidden">
-          Mesaj
-        </span>
-        <span aria-hidden="true" className="hidden @[26rem]:inline @[32rem]:hidden">
-          Mesaj gönder
-        </span>
-        <span aria-hidden="true" className="hidden @[32rem]:inline">
-          gözüyle&apos;den Mesaj Gönder
-        </span>
+        {appearance === "panel" ? (
+          <span aria-hidden="true">gözüyle&apos;den Mesaj Gönder</span>
+        ) : (
+          <>
+            {/* Etiket, butonların satırının genişliğine göre (satır bir @container):
+                dar telefonda kısa, genişte tam ad. Ölçüm: 320, 375, 414 px ve masaüstü */}
+            <span aria-hidden="true" className="@[26rem]:hidden">
+              Mesaj
+            </span>
+            <span aria-hidden="true" className="hidden @[26rem]:inline @[32rem]:hidden">
+              Mesaj gönder
+            </span>
+            <span aria-hidden="true" className="hidden @[32rem]:inline">
+              gözüyle&apos;den Mesaj Gönder
+            </span>
+          </>
+        )}
       </button>
       {showAuth &&
         createPortal(

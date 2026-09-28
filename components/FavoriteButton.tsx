@@ -22,7 +22,8 @@ type FavoriteButtonProps = {
 };
 
 const CIRCLE: Record<FavoriteButtonProps["variant"], string> = {
-  overlay: "h-11 w-11 bg-black/45",
+  // Masaüstünde (lg) sütun videonun dışında, koyu zeminde
+  overlay: "h-11 w-11 bg-black/45 lg:bg-[#27272A] lg:group-hover:bg-[#3F3F46]",
   sheet: "h-10 w-10 bg-[#F2F3F5] hover:bg-[#E6E8EB]",
   page: "h-11 w-11 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] hover:bg-[#F7F8FA]",
   card: "h-9 w-9 bg-white/90 shadow-[0_1px_4px_rgba(0,0,0,0.25)]",
@@ -61,7 +62,7 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
         onClick={handleClick}
         aria-pressed={isFavorite}
         aria-label="Favorilere ekle"
-        className={`pointer-events-auto flex flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 ${
+        className={`group pointer-events-auto flex flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 ${
           overlay
             ? "rounded-lg focus-visible:ring-white"
             : "rounded-full focus-visible:ring-[#003399] focus-visible:ring-offset-2"

@@ -2,9 +2,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   parseAdminEmails,
+  toCommentReportQueue,
   toModerationQueue,
   toPendingListing,
+  type CommentAuthorRow,
+  type CommentReportItem,
   type ModerationItem,
+  type OpenCommentReportRow,
   type OpenReportRow,
   type PendingListing,
   type PendingListingRow,
@@ -81,6 +85,8 @@ export async function fetchModerationQueueRows(
          videos(status, hls_url, thumbnail_url))`,
     )
     .eq("status", "open")
+    // Yorum şikayetleri ayrı kuyrukta (fetchCommentReportRows)
+    .is("comment_id", null)
     .order("created_at", { ascending: true })
     .limit(QUEUE_LIMIT);
 
@@ -91,6 +97,53 @@ export async function fetchModerationQueueRows(
   return { ok: true, items: toModerationQueue((data ?? []) as unknown as OpenReportRow[]) };
 }
 
+/**
+ * Açık yorum şikayetleri: yorumun metni, ilanı ve şikayetler (servis anahtarı).
+ * İlişkiler yabancı anahtar adıyla belirtilir: reports hem ilana hem yoruma bağlı.
+ */
+export const COMMENT_REPORT_SELECT = `id, reason, details, created_at,
+       comment:vehicle_comments!reports_comment_id_fkey(id, content, created_at, user_id),
+       vehicle:vehicles!reports_vehicle_id_fkey(id, status, year, price, currency, mileage_km, city, created_at,
+         brand:brands(name),
+         model:models(name),
+         images:vehicle_images(image_url, is_primary, display_order),
+         videos(status, hls_url, thumbnail_url))`;
+
+export async function fetchCommentReportRows(
+  supabase: SupabaseClient,
+): Promise<{ ok: true; items: CommentReportItem[] } | { ok: false }> {
+  const { data, error } = await supabase
+    .from("reports")
+    .select(COMMENT_REPORT_SELECT)
+    .eq("status", "open")
+    .not("comment_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(QUEUE_LIMIT);
+
+  if (error) {
+    console.error("Moderasyon: yorum şikayetleri okunamadı:", error);
+    return { ok: false };
+  }
+  const rows = (data ?? []) as unknown as OpenCommentReportRow[];
+  const authors = await fetchCommentAuthors(supabase, rows);
+  return { ok: true, items: toCommentReportQueue(rows, authors) };
+}
+
+/** Yorum yazarlarının herkese açık yüzü (okunamazsa adlar boş kalır, kuyruk yine gelir) */
+async function fetchCommentAuthors(
+  supabase: SupabaseClient,
+  rows: readonly OpenCommentReportRow[],
+): Promise<Map<string, CommentAuthorRow>> {
+  const ids = [...new Set(rows.flatMap((row) => (row.comment ? [row.comment.user_id] : [])))];
+  if (ids.length === 0) return new Map();
+  const { data, error } = await supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", ids);
+  if (error) {
+    console.error("Moderasyon: yorum yazarları okunamadı:", error);
+    return new Map();
+  }
+  return new Map(((data ?? []) as CommentAuthorRow[]).map((author) => [author.id, author]));
+}
+
 export type ModerationResult =
   | { ok: true; resolved: number }
   | { ok: false; code: "vehicle_not_found" | "database_error" };
@@ -98,7 +151,8 @@ export type ModerationResult =
 /**
  * İlanı yayından kaldırır ('rejected') ve ilanın tüm açık bildirimlerini
  * 'reviewed' yapar. Önce ilan: ikinci adım düşerse ilan yine kaldırılmış olur,
- * işlem tekrarlanabilir (ikisi de aynı sonucu verir).
+ * işlem tekrarlanabilir (ikisi de aynı sonucu verir). İlandaki yorumların
+ * şikayetleri de kapanır: ilan yayından kalkınca yorumları da görünmez.
  */
 export async function removeListing(
   supabase: SupabaseClient,

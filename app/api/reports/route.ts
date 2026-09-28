@@ -1,17 +1,26 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { clientIp, createRateLimiter, rateLimitSubject } from "../../../lib/rate-limit";
 import { consumeRateLimit, rateLimitSecret } from "../../../lib/rate-limit-server";
-import { REPORT_BURST_LIMIT, REPORT_RATE_RULES, parseReportInput } from "../../../lib/reports";
+import {
+  REPORT_BURST_LIMIT,
+  REPORT_RATE_RULES,
+  isCommentReportBody,
+  parseCommentReportInput,
+  parseReportInput,
+} from "../../../lib/reports";
 import { getAuthenticatedUserId, getSupabaseAdmin } from "../../../lib/supabase-server";
 
 // POST /api/reports
 //
 // İstek (tarayıcıdan):
 //   headers: { "Content-Type": "application/json", Authorization?: `Bearer <access_token>` }
-//   body:    { vehicleId, reason, details? }
+//   body:    { vehicleId, reason, details? }            ilan bildirimi
+//            { commentId, reason, details? }            yorum şikayeti (ilan yorumdan okunur)
 //
 // Yanıt: 201 { ok: true } | 200 { ok: true, alreadyReported: true } | 4xx/5xx { error }
 //        429 { error } + Retry-After: istek sınırı aşıldı (lib/reports.ts REPORT_RATE_RULES)
+//        Yorum şikayetinde ayrıca 404 comment_not_found, 400 own_comment (kendi yorumu)
 //
 // İstek sınırı iki katmanlı. Önce bellek içi ön sınır gelir: sunucu örneği
 // başına çalışır ve ucuzdur. Sonra veritabanındaki kalıcı sayaç: bütün
@@ -68,6 +77,8 @@ export async function POST(request: Request) {
     return errorResponse(400, "invalid_json", "İstek gövdesi geçerli bir JSON değil.");
   }
 
+  if (isCommentReportBody(body)) return reportComment(supabase, body, reporterId);
+
   const parsed = parseReportInput(body);
   if (!parsed.ok) return errorResponse(400, parsed.code, parsed.message);
   const { vehicleId, reason, details } = parsed.value;
@@ -96,6 +107,53 @@ export async function POST(request: Request) {
   if (error) {
     console.error("Bildirim kaydedilemedi:", error);
     return errorResponse(500, "database_error", "Bildirim gönderilemedi. Biraz sonra tekrar dene.");
+  }
+
+  return NextResponse.json({ ok: true }, { status: 201 });
+}
+
+const FOREIGN_KEY_VIOLATION = "23503";
+
+const commentNotFound = () =>
+  errorResponse(404, "comment_not_found", "Şikayet edilecek yorum bulunamadı; silinmiş olabilir.");
+
+/**
+ * Yorum şikayeti: yorum servis anahtarıyla okunur (ilanı ve yazarı). Kişi kendi
+ * yorumunu şikayet edemez; aynı kural veritabanında da var (fn_reports_comment_target).
+ */
+async function reportComment(supabase: SupabaseClient, body: unknown, reporterId: string | null) {
+  const parsed = parseCommentReportInput(body);
+  if (!parsed.ok) return errorResponse(400, parsed.code, parsed.message);
+  const { commentId, reason, details } = parsed.value;
+
+  const { data, error: commentError } = await supabase
+    .from("vehicle_comments")
+    .select("id, vehicle_id, user_id")
+    .eq("id", commentId)
+    .maybeSingle();
+
+  if (commentError) {
+    console.error("Yorum şikayeti: yorum okunamadı:", commentError);
+    return errorResponse(500, "database_error", "Şikayet gönderilemedi. Biraz sonra tekrar dene.");
+  }
+  const comment = data as { id: string; vehicle_id: string; user_id: string } | null;
+  if (!comment) return commentNotFound();
+  if (reporterId && comment.user_id === reporterId) {
+    return errorResponse(400, "own_comment", "Kendi yorumunu şikayet edemezsin.");
+  }
+
+  const { error } = await supabase
+    .from("reports")
+    .insert({ vehicle_id: comment.vehicle_id, comment_id: commentId, reporter_id: reporterId, reason, details });
+
+  if (error?.code === UNIQUE_VIOLATION) {
+    return NextResponse.json({ ok: true, alreadyReported: true });
+  }
+  // Yorum bu arada silindi
+  if (error?.code === FOREIGN_KEY_VIOLATION) return commentNotFound();
+  if (error) {
+    console.error("Yorum şikayeti kaydedilemedi:", error);
+    return errorResponse(500, "database_error", "Şikayet gönderilemedi. Biraz sonra tekrar dene.");
   }
 
   return NextResponse.json({ ok: true }, { status: 201 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTurkishPhone } from "./phone";
+import { formatTurkishPhone, normalizeTurkishPhone, phoneCallHref } from "./phone";
 
 describe("normalizeTurkishPhone", () => {
   it.each([
@@ -23,5 +23,21 @@ describe("normalizeTurkishPhone", () => {
     ["abc", "rakam yok"],
   ])("%s (%s) → null", (input) => {
     expect(normalizeTurkishPhone(input)).toBeNull();
+  });
+});
+
+describe("formatTurkishPhone / phoneCallHref (masaüstü panel: Ara)", () => {
+  it("ekranda ulusal biçim, bağlantıda uluslararası", () => {
+    for (const input of ["905445673430", "05445673430", "+90 544 567 34 30"]) {
+      expect(formatTurkishPhone(input)).toBe("0544 567 34 30");
+      expect(phoneCallHref(input)).toBe("tel:+905445673430");
+    }
+  });
+
+  it("Türkiye numarası değilse null", () => {
+    for (const input of ["", "12345", "4445673430"]) {
+      expect(formatTurkishPhone(input)).toBeNull();
+      expect(phoneCallHref(input)).toBeNull();
+    }
   });
 });

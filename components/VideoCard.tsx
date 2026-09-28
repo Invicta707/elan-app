@@ -9,8 +9,11 @@ import ShareButton from "./vehicle/ShareButton";
 import VehicleDetailSheet from "./VehicleDetailSheet";
 import EyePlayMark from "./brand/EyePlayMark";
 import SellerRow from "./social/SellerRow";
+import ConditionList from "./vehicle/ConditionList";
+import PricePlate from "./vehicle/PricePlate";
 import { useSellerContact } from "./vehicle/useSellerContact";
 import type { FeedVehicle } from "../lib/feed";
+import { setCommentCount, useCommentCount } from "../lib/use-comment-counts";
 import { buildVehicleShareText } from "../lib/vehicle-page";
 import { FUEL_LABELS, TRANSMISSION_LABELS } from "../lib/vehicle-labels";
 
@@ -29,40 +32,6 @@ type VideoCardProps = {
 const MAX_RECOVERY_ATTEMPTS = 2;
 
 const amountFormatter = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
-const tryFormatter = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
-
-const CURRENCIES: Record<string, { symbol: string; spoken: string }> = {
-  TRY: { symbol: "₺", spoken: "TL" },
-  USD: { symbol: "$", spoken: "dolar" },
-  EUR: { symbol: "€", spoken: "euro" },
-};
-
-// Ekspertiz raporlarındaki parça renk kodları: orijinal / boyalı / değişen
-type ConditionTone = "original" | "painted" | "changed";
-
-const TONE_MARKERS: Record<ConditionTone, string> = {
-  original: "bg-[#E9ECEF]",
-  painted: "bg-[#F5A524]",
-  changed: "bg-[#E5484D]",
-};
-
-function getConditionItems(v: FeedVehicle): { label: string; tone: ConditionTone }[] {
-  return [
-    v.paintedPartsCount === 0
-      ? { label: "Boyasız", tone: "original" }
-      : { label: `${v.paintedPartsCount} parça boyalı`, tone: "painted" },
-    v.changedPartsCount === 0
-      ? { label: "Değişensiz", tone: "original" }
-      : { label: `${v.changedPartsCount} parça değişen`, tone: "changed" },
-    v.tramerAmount === 0
-      ? { label: "Tramer kaydı yok", tone: "original" }
-      : { label: `Tramer ${tryFormatter.format(v.tramerAmount)}`, tone: "painted" },
-  ];
-}
 
 export default function VideoCard({
   vehicle,
@@ -80,8 +49,10 @@ export default function VideoCard({
   const { contact: handleContact, isContacting, notice } = useSellerContact(vehicle);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
   const [isReportOpen, setReportOpen] = useState(false);
-  // Yorum penceresi açıkken video durmaz; sayaç pencereyle birlikte değişir
-  const [commentsCount, setCommentsCount] = useState(vehicle.commentsCount);
+  // Yorum penceresi açıkken video durmaz; sayaç pencereyle (masaüstünde yan
+  // panelle) birlikte değişir: ortak depo (lib/use-comment-counts.ts)
+  const commentsCount = useCommentCount(vehicle.id, vehicle.commentsCount);
+  const handleCommentsCount = useCallback((count: number) => setCommentCount(vehicle.id, count), [vehicle.id]);
 
   const hasVideoError = failedUrl === vehicle.hlsUrl;
 
@@ -233,182 +204,169 @@ export default function VideoCard({
     }
   }
 
-  const currency = CURRENCIES[vehicle.currency] ?? {
-    symbol: vehicle.currency,
-    spoken: vehicle.currency,
-  };
   const title = `${vehicle.brandName} ${vehicle.modelName}`;
-  const conditionItems = getConditionItems(vehicle);
   const showPlayHint = isActive && !isPlaying && !hasVideoError;
 
   return (
     <article
       aria-label={`${vehicle.year} ${title}`}
-      className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden bg-[#121212] text-white"
+      // Masaüstünde (lg) kart sütunun tamamı: video üst çubuğun altında, ortada
+      // 9:16 çerçevede; sağ sütun (Favori, Yorum…) çerçevenin dışında, sağında
+      className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden bg-[#121212] text-white lg:flex lg:max-w-none lg:items-center lg:justify-center lg:px-6 lg:pt-16 lg:pb-6"
     >
-      <video
-        ref={videoRef}
-        className="absolute inset-0 h-full w-full object-cover"
-        poster={vehicle.thumbnailUrl ?? undefined}
-        muted={muted}
-        loop
-        playsInline
-        preload={shouldLoad ? "auto" : "none"}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onError={handleVideoError}
-      />
+      {/* Video çerçevesi: mobilde kartın tamamı; masaüstünde 9:16, yuvarlak köşeli
+          (sağda düğme sütununa yer kalır) */}
+      <div className="relative h-full w-full lg:aspect-[9/16] lg:w-auto lg:max-w-[calc(100%-9rem)]">
+        <video
+          ref={videoRef}
+          className="absolute inset-0 h-full w-full object-cover lg:rounded-2xl lg:bg-black"
+          poster={vehicle.thumbnailUrl ?? undefined}
+          muted={muted}
+          loop
+          playsInline
+          preload={shouldLoad ? "auto" : "none"}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onError={handleVideoError}
+        />
 
-      {/* Kartın tamamı: dokununca oynat / duraklat */}
-      <button
-        type="button"
-        onClick={handleTogglePlay}
-        aria-label={isPlaying ? "Videoyu duraklat" : "Videoyu oynat"}
-        className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
-      />
+        {/* Kartın tamamı: dokununca oynat / duraklat */}
+        <button
+          type="button"
+          onClick={handleTogglePlay}
+          aria-label={isPlaying ? "Videoyu duraklat" : "Videoyu oynat"}
+          className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white lg:rounded-2xl"
+        />
 
-      {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür: marka
-          işareti (göz hattı, göz bebeğinde oynat üçgeni), yarı saydam koyu buzlu
-          zeminde ince beyaz çizgi; parlama yok. Solarak ve hafifçe büyüyerek
-          belirir, oynatınca solarak kaybolur. Kısa gecikme, normal oynatma
-          başlarken simgenin yanıp sönmesini önler. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-        <span
-          data-paused-mark={showPlayHint ? "visible" : "hidden"}
-          className={`flex h-[84px] w-[84px] items-center justify-center rounded-full bg-black/35 ring-1 ring-inset ring-white/15 backdrop-blur-[6px] transition-[opacity,transform] ease-out motion-reduce:scale-100 ${
-            showPlayHint ? "scale-100 opacity-100 delay-150 duration-200" : "scale-90 opacity-0 duration-150"
-          }`}
-        >
-          <EyePlayMark className="h-12 w-12 text-white" strokeWidth={4} />
-        </span>
-      </div>
+        {/* Duraklatıldığında ya da otomatik oynatma engellendiğinde görünür: marka
+            işareti (göz hattı, göz bebeğinde oynat üçgeni), yarı saydam koyu buzlu
+            zeminde ince beyaz çizgi; parlama yok. Solarak ve hafifçe büyüyerek
+            belirir, oynatınca solarak kaybolur. Kısa gecikme, normal oynatma
+            başlarken simgenin yanıp sönmesini önler. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <span
+            data-paused-mark={showPlayHint ? "visible" : "hidden"}
+            className={`flex h-[84px] w-[84px] items-center justify-center rounded-full bg-black/35 ring-1 ring-inset ring-white/15 backdrop-blur-[6px] transition-[opacity,transform] ease-out motion-reduce:scale-100 ${
+              showPlayHint ? "scale-100 opacity-100 delay-150 duration-200" : "scale-90 opacity-0 duration-150"
+            }`}
+          >
+            <EyePlayMark className="h-12 w-12 text-white" strokeWidth={4} />
+          </span>
+        </div>
 
-      {hasVideoError && (
-        <p className="pointer-events-none absolute inset-x-8 top-1/3 z-10 text-center text-[15px] leading-snug text-white/90">
-          Bu video şu an oynatılamıyor. Sonraki ilana geçmek için kaydır.
-        </p>
-      )}
+        {hasVideoError && (
+          <p className="pointer-events-none absolute inset-x-8 top-1/3 z-10 text-center text-[15px] leading-snug text-white/90">
+            Bu video şu an oynatılamıyor. Sonraki ilana geçmek için kaydır.
+          </p>
+        )}
 
-      {/* Bilgi katmanı: metne yapılan dokunuşlar alttaki oynat/duraklat
-          butonuna geçer, sadece bu katmandaki butonlar tıklanabilir */}
-      {/* Mobilde ekranın altındaki güvenli alanı alt gezinme çubuğu karşılar */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.5)_55%,rgba(0,0,0,0)_100%)] px-4 pt-28 pb-5 md:pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-end gap-3">
-          <div className="min-w-0 flex-1">
-            <SellerRow sellerId={vehicle.sellerId} />
+        {/* Bilgi katmanı: metne yapılan dokunuşlar alttaki oynat/duraklat
+            butonuna geçer, sadece bu katmandaki butonlar tıklanabilir */}
+        {/* Mobilde ekranın altındaki güvenli alanı alt gezinme çubuğu karşılar.
+            Masaüstünde (lg) bilgiler sağdaki kalıcı panelde; burada yalnızca düğme
+            sütunu kalır ve çerçevenin sağına, alta hizalı geçer */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.5)_55%,rgba(0,0,0,0)_100%)] px-4 pt-28 pb-5 md:pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:top-0 lg:right-auto lg:left-full lg:flex lg:items-end lg:bg-none lg:p-0 lg:pl-4">
+          <div className="flex items-end gap-3">
+            <div className="min-w-0 flex-1 lg:hidden">
+              <SellerRow sellerId={vehicle.sellerId} />
 
-            <PricePlate
-              price={vehicle.price}
-              symbol={currency.symbol}
-              spoken={currency.spoken}
-            />
+              <PricePlate price={vehicle.price} currency={vehicle.currency} />
 
-            <h2 className="mt-3 text-[1.75rem] font-semibold leading-none [font-family:var(--font-display)]">
+              <h2 className="mt-3 text-[1.75rem] font-semibold leading-none [font-family:var(--font-display)]">
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen(true)}
+                  aria-haspopup="dialog"
+                  className="pointer-events-auto block max-w-full truncate rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  {title}
+                </button>
+              </h2>
+
+              {/* Rozetlere dokunmak da detayları açar (klavye/ekran okuyucu için
+                  başlık ve "Detaylar" butonu var) */}
+              <ul
+                aria-label="Araç özellikleri"
+                onClick={() => setDetailsOpen(true)}
+                className="pointer-events-auto mt-2.5 flex cursor-pointer flex-wrap gap-1.5"
+              >
+                <Tag>{vehicle.year}</Tag>
+                <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
+                <Tag>{FUEL_LABELS[vehicle.fuelType]}</Tag>
+                <Tag>{TRANSMISSION_LABELS[vehicle.transmission]}</Tag>
+                {vehicle.city && (
+                  <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>
+                )}
+              </ul>
+
+              {vehicle.hasHeavyDamage && (
+                <p className="mt-3 inline-flex rounded-md bg-[#E5484D] px-2 py-0.5 text-[13px] font-semibold">
+                  Ağır hasar kayıtlı
+                </p>
+              )}
+
+              <ConditionList vehicle={vehicle} className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] font-medium" />
+
+              <div role="status" aria-live="polite">
+                {notice && (
+                  <p className="mt-3 max-w-[20rem] rounded-md bg-black/75 px-3 py-2 text-[13px] leading-snug">
+                    {notice}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleContact}
+                disabled={isContacting}
+                aria-busy={isContacting}
+                className="pointer-events-auto mt-4 inline-flex h-12 items-center gap-2 rounded-full bg-[#25D366] pl-4 pr-5 text-base font-semibold text-[#062612] disabled:opacity-70 motion-safe:transition-transform motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+              >
+                <ChatIcon className="h-5 w-5" />
+                {isContacting ? "Açılıyor…" : "WhatsApp'tan yaz"}
+              </button>
+            </div>
+
+            {/* 6 düğme: kısa ekranda (320×568) aralık daralır, sütun başlığa değmez.
+                Masaüstünde "Detaylar" yok (yan panelde) */}
+            <div className="flex shrink-0 flex-col items-center gap-4 [@media(max-height:620px)]:gap-2">
+              <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
+
+              <CommentButton vehicleId={vehicle.id} count={commentsCount} onCountChange={handleCommentsCount} />
+
+              <ShareButton
+                vehicleId={vehicle.id}
+                title={title}
+                text={buildVehicleShareText(vehicle)}
+                variant="overlay"
+              />
+
               <button
                 type="button"
                 onClick={() => setDetailsOpen(true)}
                 aria-haspopup="dialog"
-                className="pointer-events-auto block max-w-full truncate rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                aria-label="İlan detayları ve fotoğraflar"
+                className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:hidden"
               >
-                {title}
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
+                  <PhotosIcon className="h-5 w-5" />
+                </span>
+                <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                  Detaylar
+                </span>
               </button>
-            </h2>
 
-            {/* Rozetlere dokunmak da detayları açar (klavye/ekran okuyucu için
-                başlık ve "Detaylar" butonu var) */}
-            <ul
-              aria-label="Araç özellikleri"
-              onClick={() => setDetailsOpen(true)}
-              className="pointer-events-auto mt-2.5 flex cursor-pointer flex-wrap gap-1.5"
-            >
-              <Tag>{vehicle.year}</Tag>
-              <Tag>{amountFormatter.format(vehicle.mileageKm)} km</Tag>
-              <Tag>{FUEL_LABELS[vehicle.fuelType]}</Tag>
-              <Tag>{TRANSMISSION_LABELS[vehicle.transmission]}</Tag>
-              {vehicle.city && (
-                <Tag icon={<PinIcon className="h-3 w-3 shrink-0" />}>{vehicle.city}</Tag>
-              )}
-            </ul>
+              <ReportButton vehicleId={vehicle.id} variant="overlay" onOpenChange={setReportOpen} />
 
-            {vehicle.hasHeavyDamage && (
-              <p className="mt-3 inline-flex rounded-md bg-[#E5484D] px-2 py-0.5 text-[13px] font-semibold">
-                Ağır hasar kayıtlı
-              </p>
-            )}
-
-            <ul
-              aria-label="Ekspertiz özeti"
-              className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] font-medium"
-            >
-              {conditionItems.map((item) => (
-                <li key={item.label} className="flex items-center gap-1.5">
-                  <span
-                    aria-hidden="true"
-                    className={`h-2.5 w-2.5 rounded-[2px] ring-1 ring-black/40 ${TONE_MARKERS[item.tone]}`}
-                  />
-                  {item.label}
-                </li>
-              ))}
-            </ul>
-
-            <div role="status" aria-live="polite">
-              {notice && (
-                <p className="mt-3 max-w-[20rem] rounded-md bg-black/75 px-3 py-2 text-[13px] leading-snug">
-                  {notice}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={handleToggleMute}
+                aria-label={muted ? "Sesi aç" : "Sesi kapat"}
+                className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/45 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:bg-[#27272A] lg:hover:bg-[#3F3F46]"
+              >
+                {muted ? <SpeakerOffIcon className="h-5 w-5" /> : <SpeakerOnIcon className="h-5 w-5" />}
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={handleContact}
-              disabled={isContacting}
-              aria-busy={isContacting}
-              className="pointer-events-auto mt-4 inline-flex h-12 items-center gap-2 rounded-full bg-[#25D366] pl-4 pr-5 text-base font-semibold text-[#062612] disabled:opacity-70 motion-safe:transition-transform motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-            >
-              <ChatIcon className="h-5 w-5" />
-              {isContacting ? "Açılıyor…" : "WhatsApp'tan yaz"}
-            </button>
-          </div>
-
-          {/* 6 düğme: kısa ekranda (320×568) aralık daralır, sütun başlığa değmez */}
-          <div className="flex shrink-0 flex-col items-center gap-4 [@media(max-height:620px)]:gap-2">
-            <FavoriteButton vehicleId={vehicle.id} variant="overlay" />
-
-            <CommentButton vehicleId={vehicle.id} count={commentsCount} onCountChange={setCommentsCount} />
-
-            <ShareButton
-              vehicleId={vehicle.id}
-              title={title}
-              text={buildVehicleShareText(vehicle)}
-              variant="overlay"
-            />
-
-            <button
-              type="button"
-              onClick={() => setDetailsOpen(true)}
-              aria-haspopup="dialog"
-              aria-label="İlan detayları ve fotoğraflar"
-              className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45">
-                <PhotosIcon className="h-5 w-5" />
-              </span>
-              <span aria-hidden="true" className="text-[11px] font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                Detaylar
-              </span>
-            </button>
-
-            <ReportButton vehicleId={vehicle.id} variant="overlay" onOpenChange={setReportOpen} />
-
-            <button
-              type="button"
-              onClick={handleToggleMute}
-              aria-label={muted ? "Sesi aç" : "Sesi kapat"}
-              className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >
-              {muted ? <SpeakerOffIcon className="h-5 w-5" /> : <SpeakerOnIcon className="h-5 w-5" />}
-            </button>
           </div>
         </div>
       </div>
@@ -434,24 +392,6 @@ function Tag({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
       {icon}
       {children}
     </li>
-  );
-}
-
-// Fiyat, Türkiye plakasından esinlenen bir etikette: soldaki mavi şeritte para birimi
-function PricePlate({ price, symbol, spoken }: { price: number; symbol: string; spoken: string }) {
-  return (
-    <p className="inline-flex h-11 items-stretch overflow-hidden rounded-[5px] border-2 border-black bg-white text-black shadow-[0_3px_0_rgba(0,0,0,0.45)]">
-      <span
-        aria-hidden="true"
-        className="flex w-7 items-center justify-center bg-[#003399] text-[15px] font-semibold text-white"
-      >
-        {symbol}
-      </span>
-      <span className="flex items-center px-3 text-[2rem] font-extrabold leading-none tracking-[0.01em] tabular-nums [font-family:var(--font-display)]">
-        {amountFormatter.format(price)}
-        <span className="sr-only"> {spoken}</span>
-      </span>
-    </p>
   );
 }
 

@@ -8,7 +8,7 @@ import {
 } from "./content-moderation";
 import { isUuid } from "./feed";
 import { toMyListing, type MyListing, type MyListingRow } from "./my-listings";
-import type { ReportReason } from "./reports";
+import type { CommentReportReason, ReportReason } from "./reports";
 
 // Moderasyon paneli (/admin/reports): ortak türler, istek doğrulaması, bildirim
 // kuyruğunun gruplanması ve /api/admin/reports çağrıları. UI'dan bağımsız.
@@ -127,7 +127,7 @@ async function callModerationApi<T>(
   payload: object | null,
   accessToken: string,
   fetchImpl: typeof fetch,
-  path: "/api/admin/reports" | "/api/admin/listings" | "/api/admin/status" = "/api/admin/reports",
+  path: "/api/admin/reports" | "/api/admin/listings" | "/api/admin/status" | "/api/admin/comment-reports" = "/api/admin/reports",
 ): Promise<{ ok: true; body: T } | ModerationFailure> {
   let response: Response;
   try {
@@ -163,6 +163,153 @@ export async function submitModerationAction(
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ ok: true; resolved: number } | ModerationFailure> {
   const result = await callModerationApi<{ resolved: number }>(input, accessToken, fetchImpl);
+  return result.ok ? { ok: true, resolved: result.body.resolved } : result;
+}
+
+// ---------------------------------------------------------------
+// Yorum şikayetleri (/api/admin/comment-reports)
+// ---------------------------------------------------------------
+//
+// Şikayetler reports tablosunda (comment_id dolu). Panel yorum başına gruplar:
+// yorumun metni ve yazarı, ilanı ve şikayetler. Karar: yorumu sil (şikayetleri
+// de gider, karar content_moderation_events'e yazılır) ya da şikayetleri yoksay.
+
+export type CommentReport = {
+  id: string;
+  reason: CommentReportReason;
+  details: string | null;
+  createdAt: string;
+};
+
+export type CommentReportItem = {
+  comment: {
+    id: string;
+    content: string;
+    createdAt: string;
+    authorId: string;
+    authorUsername: string | null;
+    authorDisplayName: string | null;
+    authorAvatarUrl: string | null;
+  };
+  vehicle: Pick<MyListing, "id" | "title" | "year" | "status" | "coverUrl">;
+  /** En eskisi önce */
+  reports: CommentReport[];
+};
+
+export type OpenCommentReportRow = {
+  id: string;
+  reason: CommentReportReason;
+  details: string | null;
+  created_at: string;
+  comment: { id: string; content: string; created_at: string; user_id: string } | null;
+  vehicle: MyListingRow | null;
+};
+
+export type CommentAuthorRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
+/**
+ * Açık yorum şikayetlerini yorum başına toplar. Satırlar en eskiden yeniye gelir;
+ * kuyruk en eski şikayeti olan yorumdan başlar. Yorumu ya da ilanı okunamayan
+ * (bu arada silinmiş) satır atlanır.
+ */
+export function toCommentReportQueue(
+  rows: readonly OpenCommentReportRow[],
+  authors: ReadonlyMap<string, CommentAuthorRow> = new Map(),
+): CommentReportItem[] {
+  const byComment = new Map<string, CommentReportItem>();
+  for (const row of rows) {
+    if (!row.comment || !row.vehicle) continue;
+    let item = byComment.get(row.comment.id);
+    if (!item) {
+      const author = authors.get(row.comment.user_id);
+      const listing = toMyListing(row.vehicle);
+      item = {
+        comment: {
+          id: row.comment.id,
+          content: row.comment.content,
+          createdAt: row.comment.created_at,
+          authorId: row.comment.user_id,
+          authorUsername: author?.username ?? null,
+          authorDisplayName: author?.display_name ?? null,
+          authorAvatarUrl: author?.avatar_url ?? null,
+        },
+        vehicle: { id: listing.id, title: listing.title, year: listing.year, status: listing.status, coverUrl: listing.coverUrl },
+        reports: [],
+      };
+      byComment.set(row.comment.id, item);
+    }
+    item.reports.push({ id: row.id, reason: row.reason, details: row.details, createdAt: row.created_at });
+  }
+  return [...byComment.values()];
+}
+
+/**
+ * delete_comment: yorum silinir (şikayetleri de gider). dismiss: yalnızca verilen
+ * (yöneticinin gördüğü) şikayetler kapatılır; yorum kalır.
+ */
+export type CommentModerationAction =
+  | { action: "delete_comment"; commentId: string }
+  | { action: "dismiss"; reportIds: string[] };
+
+export type ParseCommentActionResult =
+  | { ok: true; value: CommentModerationAction }
+  | { ok: false; code: "invalid_action" | "invalid_comment" | "invalid_reports"; message: string };
+
+export function parseCommentModerationAction(body: unknown): ParseCommentActionResult {
+  const { action, commentId, reportIds } = (body ?? {}) as Record<string, unknown>;
+
+  if (action === "delete_comment") {
+    if (!isUuid(commentId)) return { ok: false, code: "invalid_comment", message: "Silinecek yorum bulunamadı." };
+    return { ok: true, value: { action, commentId } };
+  }
+
+  if (action === "dismiss") {
+    if (
+      !Array.isArray(reportIds) ||
+      reportIds.length === 0 ||
+      reportIds.length > MAX_DISMISS_REPORTS ||
+      !reportIds.every(isUuid)
+    ) {
+      return { ok: false, code: "invalid_reports", message: "Kapatılacak şikayetler geçersiz." };
+    }
+    return { ok: true, value: { action, reportIds: [...new Set(reportIds as string[])] } };
+  }
+
+  return { ok: false, code: "invalid_action", message: "Bilinmeyen moderasyon işlemi." };
+}
+
+/**
+ * Yönetici silmesinin denetim kaydı için şikayet nedenlerinin içerik denetimi
+ * karşılığı (taciz, nefret, cinsel içerik); diğerlerinin karşılığı yok.
+ */
+export function commentReportCategories(reasons: readonly CommentReportReason[]): ModerationReason[] {
+  const map: Partial<Record<CommentReportReason, ModerationReason>> = {
+    harassment: "harassment",
+    hate: "hate",
+    sexual: "sexual",
+  };
+  return [...new Set(reasons.flatMap((reason) => (map[reason] ? [map[reason]] : [])))];
+}
+
+export async function fetchCommentReports(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: true; items: CommentReportItem[] } | ModerationFailure> {
+  const result = await callModerationApi<{ items: CommentReportItem[] }>(null, accessToken, fetchImpl, "/api/admin/comment-reports");
+  return result.ok ? { ok: true, items: result.body.items } : result;
+}
+
+export async function submitCommentModerationAction(
+  input: CommentModerationAction,
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: true; resolved: number } | ModerationFailure> {
+  const result = await callModerationApi<{ resolved: number }>(input, accessToken, fetchImpl, "/api/admin/comment-reports");
   return result.ok ? { ok: true, resolved: result.body.resolved } : result;
 }
 

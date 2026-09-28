@@ -234,3 +234,14 @@ export async function getSellerWhatsAppUrl(vehicle: SellerContactVehicle): Promi
 function toWhatsAppNumber(raw: string): string | null {
   return normalizeTurkishPhone(raw);
 }
+
+/**
+ * "Ara" (masaüstü yan panel): WhatsApp'la aynı numara, aynı RPC'den; yalnızca
+ * düğmeye basılınca istenir. Numara yoksa, geçersizse ya da ilan artık
+ * yayında değilse null. Dönen değer 90XXXXXXXXXX biçiminde.
+ */
+export async function getSellerPhone(vehicleId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc("get_seller_whatsapp", { p_vehicle_id: vehicleId });
+  if (error) throw error;
+  return typeof data === "string" ? normalizeTurkishPhone(data) : null;
+}

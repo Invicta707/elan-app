@@ -28,3 +28,20 @@ export function normalizeTurkishPhone(raw: string): string | null {
 
   return null;
 }
+
+/**
+ * Ekranda gösterim ("Ara" düğmesi): 905321234567 → "0532 123 45 67".
+ * Türkiye numarası değilse null.
+ */
+export function formatTurkishPhone(raw: string): string | null {
+  const normalized = normalizeTurkishPhone(raw);
+  if (!normalized) return null;
+  const national = normalized.slice(2);
+  return `0${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6, 8)} ${national.slice(8, 10)}`;
+}
+
+/** Telefonla arama bağlantısı: tel:+905321234567 (Türkiye numarası değilse null) */
+export function phoneCallHref(raw: string): string | null {
+  const normalized = normalizeTurkishPhone(raw);
+  return normalized ? `tel:+${normalized}` : null;
+}

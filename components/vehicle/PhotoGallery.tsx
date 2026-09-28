@@ -16,6 +16,8 @@ type PhotoGalleryProps = {
   onLightboxChange?: (open: boolean) => void;
   /** Sayfanın en üstündeki galeride ilk fotoğraf (LCP) beklemeden yüklenir */
   eagerFirst?: boolean;
+  /** dark: masaüstü yan panelin koyu zemininde */
+  tone?: "light" | "dark";
 };
 
 // Yatay kaydırılan fotoğraf şeridi; dokunulan fotoğraf tam ekran açılır.
@@ -25,6 +27,7 @@ export default function PhotoGallery({
   lightboxContainer,
   onLightboxChange,
   eagerFirst = false,
+  tone = "light",
 }: PhotoGalleryProps) {
   const thumbRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const restoreFocusRef = useRef<number | null>(null);
@@ -63,7 +66,11 @@ export default function PhotoGallery({
               type="button"
               onClick={() => open(index)}
               aria-label={`Fotoğraf ${index + 1} / ${photos.length}, tam ekran aç`}
-              className="relative block aspect-[4/3] w-full overflow-hidden rounded-lg bg-[#E6E8EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2"
+              className={`relative block aspect-[4/3] w-full overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                tone === "dark"
+                  ? "bg-[#27272A] focus-visible:ring-white focus-visible:ring-offset-[#121212]"
+                  : "bg-[#E6E8EB] focus-visible:ring-[#003399]"
+              }`}
             >
               <PhotoImage
                 src={url}
@@ -75,7 +82,9 @@ export default function PhotoGallery({
           </li>
         ))}
       </ul>
-      <p className="mt-1.5 text-[12px] text-[#5B616B]">{photos.length} fotoğraf · büyütmek için dokun</p>
+      <p className={`mt-1.5 text-[12px] ${tone === "dark" ? "text-[#A1A1AA]" : "text-[#5B616B]"}`}>
+        {photos.length} fotoğraf · büyütmek için {tone === "dark" ? "tıkla" : "dokun"}
+      </p>
 
       {lightboxIndex !== null &&
         lightboxContainer &&

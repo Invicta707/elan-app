@@ -13,7 +13,9 @@ import {
   type VehicleComment,
 } from "./comments";
 import { moderateText, recordModerationEvent } from "./content-moderation-server";
+import { commentReportCategories } from "./moderation";
 import type { TextModerator } from "./moderation-providers";
+import type { CommentReportReason } from "./reports";
 import { COMMENT_POLICY_ERROR } from "./text-moderation";
 
 // İlan yorumlarının sunucu tarafı (/api/vehicles/[id]/comments rotaları).
@@ -219,4 +221,47 @@ export async function deleteVehicleComment({
     verdict: { decision: "rejected", reasons: [], scores: {}, provider: "manual" },
   });
   return { ok: true };
+}
+
+/**
+ * Yönetici panelinden, şikayet edilen yorumu siler (servis anahtarı). Şikayetleri
+ * CASCADE ile gider; karar, açık şikayetlerin nedenleriyle birlikte kayda yazılır.
+ * resolved: yorumla birlikte kapanan açık şikayet sayısı.
+ */
+export async function removeReportedComment(
+  adminClient: SupabaseClient,
+  commentId: string,
+  moderatorId: string,
+): Promise<{ ok: true; resolved: number } | { ok: false; code: "comment_not_found" | "database_error" }> {
+  const { data, error } = await adminClient.from("vehicle_comments").select("id, user_id").eq("id", commentId).maybeSingle();
+  if (error) {
+    console.error("Şikayet edilen yorum okunamadı:", commentId, error);
+    return { ok: false, code: "database_error" };
+  }
+  const comment = data as { id: string; user_id: string } | null;
+  if (!comment) return { ok: false, code: "comment_not_found" };
+
+  const { data: open, error: reportsError } = await adminClient
+    .from("reports")
+    .select("reason")
+    .eq("comment_id", commentId)
+    .eq("status", "open");
+  if (reportsError) console.error("Yorumun şikayetleri okunamadı:", commentId, reportsError);
+  const reasons = ((open ?? []) as { reason: CommentReportReason }[]).map((report) => report.reason);
+
+  const { data: deleted, error: deleteError } = await adminClient.from("vehicle_comments").delete().eq("id", commentId).select("id");
+  if (deleteError) {
+    console.error("Şikayet edilen yorum silinemedi:", commentId, deleteError);
+    return { ok: false, code: "database_error" };
+  }
+  if (!deleted?.length) return { ok: false, code: "comment_not_found" };
+
+  await recordModerationEvent(adminClient, {
+    subjectType: "comment",
+    subjectId: commentId,
+    userId: comment.user_id,
+    moderatorId,
+    verdict: { decision: "rejected", reasons: commentReportCategories(reasons), scores: {}, provider: "manual" },
+  });
+  return { ok: true, resolved: reasons.length };
 }
