@@ -18,6 +18,7 @@ import {
   parsePrice,
   parseYear,
   searchVehicles,
+  type BodyType,
   type Catalog,
   type RawSearchParams,
   type SearchFilters,
@@ -44,6 +45,8 @@ export type PortalVehicle = {
   fuelType: FuelType;
   transmission: TransmissionType;
   city: string | null;
+  /** Kasa tipi: ilanın /ilan/… adresinde; yalnızca biliniyorsa yazılır */
+  bodyType?: BodyType | null;
   tramerAmount: number;
   hasHeavyDamage: boolean;
   paintedPartsCount: number;
@@ -91,6 +94,7 @@ export function portalVehicleFromSearch(row: VehicleSearchResult, meta?: Listing
     fuelType: row.fuelType,
     transmission: row.transmission,
     city: row.city,
+    ...(row.bodyType ? { bodyType: row.bodyType } : {}),
     tramerAmount: row.tramerAmount,
     hasHeavyDamage: row.hasHeavyDamage,
     paintedPartsCount: row.paintedPartsCount,
@@ -121,6 +125,7 @@ export function portalVehicleFromFeed(vehicle: FeedVehicle): PortalVehicle {
     fuelType: vehicle.fuelType,
     transmission: vehicle.transmission,
     city: vehicle.city,
+    ...(vehicle.bodyType ? { bodyType: vehicle.bodyType } : {}),
     tramerAmount: vehicle.tramerAmount,
     hasHeavyDamage: vehicle.hasHeavyDamage,
     paintedPartsCount: vehicle.paintedPartsCount,
@@ -151,6 +156,7 @@ export function feedVehicleFromPortal(vehicle: PortalVehicle): FeedVehicle | nul
     fuelType: vehicle.fuelType,
     transmission: vehicle.transmission,
     city: vehicle.city,
+    ...(vehicle.bodyType ? { bodyType: vehicle.bodyType } : {}),
     tramerAmount: vehicle.tramerAmount,
     hasHeavyDamage: vehicle.hasHeavyDamage,
     paintedPartsCount: vehicle.paintedPartsCount,

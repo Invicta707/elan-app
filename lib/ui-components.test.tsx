@@ -74,7 +74,8 @@ describe("ShowcaseTile", () => {
   it("yayındaki ilan: dikey kapak, fiyat hapı, görüntülenme; ilan sayfasına gider", () => {
     render(<ShowcaseTile listing={listing} onManage={vi.fn()} />);
     const link = screen.getByRole("link", { name: /BMW 3 Serisi 2020/ });
-    expect(link.getAttribute("href")).toBe("/vehicles/veh-1");
+    // Vitrinim yalnızca kimliği bilir: /ilan/<id>, sayfa tam adrese yönlendirir
+    expect(link.getAttribute("href")).toBe("/ilan/veh-1");
     expect(link.className).toContain("aspect-[9/16]");
     expect(link.className).toContain("active:scale-95");
     expect(link.textContent).toContain("₺1,25 Mn");
@@ -216,7 +217,7 @@ describe("UnreadBadge", () => {
 describe("ShowcaseTile (herkese açık profil)", () => {
   it("yönetim menüsü verilmezse köşe menüsü yok, kare ilana gider", () => {
     render(<ShowcaseTile listing={listing} />);
-    expect(screen.getByRole("link", { name: /BMW 3 Serisi 2020/ }).getAttribute("href")).toBe("/vehicles/veh-1");
+    expect(screen.getByRole("link", { name: /BMW 3 Serisi 2020/ }).getAttribute("href")).toBe("/ilan/veh-1");
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
@@ -383,7 +384,7 @@ describe("ProfileStats", () => {
 
 describe("canPromptOn (kullanıcı adı penceresi)", () => {
   it("ilan verme, sohbet, giriş dönüşü ve yönetim sayfalarında açılmaz", () => {
-    for (const path of ["/", "/search", "/my-listings", "/messages", "/@kamil", "/vehicles/abc"]) {
+    for (const path of ["/", "/search", "/my-listings", "/messages", "/@kamil", "/vehicles/abc", "/ilan/2021-bmw-320i-abc"]) {
       expect(canPromptOn(path)).toBe(true);
     }
     for (const path of ["/sell", "/auth/callback", "/messages/123", "/admin/reports", "/privacy", "/terms", null]) {

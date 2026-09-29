@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 import FavoriteButton from "../../../components/FavoriteButton";
 import ReportButton from "../../../components/ReportButton";
@@ -10,64 +10,43 @@ import BackButton from "../../../components/vehicle/BackButton";
 import SpecsTable, { formatVehiclePrice } from "../../../components/vehicle/SpecsTable";
 import { VehiclePageActions, VehiclePageGallery } from "../../../components/vehicle/VehiclePageClient";
 import { fetchSellerProfiles } from "../../../lib/follows";
-import { vehiclePath } from "../../../lib/share";
-import {
-  buildVehicleDescription,
-  buildVehicleShareText,
-  buildVehicleTitle,
-  fetchVehiclePage,
-  vehicleOgImagePath,
-} from "../../../lib/vehicle-page";
+import { currentSiteUrl } from "../../../lib/site-url";
+import { buildVehicleShareText, buildVehicleTitle, fetchVehiclePage } from "../../../lib/vehicle-page";
+import { buildVehicleJsonLd, buildVehicleMetadata, serializeJsonLd } from "../../../lib/vehicle-seo";
+import { LISTING_BASE_PATH, parseListingSegment, vehicleListingPath } from "../../../lib/vehicle-slug";
 import { bodyFont, displayFont } from "../../fonts";
 
 type VehiclePageProps = {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 };
 
+// Adres: /ilan/<yıl>-<marka>-<model>-<kasa>-<il>-<ilan-id> (lib/vehicle-slug.ts).
+// İlan sondaki kimlikten okunur; slug eksik ya da eskiyse tam adrese kalıcı
+// yönlendirilir (308). Eski /vehicles/<id> adresleri 301 ile buraya gelir.
+//
 // Sunucu anonim okur: RLS gereği sadece yayındaki ilanlar gelir, satılmış ya
 // da kaldırılmış ilanın linki not-found.tsx'e düşer.
 // generateMetadata ve sayfa aynı isteği paylaşır: veritabanına tek sorgu
 const getVehicle = cache(fetchVehiclePage);
 
+async function vehicleFromParams(params: VehiclePageProps["params"]) {
+  const { slug } = await params;
+  const parsed = parseListingSegment(slug);
+  return { slug, vehicle: parsed ? await getVehicle(parsed.id) : null };
+}
+
 export async function generateMetadata({ params }: VehiclePageProps): Promise<Metadata> {
-  const { id } = await params;
-  const vehicle = await getVehicle(id);
+  const { vehicle } = await vehicleFromParams(params);
   if (!vehicle) return { title: "İlan bulunamadı | gözüyle" };
-
-  const title = buildVehicleTitle(vehicle);
-  const description = buildVehicleDescription(vehicle);
-  const path = vehiclePath(vehicle.id);
-  // Araca özel afiş (fiyat plakası, başlık, Yıl / KM / İl, dikey video kartı); yayında olmayan ilanda yok
-  const image = vehicle.status === "active" ? vehicleOgImagePath(vehicle) : null;
-  const alt = `${vehicle.year} ${vehicle.brandName} ${vehicle.modelName}`;
-
-  return {
-    title,
-    description,
-    alternates: { canonical: path },
-    // WhatsApp ve sosyal medyada link, araca özel afişle kart olarak görünür
-    openGraph: {
-      type: "website",
-      siteName: "gözüyle",
-      locale: "tr_TR",
-      url: path,
-      title,
-      description,
-      images: image ? [{ url: image, width: 1200, height: 630, alt, type: "image/png" }] : undefined,
-    },
-    twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title,
-      description,
-      images: image ? [{ url: image, alt }] : undefined,
-    },
-  };
+  return buildVehicleMetadata(vehicle);
 }
 
 export default async function VehiclePage({ params }: VehiclePageProps) {
-  const { id } = await params;
-  const vehicle = await getVehicle(id);
+  const { slug, vehicle } = await vehicleFromParams(params);
   if (!vehicle) notFound();
+
+  const canonicalPath = vehicleListingPath(vehicle);
+  if (`${LISTING_BASE_PATH}/${slug}` !== canonicalPath) permanentRedirect(canonicalPath);
 
   const title = `${vehicle.brandName} ${vehicle.modelName}`;
   // Satıcı kartı: okunamazsa sayfa kartsız çizilir
@@ -79,6 +58,11 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
     <main
       className={`${displayFont.variable} ${bodyFont.variable} min-h-dvh w-full bg-[#F2F3F5] text-[#15181C] [font-family:var(--font-body)]`}
     >
+      {/* schema.org Product + Car: Google fiyatı, modeli ve km'yi sonuçta gösterebilir */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(buildVehicleJsonLd(vehicle, currentSiteUrl())) }}
+      />
       <div className="mx-auto max-w-2xl px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(6rem+var(--bottom-nav-height))]">
         <div className="-ml-2 flex h-14 items-center justify-between">
           <BackButton />
@@ -144,6 +128,7 @@ export default async function VehiclePage({ params }: VehiclePageProps) {
       <VehiclePageActions
         vehicle={vehicle}
         sellerId={vehicle.sellerId}
+        sharePath={canonicalPath}
         shareTitle={buildVehicleTitle(vehicle)}
         shareText={buildVehicleShareText(vehicle)}
       />

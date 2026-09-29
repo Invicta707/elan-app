@@ -5,7 +5,7 @@ import Image from "next/image";
 import type { MouseEvent } from "react";
 import { formatListingDate, type PortalVehicle } from "../../lib/portal";
 import { currencySymbol, formatAmount } from "../../lib/search";
-import { vehiclePath } from "../../lib/share";
+import { vehicleListingPath } from "../../lib/vehicle-slug";
 import { FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/vehicle-labels";
 import { ListingBadges } from "./PortalCard";
 
@@ -49,7 +49,7 @@ export default function PortalPhotoCard({
   return (
     <a
       ref={linkRef}
-      href={vehiclePath(vehicle.id)}
+      href={vehicleListingPath(vehicle)}
       onClick={handleClick}
       aria-haspopup="dialog"
       data-photo-card={vehicle.id}

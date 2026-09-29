@@ -17,6 +17,7 @@ import {
   LISTING_REJECTED_MESSAGE,
 } from "../../lib/content-moderation";
 import { formatTilePrice, isContentRejected } from "../../lib/showcase";
+import { vehicleIdPath } from "../../lib/vehicle-slug";
 import BottomSheet, { type SheetAction } from "../ui/BottomSheet";
 
 // Vitrindeki bir ilanın menüsü: görüntüle, akışta gör, durum değiştir.
@@ -114,7 +115,7 @@ export default function ListingManageSheet({
     actions.push({
       label: "İlanı görüntüle",
       icon: <ExternalLink className="h-5 w-5" />,
-      onSelect: () => router.push(`/vehicles/${listing.id}`),
+      onSelect: () => router.push(vehicleIdPath(listing.id)),
     });
     if (listing.hasPlayableVideo) {
       actions.push({ label: "Akışta gör", icon: <CirclePlay className="h-5 w-5" />, onSelect: () => router.push(`/?v=${listing.id}`) });

@@ -6,6 +6,7 @@ import { AuthModalPortal } from "./AuthGatedLink";
 import FeedHeader from "./FeedHeader";
 import VideoFeed from "./VideoFeed";
 import FeedFilterButton, { FilteredFeedEmpty } from "./feed/FeedFilterButton";
+import InstallAppButton from "./pwa/InstallAppButton";
 import DesktopPortal, { DesktopPortalSkeleton } from "./portal/DesktopPortal";
 import FeedTabs, { type FeedTab } from "./social/FeedTabs";
 import FollowingEmpty from "./social/FollowingEmpty";
@@ -144,6 +145,8 @@ function MobileHome({
       <FeedHeader center={<FeedTabs active={tab} onChange={selectTab} panelIds={PANEL_IDS} />} />
 
       {!followingVisible && <FeedFilterButton home={home} onApply={applyFilters} />}
+      {/* "Filtrele"nin altında; tarayıcı kurulum olayı gelmediyse çizilmez */}
+      {!followingVisible && <InstallAppButton />}
 
       {showAuth &&
         createPortal(

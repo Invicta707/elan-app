@@ -22,6 +22,8 @@ export type FeedVehicle = {
   fuelType: FuelType;
   transmission: TransmissionType;
   city: string | null;
+  /** Kasa tipi: ilanın /ilan/… adresinde (lib/vehicle-slug.ts); yalnızca biliniyorsa yazılır */
+  bodyType?: BodyType | null;
   tramerAmount: number;
   hasHeavyDamage: boolean;
   paintedPartsCount: number;
@@ -58,6 +60,7 @@ type FeedRow = {
   fuel_type: FuelType;
   transmission: TransmissionType;
   city: string | null;
+  body_type?: BodyType | null;
   tramer_amount: number | string;
   has_heavy_damage: boolean;
   painted_parts_count: number;
@@ -74,7 +77,7 @@ type FeedRow = {
 // Satıcı, RLS izin verdiği için status'ü elle 'active' yapsa bile
 // videosuz bir ilan feed'e sızmaz.
 const FEED_COLUMNS = `
-  id, seller_id, created_at, year, price, currency, mileage_km, fuel_type, transmission, city,
+  id, seller_id, created_at, year, price, currency, mileage_km, fuel_type, transmission, city, body_type,
   tramer_amount, has_heavy_damage, painted_parts_count, changed_parts_count, comments_count, is_test, views_count,
   brand:brands(name),
   model:models(name),
@@ -175,6 +178,7 @@ function toFeedVehicle(row: FeedRow): FeedVehicle | null {
     fuelType: row.fuel_type,
     transmission: row.transmission,
     city: row.city,
+    ...(row.body_type ? { bodyType: row.body_type } : {}),
     tramerAmount: Number(row.tramer_amount),
     hasHeavyDamage: row.has_heavy_damage,
     paintedPartsCount: row.painted_parts_count,

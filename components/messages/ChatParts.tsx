@@ -16,6 +16,7 @@ import {
 } from "../../lib/messages";
 import { formatTilePrice } from "../../lib/showcase";
 import { profilePath } from "../../lib/username";
+import { vehicleIdPath } from "../../lib/vehicle-slug";
 import Avatar from "../ui/Avatar";
 
 // Sohbet ekranının sunum parçaları (veri ve Realtime: ChatView).
@@ -187,7 +188,7 @@ export function ChatHeader({
         <div className="mt-1.5 px-1">
           {live ? (
             <Link
-              href={`/vehicles/${listing.id}`}
+              href={vehicleIdPath(listing.id)}
               className="block rounded-2xl transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399]"
             >
               {card}

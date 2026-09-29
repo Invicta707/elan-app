@@ -119,6 +119,7 @@ export function toFavoriteCard(row: MyListingRow): VehicleCardData {
     currency: row.currency,
     mileageKm: row.mileage_km,
     city: row.city,
+    ...(row.body_type ? { bodyType: row.body_type } : {}),
     coverImageUrl: listing.coverUrl,
     videoThumbnailUrl: null,
     hasPlayableVideo: listing.hasPlayableVideo,
@@ -139,7 +140,7 @@ export async function fetchFavoriteVehicles(ids: readonly string[]): Promise<Veh
     const { data, error } = await supabase
       .from("vehicles")
       .select(
-        `id, status, year, price, currency, mileage_km, city, created_at,
+        `id, status, year, price, currency, mileage_km, city, body_type, created_at,
          brand:brands(name),
          model:models(name),
          images:vehicle_images(image_url, is_primary, display_order),

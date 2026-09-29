@@ -20,6 +20,7 @@ import {
 import { REPORT_REASONS } from "../lib/reports";
 import { currencySymbol, formatAmount } from "../lib/search";
 import { supabase } from "../lib/supabase";
+import { vehicleIdPath } from "../lib/vehicle-slug";
 
 // /admin/reports: içerik denetimi kuyruğu (components/moderation/PendingListingsSection.tsx),
 // açık ilan bildirimleri, yorum şikayetleri (components/moderation/CommentReportsSection.tsx)
@@ -171,7 +172,7 @@ function ReportCard({ item, onResolved }: { item: ModerationItem; onResolved: (m
   const [error, setError] = useState<string | null>(null);
 
   const { vehicle, reports } = item;
-  const vehicleUrl = `/vehicles/${vehicle.id}`;
+  const vehicleUrl = vehicleIdPath(vehicle.id);
   const alreadyRemoved = vehicle.status === "rejected";
 
   async function run(input: ModerationAction, doneMessage: string) {

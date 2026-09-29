@@ -249,7 +249,8 @@ function renderCard(item: PortalVehicle = vehicle("a"), previewEnabled = true) {
 describe("PortalCard", () => {
   it("dikey kapak, başlık, fiyat, yıl/km, il ve eklenme günü; bağlantı ilan sayfası", () => {
     const { link } = renderCard();
-    expect(link.getAttribute("href")).toBe("/vehicles/a");
+    // Okunabilir ilan adresi: /ilan/<yıl>-<marka>-<model>-<il>-<id>
+    expect(link.getAttribute("href")).toBe("/ilan/2019-bmw-model-a-istanbul-a");
     expect(link.querySelector("img")?.getAttribute("src")).toBe("https://video/a.jpg");
     expect(link.textContent).toContain("BMW Model a");
     expect(link.textContent).toContain("1.250.000");

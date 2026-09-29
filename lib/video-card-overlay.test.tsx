@@ -43,6 +43,7 @@ vi.mock("./feed", () => feedApi);
 import VideoCard from "../components/VideoCard";
 import type { FeedVehicle } from "./feed";
 import { resetSound, setSoundMuted } from "./sound";
+import { toggleFavorite } from "./use-favorites";
 
 const vehicle: FeedVehicle = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -115,17 +116,27 @@ describe("mobil bilgi şeridi", () => {
 });
 
 describe("sağ sütun", () => {
-  it("Favori, Yorum, Paylaş, WhatsApp, Detaylar, Bildir ve Ses; etiketler ince ve 11,5 px", () => {
+  it("Beğen, Yorum, Paylaş, WhatsApp, Detaylar, Bildir ve Ses; etiketler ince ve 11,5 px", () => {
     renderCard();
-    for (const name of ["Favorilere ekle", "Yorumlar (3)", "İlanı paylaş", "WhatsApp'tan yaz", "İlan detayları ve fotoğraflar", "İlanı bildir", "Sesi aç"]) {
+    for (const name of ["Beğen, favorilere ekle", "Yorumlar (3)", "İlanı paylaş", "WhatsApp'tan yaz", "İlan detayları ve fotoğraflar", "İlanı bildir", "Sesi aç"]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
-    const label = within(screen.getByRole("button", { name: "Favorilere ekle" })).getByText("Favori");
+    // Masaüstü Shorts sütunuyla aynı etiket; eski "Favori" yazısı kalmadı
+    const like = screen.getByRole("button", { name: "Beğen, favorilere ekle" });
+    expect(like.textContent).toBe("Beğen");
+    expect(within(screen.getByRole("article")).queryByText("Favori")).toBeNull();
+    const label = within(like).getByText("Beğen");
     expect(label.className).toContain("text-[11.5px]");
     expect(label.className).toContain("font-medium");
     // Simge 26 px, dokunma alanı 44 px genişliğinde
     expect(screen.getByRole("button", { name: "Yorumlar (3)" }).className).toContain("w-11");
     expect(screen.getByRole("button", { name: "Yorumlar (3)" }).querySelector("svg")?.getAttribute("class")).toContain("h-[26px]");
+  });
+
+  it("Beğen yine favorilere ekler (işlev aynı)", () => {
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "Beğen, favorilere ekle" }));
+    expect(toggleFavorite).toHaveBeenCalledWith(vehicle.id);
   });
 
   it("WhatsApp sütundan açılır; numara yoksa bilgi şeridinde uyarı", async () => {

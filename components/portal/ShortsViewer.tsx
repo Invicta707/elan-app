@@ -451,7 +451,7 @@ function ActionColumn({
         </span>
       </button>
 
-      <ShareButton vehicleId={vehicle.id} title={title} text={buildVehicleShareText(vehicle)} variant="shorts" />
+      <ShareButton vehicle={vehicle} title={title} text={buildVehicleShareText(vehicle)} variant="shorts" />
 
       <button
         type="button"

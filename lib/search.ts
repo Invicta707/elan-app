@@ -120,7 +120,10 @@ export type VehicleCardData = Pick<
   | "coverImageUrl"
   | "videoThumbnailUrl"
   | "hasPlayableVideo"
->;
+> & {
+  /** Kasa tipi (arama sonucunda var, favori kartında yok): ilanın /ilan/… adresinde */
+  bodyType?: BodyType | null;
+};
 
 export type SearchPage = {
   items: VehicleSearchResult[];

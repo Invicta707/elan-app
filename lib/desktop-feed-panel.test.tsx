@@ -152,12 +152,15 @@ describe("DesktopFeedPanel", () => {
     expect(screen.getByText("Dizel")).toBeTruthy();
     expect(screen.getByText("Otomatik")).toBeTruthy();
     expect(screen.getByText("2 parça boyalı")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "İlan sayfasını aç" }).getAttribute("href")).toBe(`/vehicles/${vehicle.id}`);
     expect(screen.getByText("@nihad")).toBeTruthy();
     expect(screen.getByRole("button", { name: "@nihad adlı kullanıcıyı takip et" })).toBeTruthy();
 
     expect(await screen.findByText("Hasar boya yok.")).toBeTruthy();
     expect(screen.getByText("Sedan")).toBeTruthy();
+    // İlan sayfası bağlantısı: kasa tipi detaylarla gelince tam (canonical) adres
+    expect(screen.getByRole("link", { name: "İlan sayfasını aç" }).getAttribute("href")).toBe(
+      `/ilan/2013-bmw-5-serisi-sedan-isparta-${vehicle.id}`,
+    );
     // Yorumlar pencere açmadan listelenir; yazma yerine misafirde giriş düğmesi
     expect(await screen.findByText("Takas olur mu?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "@alici yorumunu şikayet et" })).toBeTruthy();

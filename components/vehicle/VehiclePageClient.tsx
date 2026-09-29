@@ -8,7 +8,7 @@ import { useSellerContact } from "./useSellerContact";
 import WhatsAppButton from "./WhatsAppButton";
 import type { SellerContactVehicle } from "../../lib/feed";
 
-// /vehicles/[id] sayfasının etkileşimli parçaları; sayfanın geri kalanı sunucuda çizilir.
+// /ilan/[slug] sayfasının etkileşimli parçaları; sayfanın geri kalanı sunucuda çizilir.
 
 export function VehiclePageGallery({ photos, title }: { photos: string[]; title: string }) {
   // Tam ekran görüntüleyici body'ye çizilir; sunucuda null (görüntüleyici
@@ -20,11 +20,14 @@ export function VehiclePageGallery({ photos, title }: { photos: string[]; title:
 export function VehiclePageActions({
   vehicle,
   sellerId,
+  sharePath,
   shareTitle,
   shareText,
 }: {
   vehicle: SellerContactVehicle;
   sellerId: string | null;
+  /** İlanın tam adresi (/ilan/…): paylaşılan bağlantı */
+  sharePath: string;
   shareTitle: string;
   shareText: string;
 }) {
@@ -41,7 +44,7 @@ export function VehiclePageActions({
         </div>
         {/* İki iletişim yolu eşit ağırlıkta; paylaş yalnızca simge */}
         <div className="@container flex gap-2">
-          <ShareButton vehicleId={vehicle.id} title={shareTitle} text={shareText} variant="icon" className="shrink-0" />
+          <ShareButton path={sharePath} title={shareTitle} text={shareText} variant="icon" className="shrink-0" />
           <MessageSellerButton vehicleId={vehicle.id} sellerId={sellerId} onNotice={setMessageNotice} className="min-w-0 flex-1" />
           <WhatsAppButton onClick={contact} isContacting={isContacting} className="min-w-0 flex-1" />
         </div>

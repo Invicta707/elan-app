@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { MyListing } from "../../lib/my-listings";
 import { formatCount, formatTilePrice, isAwaitingApproval, isContentRejected, isLive, tileBadge } from "../../lib/showcase";
+import { vehicleIdPath } from "../../lib/vehicle-slug";
 
 // Vitrinim ızgarasının dikey karesi (Reels / TikTok profili gibi): video
 // kapağı, sol altta cam efektli fiyat, sağ altta görüntülenme. Yayındaki ilan
@@ -82,7 +83,7 @@ export default function ShowcaseTile({
   return (
     <div className="relative">
       {live || !onManage ? (
-        <Link href={`/vehicles/${listing.id}`} aria-label={label} className={surface}>
+        <Link href={vehicleIdPath(listing.id)} aria-label={label} className={surface}>
           {body}
         </Link>
       ) : (

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { STATUS_LABELS, type VehicleStatus } from "../../lib/listing-status";
 import { deleteAllTestListings, fetchTestListings, formatRelativeTime, type TestListing } from "../../lib/moderation";
 import { currencySymbol, formatAmount } from "../../lib/search";
+import { vehicleIdPath } from "../../lib/vehicle-slug";
 
 // /admin/reports → "Test ilanları": vitrini gerçek veriyle denemek için açılan
 // deneme ilanları (vehicles.is_test, scripts/seed-test-listings.mjs). Kartta ve
@@ -183,7 +184,7 @@ function TestListingRowView({ item }: { item: TestListing }) {
         {item.coverUrl && <Image src={item.coverUrl} alt="" fill sizes="48px" className="object-cover" />}
       </span>
       <span className="min-w-0 flex-1">
-        <a href={`/vehicles/${item.id}`} className="block truncate text-[15px] font-semibold text-[#15181C] hover:underline">
+        <a href={vehicleIdPath(item.id)} className="block truncate text-[15px] font-semibold text-[#15181C] hover:underline">
           {item.year} {item.title}
         </a>
         <span className="block truncate text-[13px] text-[#5B616B]">

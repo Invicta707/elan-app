@@ -4,8 +4,9 @@ import type { VehicleStatus } from "./listing-status";
 import { currencySymbol, formatAmount, type BodyType } from "./search";
 import { supabase } from "./supabase";
 import { FUEL_LABELS, TRANSMISSION_LABELS } from "./vehicle-labels";
+import { vehicleIdPath, vehicleListingPath } from "./vehicle-slug";
 
-// /vehicles/[id]: paylaşılabilir ilan sayfasının verisi ve SEO/OpenGraph metinleri.
+// /ilan/[slug]: paylaşılabilir ilan sayfasının verisi ve SEO/OpenGraph metinleri.
 
 export type VehicleSpecs = {
   brandName: string;
@@ -111,6 +112,41 @@ export async function fetchVehiclePage(id: string): Promise<VehiclePageData | nu
 
   if (error) throw error;
   return data ? toVehiclePage(data as unknown as VehiclePageRow) : null;
+}
+
+type ListingPathRow = {
+  id: string;
+  year: number;
+  body_type: BodyType | null;
+  city: string | null;
+  brand: { name: string } | null;
+  model: { name: string } | null;
+};
+
+/**
+ * Eski /vehicles/<id> adresinin 301 hedefi: ilanın tam /ilan/… yolu. İlan
+ * okunamazsa (yayında değil, yok, kimlik bozuk) /ilan/<id>: orası 404 verir.
+ */
+export async function fetchListingPath(id: string): Promise<string> {
+  if (!isUuid(id)) return vehicleIdPath(id);
+
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("id, year, body_type, city, brand:brands(name), model:models(name)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) console.error("İlan adresi okunamadı:", error);
+  if (error || !data) return vehicleIdPath(id.toLowerCase());
+  const row = data as unknown as ListingPathRow;
+  return vehicleListingPath({
+    id: row.id,
+    year: row.year,
+    brandName: row.brand?.name ?? "",
+    modelName: row.model?.name ?? "",
+    bodyType: row.body_type,
+    city: row.city,
+  });
 }
 
 // ---------------------------------------------------------------

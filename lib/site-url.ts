@@ -37,6 +37,17 @@ export function resolveSiteUrl(env: SiteUrlEnv): URL {
   return fallback;
 }
 
+/** Sunucuda çalışan kod için (metadataBase, sitemap, robots, JSON-LD): ortamdan okunan kök adres */
+export function currentSiteUrl(): URL {
+  return resolveSiteUrl({
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    VERCEL_BRANCH_URL: process.env.VERCEL_BRANCH_URL,
+    VERCEL_URL: process.env.VERCEL_URL,
+  });
+}
+
 function fallbackUrl(env: SiteUrlEnv): URL {
   const previewHost =
     env.VERCEL_ENV === "preview" ? (env.VERCEL_BRANCH_URL?.trim() || env.VERCEL_URL?.trim()) : undefined;

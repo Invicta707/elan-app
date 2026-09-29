@@ -1,4 +1,4 @@
-// Akış kartının sağ düğme sütunu (Favori, Yorum, Paylaş, WhatsApp, Detaylar,
+// Akış kartının sağ düğme sütunu (Beğen, Yorum, Paylaş, WhatsApp, Detaylar,
 // Bildir, Ses) için ortak sınıflar.
 //
 // Mobil (< 1024 px, TikTok / Reels gibi): arka plansız 26 px beyaz simge, hafif

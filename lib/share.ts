@@ -23,10 +23,6 @@ export type ShareOutcome =
   | { kind: "cancelled" }
   | { kind: "fallback"; copied: boolean; whatsappOpened: boolean; whatsappUrl: string };
 
-export function vehiclePath(vehicleId: string): string {
-  return `/vehicles/${vehicleId}`;
-}
-
 /** WhatsApp paylaşım bağlantısı: telefonda uygulamayı, masaüstünde WhatsApp Web/Desktop'ı açar */
 export function whatsappShareUrl(data: Pick<ShareData, "text" | "url">): string {
   return `https://wa.me/?text=${encodeURIComponent(`${data.text} ${data.url}`)}`;

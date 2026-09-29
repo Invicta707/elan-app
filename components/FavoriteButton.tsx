@@ -22,7 +22,7 @@ const MESSAGES: Partial<Record<ToggleOutcome, string>> = {
 type FavoriteButtonProps = {
   vehicleId: string;
   /**
-   * overlay: dikey videonun üstünde, sağdaki buton sütununda (etiketli)
+   * overlay: dikey videonun üstünde, sağdaki buton sütununda ("Beğen" etiketli, Shorts'la aynı)
    * sheet: beyaz zeminde (detay çekmecesi)
    * page: açık gri zeminde (ilan sayfası)
    * card: grid kartının fotoğrafının üstünde
@@ -76,7 +76,7 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
         onClick={handleClick}
         aria-pressed={isFavorite}
         // Görünen etiket erişilebilir adın içinde kalır (WCAG 2.5.3)
-        aria-label={shorts ? "Beğen, favorilere ekle" : "Favorilere ekle"}
+        aria-label={shorts || overlay ? "Beğen, favorilere ekle" : "Favorilere ekle"}
         className={
           overlay
             ? ACTION_BUTTON
@@ -97,7 +97,7 @@ export default function FavoriteButton({ vehicleId, variant, className = "" }: F
         </span>
         {overlay && (
           <span aria-hidden="true" className={ACTION_LABEL}>
-            Favori
+            Beğen
           </span>
         )}
         {shorts && (

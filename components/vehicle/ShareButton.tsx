@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shareListing, shareMessage, vehiclePath, type ShareEnvironment } from "../../lib/share";
+import { shareListing, shareMessage, type ShareEnvironment } from "../../lib/share";
+import { vehicleListingPath, type ListingLinkInput } from "../../lib/vehicle-slug";
 import {
   ACTION_BUTTON,
   ACTION_ICON,
@@ -31,7 +32,7 @@ function browserShareEnvironment(): ShareEnvironment {
 }
 
 export default function ShareButton({
-  vehicleId,
+  vehicle,
   path,
   label = "İlanı paylaş",
   title,
@@ -39,7 +40,8 @@ export default function ShareButton({
   variant = "pill",
   className = "",
 }: {
-  vehicleId?: string;
+  /** Paylaşılan ilan: bağlantı ilanın tam /ilan/<yıl>-<marka>-<model>-<kasa>-<il>-<id> adresi */
+  vehicle?: ListingLinkInput;
   /** İlan dışında bir sayfa paylaşılıyorsa (ör. profil: /@kullanici_adi) */
   path?: string;
   /** Düğmenin erişilebilir adı */
@@ -67,7 +69,7 @@ export default function ShareButton({
   }, [message]);
 
   async function handleShare() {
-    const url = new URL(path ?? (vehicleId ? vehiclePath(vehicleId) : "/"), window.location.origin).toString();
+    const url = new URL(path ?? (vehicle ? vehicleListingPath(vehicle) : "/"), window.location.origin).toString();
     const outcome = await shareListing({ url, title, text }, browserShareEnvironment());
     const shown = shareMessage(outcome);
     setMessage(

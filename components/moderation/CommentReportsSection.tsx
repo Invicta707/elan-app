@@ -12,6 +12,7 @@ import {
 } from "../../lib/moderation";
 import { COMMENT_REPORT_REASONS } from "../../lib/reports";
 import { profilePath } from "../../lib/username";
+import { vehicleIdPath } from "../../lib/vehicle-slug";
 import Avatar from "../ui/Avatar";
 
 // /admin/reports → "Yorum şikayetleri" (Google Play kullanıcı içeriği politikası):
@@ -146,7 +147,7 @@ export function CommentReportCard({
   const [error, setError] = useState<string | null>(null);
   const { comment, vehicle, reports } = item;
   const author = comment.authorUsername ? `@${comment.authorUsername}` : (comment.authorDisplayName ?? "Kullanıcı");
-  const vehicleUrl = `/vehicles/${vehicle.id}`;
+  const vehicleUrl = vehicleIdPath(vehicle.id);
 
   async function run(input: CommentModerationAction, doneMessage: string) {
     setConfirmingDelete(false);

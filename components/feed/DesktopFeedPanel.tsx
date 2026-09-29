@@ -11,6 +11,7 @@ import { getCommentCount, setCommentCount } from "../../lib/use-comment-counts";
 import { useSellerProfile } from "../../lib/use-follow";
 import { profilePath } from "../../lib/username";
 import { BODY_TYPE_LABELS, FUEL_LABELS, TRANSMISSION_LABELS } from "../../lib/vehicle-labels";
+import { vehicleListingPath } from "../../lib/vehicle-slug";
 import { CommentComposerArea, CommentList, CommentListError, CommentThreadDialogs } from "../comments/CommentThreadView";
 import { useCommentThread } from "../comments/useCommentThread";
 import FollowButton from "../social/FollowButton";
@@ -121,7 +122,7 @@ function VehiclePanel({
               {title}
             </h2>
             <Link
-              href={`/vehicles/${vehicle.id}`}
+              href={vehicleListingPath({ ...vehicle, bodyType: vehicle.bodyType ?? details?.bodyType })}
               aria-label="İlan sayfasını aç"
               title="İlan sayfasını aç"
               className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#A1A1AA] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"

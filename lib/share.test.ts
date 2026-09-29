@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { shareListing, shareMessage, vehiclePath, whatsappShareUrl, type ShareEnvironment } from "./share";
+import { shareListing, shareMessage, whatsappShareUrl, type ShareEnvironment } from "./share";
 
-const data = { url: "https://gozuyle.test/vehicles/veh-1", title: "2021 Porsche 911", text: "gözüyle'de 2021 Porsche 911" };
+const data = { url: "https://gozuyle.test/ilan/2021-porsche-911-veh-1", title: "2021 Porsche 911", text: "gözüyle'de 2021 Porsche 911" };
 const WHATSAPP = whatsappShareUrl(data);
 
 function env(overrides: Partial<ShareEnvironment> & { nav?: ShareEnvironment["nav"] } = {}): ShareEnvironment {
@@ -104,11 +104,5 @@ describe("shareMessage", () => {
     expect(shareMessage(fallback(true, false))).toEqual({ text: "Bağlantı kopyalandı.", showWhatsappLink: true });
     expect(shareMessage(fallback(false, true))?.showWhatsappLink).toBe(false);
     expect(shareMessage(fallback(false, false))?.showWhatsappLink).toBe(true);
-  });
-});
-
-describe("vehiclePath", () => {
-  it("paylaşılan kalıcı ilan adresi", () => {
-    expect(vehiclePath("veh-1")).toBe("/vehicles/veh-1");
   });
 });

@@ -3,7 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BottomNav from "../components/BottomNav";
 import UsernameOnboarding from "../components/profile/UsernameOnboarding";
-import { resolveSiteUrl } from "../lib/site-url";
+import InstallPromptCapture from "../components/pwa/InstallPromptCapture";
+import { currentSiteUrl } from "../lib/site-url";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,13 +20,7 @@ export const metadata: Metadata = {
   // OpenGraph/canonical gibi göreli URL'ler bu adrese göre tamamlanır. Özel alan
   // adında NEXT_PUBLIC_SITE_URL (ör. https://gozuyle.com) tanımlanmalı; boş ya da
   // bozuksa build düşmez, Vercel'in alan adına düşülür (bkz. lib/site-url.ts).
-  metadataBase: resolveSiteUrl({
-    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
-    VERCEL_ENV: process.env.VERCEL_ENV,
-    VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
-    VERCEL_BRANCH_URL: process.env.VERCEL_BRANCH_URL,
-    VERCEL_URL: process.env.VERCEL_URL,
-  }),
+  metadataBase: currentSiteUrl(),
   title: "gözüyle | Videolu araç ilanları",
   description: "Araçları kısa videolarla keşfet, satıcıya tek dokunuşla WhatsApp'tan yaz.",
   // Ana ekrana ekleme ve Play Store (TWA) paketi bu manifest'i okur
@@ -35,9 +30,9 @@ export const metadata: Metadata = {
   appleWebApp: { title: "gözüyle", statusBarStyle: "black" },
 };
 
-// Tarayıcı çubuğu / uygulama başlığı rengi: manifest'teki theme_color ile aynı
+// Tarayıcı çubuğu / uygulama başlığı rengi: manifest'teki theme_color ile aynı (siyah)
 export const viewport: Viewport = {
-  themeColor: "#121212",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -51,6 +46,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <BottomNav />
         {/* Giriş yapmış, kullanıcı adı olmayan kullanıcıya bir kez sorulur */}
         <UsernameOnboarding />
+        {/* "Uygulamayı yükle": tarayıcının kurulum olayı her sayfada yakalanır */}
+        <InstallPromptCapture />
       </body>
     </html>
   );

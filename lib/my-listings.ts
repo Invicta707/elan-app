@@ -1,4 +1,5 @@
 import type { ModerationStatus, VehicleStatus } from "./listing-status";
+import type { BodyType } from "./search";
 import { supabase } from "./supabase";
 
 // "Vitrinim": giriş yapan satıcının ilanları ve durum değişikliği.
@@ -33,6 +34,8 @@ export type MyListingRow = {
   currency: string;
   mileage_km: number;
   city: string | null;
+  /** Favori kartı sorgusunda: ilanın /ilan/… adresi için */
+  body_type?: BodyType | null;
   created_at: string;
   views_count?: number | null;
   brand: { name: string } | null;

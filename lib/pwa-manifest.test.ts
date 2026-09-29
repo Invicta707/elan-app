@@ -22,7 +22,9 @@ describe("PWA manifest", () => {
       name: "gözüyle",
       display: "standalone",
       start_url: "/",
-      theme_color: "#121212",
+      orientation: "portrait",
+      theme_color: "#000000",
+      background_color: "#000000",
     });
     expect(manifest.short_name).toBeTruthy();
   });

@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { currencySpoken, currencySymbol, formatAmount, type VehicleCardData } from "../lib/search";
-import { vehiclePath } from "../lib/share";
+import { vehicleListingPath } from "../lib/vehicle-slug";
 
 // Arama sonuçları ve favoriler grid'indeki ilan kartı. Kancasız: hem sunucu hem
 // istemci bileşenlerinde kullanılabilir.
@@ -24,7 +24,7 @@ export default function VehicleGridCard({
   return (
     <div className="relative">
       <Link
-        href={vehiclePath(vehicle.id)}
+        href={vehicleListingPath(vehicle)}
         className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003399] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F2F3F5]"
       >
         <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-[#DDE1E6]">

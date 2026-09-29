@@ -341,7 +341,7 @@ function Sheet({ vehicle, onClose, onContact, isContacting, notice }: VehicleDet
           {/* İki iletişim yolu eşit ağırlıkta; paylaş yalnızca simge */}
           <div className="@container flex gap-2">
             <ShareButton
-              vehicleId={vehicle.id}
+              vehicle={vehicle}
               title={title}
               text={buildVehicleShareText(vehicle)}
               variant="icon"

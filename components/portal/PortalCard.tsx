@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { PREVIEW_DELAY_MS, PREVIEW_LOOP_SECONDS, formatListingDate, previewLoopTime, type PortalVehicle } from "../../lib/portal";
 import { formatAmount } from "../../lib/search";
-import { vehiclePath } from "../../lib/share";
+import { vehicleListingPath } from "../../lib/vehicle-slug";
 import { useHlsVideo } from "../../lib/use-hls-video";
 import VideoPlayMark from "../brand/VideoPlayMark";
 import PricePlate from "../vehicle/PricePlate";
@@ -83,7 +83,7 @@ export default function PortalCard({
   return (
     <a
       ref={linkRef}
-      href={vehiclePath(vehicle.id)}
+      href={vehicleListingPath(vehicle)}
       onClick={handleClick}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}

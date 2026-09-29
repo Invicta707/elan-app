@@ -370,7 +370,7 @@ export default function VideoCard({ vehicle, isActive, shouldLoad }: VideoCardPr
               <CommentButton vehicleId={vehicle.id} count={commentsCount} onCountChange={handleCommentsCount} />
 
               <ShareButton
-                vehicleId={vehicle.id}
+                vehicle={vehicle}
                 title={title}
                 text={buildVehicleShareText(vehicle)}
                 variant="overlay"
