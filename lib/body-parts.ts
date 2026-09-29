@@ -76,3 +76,50 @@ export function bodyPartStates(counts: Counts, parts: BodyPartMap | null | undef
 export function bodyPartsUnknown(counts: Counts, parts: BodyPartMap | null | undefined): boolean {
   return !parts && (counts.paintedPartsCount > 0 || counts.changedPartsCount > 0);
 }
+
+// ---------------------------------------------------------------
+// /sell: satıcının seçtiği parçalar
+// ---------------------------------------------------------------
+
+/** Parçanın durumunu değiştirir; orijinal seçilince listeden çıkar (listede yalnızca orijinal olmayanlar) */
+export function setBodyPart(parts: BodyPartMap, key: BodyPartKey, status: BodyPartStatus): BodyPartMap {
+  const next: BodyPartMap = { ...parts };
+  if (status === "original") delete next[key];
+  else next[key] = status;
+  return next;
+}
+
+/** Boyalı (lokal + tam) ve değişen parça sayısı: ilanın painted/changed_parts_count'u (veritabanı da aynı hesabı yapar) */
+export function bodyPartCounts(parts: BodyPartMap): { paintedPartsCount: number; changedPartsCount: number } {
+  let paintedPartsCount = 0;
+  let changedPartsCount = 0;
+  for (const status of Object.values(parts)) {
+    if (status === "local_paint" || status === "painted") paintedPartsCount += 1;
+    else if (status === "changed") changedPartsCount += 1;
+  }
+  return { paintedPartsCount, changedPartsCount };
+}
+
+/** Seçicinin ve /sell özet kartının tek satırı: "Bütün parçalar orijinal" ya da "2 parça boyalı · Değişensiz" */
+export function bodyPartsSummary(parts: BodyPartMap): string {
+  const { paintedPartsCount, changedPartsCount } = bodyPartCounts(parts);
+  if (paintedPartsCount === 0 && changedPartsCount === 0) return "Bütün parçalar orijinal";
+  return [
+    paintedPartsCount > 0 ? `${paintedPartsCount} parça boyalı` : "Boyasız",
+    changedPartsCount > 0 ? `${changedPartsCount} parça değişen` : "Değişensiz",
+  ].join(" · ");
+}
+
+/**
+ * vehicles.expertise_summary'ye yazılacak nesne: { parts: { ... } }, yalnızca
+ * orijinal olmayan parçalar, BODY_PARTS sırasıyla (JSON hep aynı çıksın).
+ * Detay çekmecesi parseBodyParts ile aynen okur.
+ */
+export function expertiseSummary(parts: BodyPartMap): { parts: BodyPartMap } {
+  const ordered: BodyPartMap = {};
+  for (const { key } of BODY_PARTS) {
+    const status = parts[key];
+    if (status && status !== "original" && STATUSES.has(status)) ordered[key] = status;
+  }
+  return { parts: ordered };
+}

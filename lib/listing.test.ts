@@ -116,6 +116,27 @@ describe("buildListingRecords", () => {
     });
   });
 
+  it("boya/değişen şeması: sayılar ve expertise_summary.parts (orijinaller yazılmaz, sıra sabit)", () => {
+    const { vehicle } = buildListingRecords("user-1", {
+      ...validDraft,
+      bodyParts: { trunk: "changed", hood: "painted", roof: "original", front_bumper: "local_paint" },
+    });
+    expect(vehicle).toMatchObject({
+      painted_parts_count: 2,
+      changed_parts_count: 1,
+      expertise_summary: { parts: { front_bumper: "local_paint", hood: "painted", trunk: "changed" } },
+    });
+    expect(Object.keys(vehicle.expertise_summary?.parts ?? {})).toEqual(["front_bumper", "hood", "trunk"]);
+  });
+
+  it("şemaya dokunulmayan yeni ilan (boş seçim): bütün parçalar orijinal, sayılar 0", () => {
+    const { vehicle } = buildListingRecords("user-1", { ...EMPTY_LISTING_DRAFT, ...validDraft, bodyParts: {} });
+    expect(vehicle).toMatchObject({ painted_parts_count: 0, changed_parts_count: 0, expertise_summary: { parts: {} } });
+    // Şemasız eski çağıranlar (bodyParts verilmedi) ekspertiz alanlarına dokunmaz
+    expect(buildListingRecords("user-1", validDraft).vehicle).not.toHaveProperty("expertise_summary");
+    expect(EMPTY_LISTING_DRAFT.bodyParts).toEqual({});
+  });
+
   it("katalog seçiminde id'ler doğrudan yazılır; yazılan adda RPC'ye ad gider", () => {
     const fromCatalog = buildListingRecords("user-1", validDraft).catalog;
     expect(catalogIds(fromCatalog)).toEqual({ brand_id: "brand-1", model_id: "model-1" });

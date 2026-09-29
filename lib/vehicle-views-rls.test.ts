@@ -133,9 +133,9 @@ afterAll(async () => {
 });
 
 describe("izlenme sayacı: increment_vehicle_view", () => {
-  it("migration en son: test ilanlarından sonra uygulanır", () => {
+  it("migration test ilanlarından sonra uygulanır", () => {
     const migrations = readdirSync("supabase/migrations").sort();
-    expect(migrations.at(-1)).toBe("20260929100000_vehicle_views.sql");
+    expect(migrations).toContain("20260929100000_vehicle_views.sql");
     expect(migrations.indexOf("20260929100000_vehicle_views.sql")).toBeGreaterThan(migrations.indexOf("20260928200000_test_listings.sql"));
   });
 

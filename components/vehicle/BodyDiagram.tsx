@@ -10,6 +10,7 @@ import {
   type BodyPartMap,
   type BodyPartState,
 } from "../../lib/body-parts";
+import { CAR_TONES, CarChrome, SHAPES, STATE_COLORS, VIEW_H, VIEW_W, type BodyTone, type Rect } from "./carBody";
 
 // Boya / değişen şeması: aracın üstten görünüşü (burnu sağda; üst kenar sol
 // taraf, alt kenar sağ taraf), 13 parça ekspertiz renkleriyle. Parçanın
@@ -17,57 +18,13 @@ import {
 // görünür. Altında renk açıklaması. Masaüstü "İlan detayı" çekmecesi (koyu)
 // ve mobil detay penceresi (açık) aynı şemayı çizer.
 
-type Tone = "dark" | "light";
-type Rect = { x: number; y: number; w: number; h: number; r: number };
+type Tone = BodyTone;
 
-const VIEW_W = 460;
-const VIEW_H = 220;
-const SIDE_TOP = { y: 16, h: 30 };
-const SIDE_BOTTOM = { y: 174, h: 30 };
+export { STATE_COLORS };
 
-/** Parçaların yeri (viewBox 460×220) */
-const SHAPES: Record<BodyPartKey, Rect> = {
-  rear_bumper: { x: 10, y: 40, w: 26, h: 140, r: 12 },
-  trunk: { x: 42, y: 52, w: 70, h: 116, r: 10 },
-  roof: { x: 154, y: 54, w: 130, h: 112, r: 10 },
-  hood: { x: 326, y: 52, w: 92, h: 116, r: 10 },
-  front_bumper: { x: 424, y: 40, w: 26, h: 140, r: 12 },
-  left_rear_fender: { x: 40, w: 94, r: 8, ...SIDE_TOP },
-  left_rear_door: { x: 138, w: 88, r: 6, ...SIDE_TOP },
-  left_front_door: { x: 230, w: 88, r: 6, ...SIDE_TOP },
-  left_front_fender: { x: 322, w: 98, r: 8, ...SIDE_TOP },
-  right_rear_fender: { x: 40, w: 94, r: 8, ...SIDE_BOTTOM },
-  right_rear_door: { x: 138, w: 88, r: 6, ...SIDE_BOTTOM },
-  right_front_door: { x: 230, w: 88, r: 6, ...SIDE_BOTTOM },
-  right_front_fender: { x: 322, w: 98, r: 8, ...SIDE_BOTTOM },
-};
-
-/** Ekspertiz renkleri: orijinal yeşil, lokal boyalı sarı, boyalı turuncu, değişen kırmızı */
-export const STATE_COLORS: Record<BodyPartState, Record<Tone, string>> = {
-  original: { dark: "#22C55E", light: "#22C55E" },
-  local_paint: { dark: "#EAB308", light: "#EAB308" },
-  painted: { dark: "#F97316", light: "#F97316" },
-  changed: { dark: "#EF4444", light: "#EF4444" },
-  unknown: { dark: "#52525B", light: "#C9CED6" },
-};
-
-const TONES: Record<Tone, { edge: string; glass: string; wheel: string; tooltip: string; legend: string; note: string }> = {
-  dark: {
-    edge: "#18181B",
-    glass: "#27272A",
-    wheel: "#09090B",
-    tooltip: "bg-white text-[#121212]",
-    legend: "text-[#D4D4D8]",
-    note: "text-[#A1A1AA]",
-  },
-  light: {
-    edge: "#FFFFFF",
-    glass: "#E4E7EB",
-    wheel: "#3F3F46",
-    tooltip: "bg-[#15181C] text-white",
-    legend: "text-[#2A2F36]",
-    note: "text-[#5B6470]",
-  },
+const TONES: Record<Tone, { edge: string; tooltip: string; legend: string; note: string }> = {
+  dark: { edge: CAR_TONES.dark.edge, tooltip: "bg-white text-[#121212]", legend: "text-[#D4D4D8]", note: "text-[#A1A1AA]" },
+  light: { edge: CAR_TONES.light.edge, tooltip: "bg-[#15181C] text-white", legend: "text-[#2A2F36]", note: "text-[#5B6470]" },
 };
 
 const LEGEND: BodyPartState[] = ["original", "local_paint", "painted", "changed"];
@@ -110,14 +67,7 @@ export default function BodyDiagram({
       <div className="relative mx-auto w-full max-w-[380px]" onPointerLeave={(event) => event.pointerType === "mouse" && setActive(null)}>
         <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} role="group" aria-label="Boya ve değişen şeması" className="block h-auto w-full select-none">
           {/* Tekerlekler ve camlar: parça değil */}
-          {[60, 340].map((x) => (
-            <g key={x} aria-hidden="true" fill={t.wheel}>
-              <rect x={x} y={4} width={54} height={10} rx={5} />
-              <rect x={x} y={206} width={54} height={10} rx={5} />
-            </g>
-          ))}
-          <rect aria-hidden="true" x={116} y={58} width={34} height={104} rx={8} fill={t.glass} />
-          <rect aria-hidden="true" x={288} y={58} width={34} height={104} rx={8} fill={t.glass} />
+          <CarChrome tone={tone} />
 
           {BODY_PARTS.map(({ key, label }) => {
             const shape = SHAPES[key];
@@ -134,7 +84,7 @@ export default function BodyDiagram({
                 height={shape.h}
                 rx={shape.r}
                 fill={STATE_COLORS[state][tone]}
-                stroke={isActive ? (tone === "dark" ? "#FFFFFF" : "#15181C") : t.edge}
+                stroke={isActive ? CAR_TONES[tone].selected : t.edge}
                 strokeWidth={isActive ? 3 : 2}
                 tabIndex={0}
                 role="img"

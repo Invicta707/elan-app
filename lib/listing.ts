@@ -1,3 +1,4 @@
+import { bodyPartCounts, expertiseSummary, type BodyPartMap } from "./body-parts";
 import { MAX_BRAND_NAME, MAX_MODEL_NAME, catalogNameError, cleanCatalogName } from "./catalog-search";
 import type { FuelType, TransmissionType } from "./feed";
 import { normalizeTurkishPhone } from "./phone";
@@ -31,6 +32,12 @@ export type ListingDraft = {
   fuelType: FuelType | "";
   transmission: TransmissionType | "";
   damageStatus: DamageStatus;
+  /**
+   * Boya / değişen şeması (Araç Bilgileri adımı): yalnızca orijinal olmayan
+   * parçalar. Boyalı ve değişen parça sayısı buradan hesaplanır. Verilmezse
+   * (şemasız eski çağıranlar) ilanın ekspertiz alanlarına dokunulmaz.
+   */
+  bodyParts?: BodyPartMap;
   description: string;
   whatsapp: string;
 };
@@ -48,6 +55,7 @@ export const EMPTY_LISTING_DRAFT: ListingDraft = {
   fuelType: "",
   transmission: "",
   damageStatus: "none",
+  bodyParts: {},
   description: "",
   whatsapp: "",
 };
@@ -98,7 +106,7 @@ export function validateListingDraft(draft: ListingDraft, now: Date = new Date()
 
 /** Doğrulanan alanlar (hasar durumu her zaman geçerli; açıklama isteğe bağlı, yalnızca metin
  * filtresine bakılır; yazılan marka/model adı hatası marka/model alanında gösterilir) */
-export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "brandName" | "modelName">;
+export type ListingField = Exclude<keyof ListingDraft, "damageStatus" | "bodyParts" | "brandName" | "modelName">;
 export type ListingFieldErrors = Partial<Record<ListingField, string>>;
 
 /**
@@ -183,6 +191,11 @@ export type VehicleInsert = {
   fuel_type: FuelType;
   transmission: TransmissionType;
   has_heavy_damage: boolean;
+  /** Şemadan: boyalı (lokal + tam) ve değişen parça sayısı; veritabanı parçalardan yeniden hesaplar */
+  painted_parts_count?: number;
+  changed_parts_count?: number;
+  /** { parts: { hood: "painted", ... } } (20260929120000_expertise_parts.sql) */
+  expertise_summary?: { parts: BodyPartMap };
   description: string | null;
   // Video hazır olunca webhook (ya da yerelde /api/dev/complete-upload) ilanı
   // "active" yapar; fn_check_vehicle_publishable o geçişi denetler.
@@ -253,9 +266,21 @@ export function buildListingRecords(sellerId: string, draft: ListingDraft): List
       fuel_type: draft.fuelType,
       transmission: draft.transmission,
       has_heavy_damage: draft.damageStatus === "heavy",
+      ...(draft.bodyParts ? expertiseFields(draft.bodyParts) : {}),
       description: draft.description.trim() || null,
       status: "pending_video",
     },
+  };
+}
+
+/** Şemadan ilanın ekspertiz alanları: sayılar ve expertise_summary */
+function expertiseFields(parts: BodyPartMap) {
+  const summary = expertiseSummary(parts);
+  const counts = bodyPartCounts(summary.parts);
+  return {
+    painted_parts_count: counts.paintedPartsCount,
+    changed_parts_count: counts.changedPartsCount,
+    expertise_summary: summary,
   };
 }
 

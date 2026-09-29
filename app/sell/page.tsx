@@ -14,6 +14,7 @@ import {
   controlClass,
   describedBy,
 } from "../../components/sell/FormControls";
+import BodyPartsEditor from "../../components/sell/BodyPartsEditor";
 import { CatalogCombobox } from "../../components/sell/CatalogCombobox";
 import { PhotoDropzone, VideoDropzone } from "../../components/sell/MediaPickers";
 import {
@@ -25,6 +26,7 @@ import {
 } from "../../components/sell/SellChrome";
 import type { PickedPhoto, PickedVideo } from "../../components/sell/types";
 import { useSupabaseSession } from "../../lib/auth";
+import { bodyPartsSummary } from "../../lib/body-parts";
 import { MAX_BRAND_NAME, MAX_MODEL_NAME } from "../../lib/catalog-search";
 import type { FuelType, TransmissionType } from "../../lib/feed";
 import {
@@ -693,6 +695,19 @@ export default function SellPage() {
                 </Field>
               </div>
             </FormCard>
+
+            {/* Boyalı / değişen sayıları buradan hesaplanır (lib/body-parts.ts); satıcı ayrıca sayı girmez */}
+            <FormCard
+              title="Boya ve değişen"
+              tag={{ label: "İsteğe bağlı", tone: "optional" }}
+              description="Boyalı ya da değişen parça varsa şemada işaretle. Dokunmazsan bütün parçalar orijinal sayılır."
+            >
+              <BodyPartsEditor
+                id="sell-bodyParts"
+                value={draft.bodyParts ?? {}}
+                onChange={(bodyParts) => update({ bodyParts })}
+              />
+            </FormCard>
           </>
         ) : current.id === "media" ? (
           <>
@@ -823,6 +838,8 @@ export default function SellPage() {
                 <dd className="text-right font-semibold tabular-nums">
                   {draft.price ? `₺${groupThousands(draft.price)}` : "—"}
                 </dd>
+                <dt className="text-[#5B616B]">Boya / değişen</dt>
+                <dd className="text-right font-semibold">{bodyPartsSummary(draft.bodyParts ?? {})}</dd>
                 <dt className="text-[#5B616B]">Medya</dt>
                 <dd className="text-right font-semibold">
                   {video ? "Video" : "Video yok"}
