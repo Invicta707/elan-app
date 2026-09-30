@@ -253,9 +253,6 @@ describe("masaüstü Shorts oynatıcısı", () => {
       <ShortsViewer
         vehicle={portalVehicle}
         direction={0}
-        position={1}
-        total={1}
-        moreAvailable={false}
         hasPrev={false}
         hasNext={false}
         loadingNext={false}

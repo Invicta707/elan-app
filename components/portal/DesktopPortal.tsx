@@ -423,9 +423,6 @@ export default function DesktopPortal({
         <ShortsViewer
           vehicle={modal.vehicle}
           direction={modal.direction}
-          position={modalIndex === -1 ? null : modalIndex + 1}
-          total={modalList.items.length}
-          moreAvailable={modalList.hasMore}
           hasPrev={modalIndex > 0}
           hasNext={modalIndex === -1 ? modalList.items.length > 0 : modalIndex < modalList.items.length - 1 || modalList.hasMore}
           loadingNext={modalList.more === "loading"}

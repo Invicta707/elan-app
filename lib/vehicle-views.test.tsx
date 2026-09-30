@@ -254,9 +254,6 @@ describe("Shorts oynatıcısı: oynayınca sayar", () => {
       <ShortsViewer
         vehicle={vehicle}
         direction={0}
-        position={1}
-        total={1}
-        moreAvailable={false}
         hasPrev={false}
         hasNext={false}
         loadingNext={false}

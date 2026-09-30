@@ -60,9 +60,6 @@ type Leaving = { vehicle: PortalVehicle; direction: 1 | -1 };
 export default function ShortsViewer({
   vehicle,
   direction,
-  position,
-  total,
-  moreAvailable,
   hasPrev,
   hasNext,
   loadingNext,
@@ -73,11 +70,6 @@ export default function ShortsViewer({
   vehicle: PortalVehicle;
   /** Bu ilana hangi adımla gelindi: 1 sonraki, -1 önceki (kayarak geçiş), 0 ilk açılış */
   direction: -1 | 0 | 1;
-  /** Listede kaçıncı (1'den); liste dışından açıldıysa (bağlantı) null */
-  position: number | null;
-  total: number;
-  /** Listenin devamı var (sayaçta "+") */
-  moreAvailable: boolean;
   hasPrev: boolean;
   hasNext: boolean;
   /** Sonraki ilan için yeni sayfa bekleniyor */
@@ -252,25 +244,11 @@ export default function ShortsViewer({
             </SlideFrame>
           </div>
 
-          <div className="absolute top-4 left-4 z-20 flex items-center gap-3">
+          {/* Kaçıncı ilanda olunduğu ("3 / 20") gösterilmez: akış sonsuz bir keşif gibi durur */}
+          <div className="absolute top-4 left-4 z-20">
             <button type="button" onClick={close} aria-label="Vitrine dön" title="Vitrine dön (Esc)" className={roundButton}>
               <ArrowLeft aria-hidden="true" className="h-5 w-5" />
             </button>
-            <p aria-live="polite" data-shorts-counter="" className="text-[13.5px] text-[#A1A1AA]">
-              {position !== null ? (
-                <>
-                  <span className="font-semibold text-white tabular-nums">{position}</span>
-                  <span className="tabular-nums">
-                    {" "}
-                    / {total}
-                    {moreAvailable ? "+" : ""}
-                  </span>
-                  <span className="sr-only"> ilan</span>
-                </>
-              ) : (
-                "Paylaşılan ilan"
-              )}
-            </p>
           </div>
 
           <div className="absolute top-1/2 right-6 z-20 flex -translate-y-1/2 flex-col gap-3">

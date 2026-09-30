@@ -96,6 +96,8 @@ describe("mobil bilgi şeridi", () => {
       "100.000 km",
       "Isparta",
     ]);
+    // Akışta kaçıncı videoda olunduğu ("1 / 5") gösterilmez
+    expect(screen.getByRole("article").textContent).not.toMatch(/\d+\s*\/\s*\d+/);
   });
 
   it("yakıt, vites ve ekspertiz kartta yok (detaylarda); ağır hasar küçük kırmızı hapta", () => {

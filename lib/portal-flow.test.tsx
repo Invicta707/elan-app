@@ -178,7 +178,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const counter = () => document.querySelector("[data-shorts-counter]")?.textContent;
 /** Oynatıcıda gösterilen ilan: videonun sol altındaki başlık */
 const panel = () => document.querySelector("[data-shorts-slide='current'] [data-shorts-info]")?.textContent;
 
@@ -197,17 +196,17 @@ describe("masaüstü vitrin: Shorts oynatıcısı akışı", () => {
 
     fireEvent.click(document.querySelector("[data-portal-card='a']")!, { button: 0 });
     expect(home.setVehicleParam).toHaveBeenLastCalledWith("a");
-    expect(counter()).toContain("1 / 3");
     expect(panel()).toContain("Model a");
+    // Oynatıcıda "1 / 3" gibi sayaç yok
+    expect(document.querySelector("[data-shorts-viewer]")?.textContent).not.toMatch(/\d+\s*\/\s*\d+/);
 
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
-    expect(counter()).toContain("2 / 3");
     expect(panel()).toContain("Model b");
     expect(home.setVehicleParam).toHaveBeenLastCalledWith("b");
 
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
-    expect(counter()).toContain("3 / 3");
+    expect(panel()).toContain("Model c");
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sonraki ilan" }).disabled).toBe(true);
 
     fireEvent.keyDown(document.body, { key: "ArrowUp" });
@@ -228,11 +227,12 @@ describe("masaüstü vitrin: Shorts oynatıcısı akışı", () => {
     expect(screen.getByText("2+ videolu ilan")).toBeTruthy();
 
     fireEvent.click(document.querySelector("[data-portal-card='b']")!, { button: 0 });
-    expect(counter()).toContain("2 / 2+");
+    expect(panel()).toContain("Model b");
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     await waitFor(() => expect(panel()).toContain("Model c"));
     expect(api.searchPortalPage).toHaveBeenLastCalledWith(EMPTY_FILTERS, 2);
-    expect(counter()).toContain("3 / 3");
+    // Yeni sayfa geldikten sonra listenin sonu: sonraki kapalı
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sonraki ilan" }).disabled).toBe(true);
   });
 
   it("paylaşılan ilan (?v=) oynatıcıyla açılır; yayında değilse bilgi verilir ve ?v= kalkar", async () => {
@@ -240,7 +240,8 @@ describe("masaüstü vitrin: Shorts oynatıcısı akışı", () => {
     api.fetchPortalVehicle.mockResolvedValueOnce(vehicle("paylasilan"));
     const first = render(<DesktopPortal home={homeFilters()} initialVehicleId="paylasilan" initialTab="explore" />);
     await waitFor(() => expect(panel()).toContain("Model paylasilan"));
-    expect(screen.getByText("Paylaşılan ilan")).toBeTruthy();
+    // Bağlantıyla açılan ilanda da sayaç ya da etiket yok
+    expect(screen.queryByText("Paylaşılan ilan")).toBeNull();
     // Paylaşılan ilandan sonra listenin başı
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     expect(panel()).toContain("Model a");
@@ -437,12 +438,12 @@ describe("masaüstü vitrin: görselli ilanlar ve video bölümü", () => {
     expect(document.querySelector("[data-photo-card='a']")!.textContent).toContain("Video");
 
     fireEvent.click(document.querySelector("[data-photo-card='a']")!, { button: 0 });
-    expect(counter()).toContain("1 / 3");
+    expect(panel()).toContain("Model a");
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     expect(panel()).toContain("Model c");
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     expect(panel()).toContain("Model d");
-    expect(counter()).toContain("3 / 3");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sonraki ilan" }).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Vitrine dön" }));
     await waitFor(() => expect(document.activeElement?.getAttribute("data-photo-card")).toBe("d"));

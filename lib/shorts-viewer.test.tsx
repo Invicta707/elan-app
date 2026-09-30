@@ -121,9 +121,6 @@ function props(overrides: Partial<Props> = {}): Props {
   return {
     vehicle: vehicle("b"),
     direction: 0,
-    position: 2,
-    total: 5,
-    moreAvailable: true,
     hasPrev: true,
     hasNext: true,
     loadingNext: false,
@@ -169,7 +166,7 @@ afterEach(() => {
 });
 
 describe("ShortsViewer: açılış ve yerleşim", () => {
-  it("tam ekran oynatıcı: 9:16 video, sol altta satıcı / başlık / fiyat, sayaç; çekmece kapalı", async () => {
+  it("tam ekran oynatıcı: 9:16 video, sol altta satıcı / başlık / fiyat; \"X / Y\" sayacı yok; çekmece kapalı", async () => {
     const { dialog } = renderViewer({ vehicle: vehicle("b", { isTest: true }) });
     expect(dialog.open).toBe(true);
     expect(dialog.getAttribute("aria-label")).toBe("2019 BMW Model b ilanı");
@@ -190,7 +187,10 @@ describe("ShortsViewer: açılış ve yerleşim", () => {
     // Künye videonun üstünde yok: yakıt, vites, km, ekspertiz çekmecede
     expect(info.textContent).not.toMatch(/Dizel|Otomatik|85\.000/);
 
-    expect(dialog.textContent).toContain("2 / 5+");
+    // Kaçıncı ilanda olunduğu gösterilmez (sonsuz akış hissi)
+    expect(dialog.querySelector("[data-shorts-counter]")).toBeNull();
+    expect(dialog.textContent).not.toMatch(/\d+\s*\/\s*\d+/);
+    expect(dialog.textContent).not.toContain("Paylaşılan ilan");
     expect(drawer().dataset.open).toBe("false");
     expect(screen.queryByTestId("panel")).toBeNull();
 
@@ -300,14 +300,11 @@ describe("ShortsViewer: gezinme", () => {
     expect(current.onStep).toHaveBeenCalledTimes(2);
   });
 
-  it("sağdaki oklar; listenin başında önceki kapalı; paylaşılan ilanda sayaç yerine etiket", () => {
-    const first = renderViewer({ hasPrev: false, position: 1 });
+  it("sağdaki oklar; listenin başında önceki kapalı", () => {
+    const first = renderViewer({ hasPrev: false });
     expect(button("Önceki ilan").disabled).toBe(true);
     fireEvent.click(button("Sonraki ilan"));
     expect(first.props.onStep).toHaveBeenCalledWith(1);
-    first.unmount();
-    renderViewer({ position: null });
-    expect(screen.getByText("Paylaşılan ilan")).toBeTruthy();
   });
 
   it("fare tekerleği: bir hareket bir ilan; Ctrl+tekerlek ve listenin sonu adım atmaz", () => {
@@ -341,7 +338,7 @@ describe("ShortsViewer: gezinme", () => {
     const view = renderViewer();
     await vi.waitFor(() => expect(hls.instances).toHaveLength(1));
 
-    view.rerender(<ShortsViewer {...props({ vehicle: vehicle("c"), direction: 1, position: 3 })} />);
+    view.rerender(<ShortsViewer {...props({ vehicle: vehicle("c"), direction: 1 })} />);
     expect(leavingSlide()?.className).toContain("shorts-leave-next");
     expect(leavingSlide()?.hasAttribute("inert")).toBe(true);
     expect(leavingSlide()?.querySelector("img")?.getAttribute("src")).toBe("https://video/b.jpg");
