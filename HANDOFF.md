@@ -1,6 +1,14 @@
 # gözüyle (eski adı Elan): Handoff ve Bağlam Aktarımı
 
-_Son güncelleme: 30 Eylül 2026_
+_Son güncelleme: 17 Ekim 2026_
+
+## 0. Güncel durum ve sıradaki görev (bağlam sıfırlaması öncesi, 17 Ekim 2026)
+
+- **Kod:** son kod commit'i `e42f89a` (Shorts oynatıcısındaki "X / Y" sayacı kaldırıldı); ondan sonra yalnızca dokümantasyon commit'leri. `main` = `origin/main`, çalışma ağacı temiz (commit'lenmemiş ya da yarım dosya yok).
+- **Canlı:** gozuyle.com → deploy `elan-cxfme87ks` (`dpl_24ZJnwibkbSRBwxtxtWTHYNuKZh2`, 30 Eylül 2026; `81a6a76` docs push'u, kod `e42f89a` ile aynı). Bu kapanış commit'i yeni bir docs deploy'u tetikler (kod değişmez).
+- **Veritabanı:** 27 migration'ın hepsi uzakta uygulanmış; sonuncusu `20260929120000_expertise_parts.sql`.
+- **Doğrulama (17 Ekim 2026):** `npm test` → 92 dosya, **1660 test** yeşil; `npm run build` hatasız.
+- **Sıradaki görev:** `/cansu-kamil` interaktif sürpriz rotasının geliştirilmesi: iPhone 11 optimizasyonu (414×896 CSS px, `100dvh`, güvenli alanlar, dokunma hedefleri, Safari'de otomatik oynatma/ses kısıtları), görsel kırpma (ör. `object-fit` / odak noktası ya da tarayıcıda kırpma; mevcut kare kırpma örneği [lib/avatar-image.ts](lib/avatar-image.ts)) ve WhatsApp entegrasyonu (`wa.me` bağlantısı; mevcut yardımcı `whatsappShareUrl` [lib/share.ts](lib/share.ts)'te). **Dikkat:** bu rota repoda henüz **yok** (`app/` altında `cansu-kamil` klasörü ya da bu adı geçen dosya bulunmadı; uzakta başka dal da yok). Yeni oturum önce kullanıcıdan rotanın kaynağını (başka bir repo/dosya mı, sıfırdan mı) ve içeriğini teyit etmeli. Herkese açık olmayacaksa `robots` `noindex` ve sitemap dışı tutulmalı ([app/sitemap.ts](app/sitemap.ts) yalnızca sabit sayfaları ve ilanları listeler).
 
 **Proje:** Türkiye pazarı için kısa videolu araç ilanı platformu (dikey video akışı, arama, ilan verme, favoriler, WhatsApp ve ilan üzerinden mesajlaşma, kullanıcı adı ve takip sistemi, "Takip Edilenler" akışı).
 **Konum:** `C:\Users\Kamil\elan-app` (Windows; Git Bash + PowerShell).
