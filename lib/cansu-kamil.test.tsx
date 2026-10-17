@@ -2,7 +2,8 @@
 //
 // /cansu-kamil sürpriz sayfası (app/cansu-kamil/page.tsx): portre ve başlık görünür;
 // "Aşkımızı Ölç" 1,5 sn hesaplar, sonra sonuç kartı, kalp yağmuru ve "Bu akşam ne
-// yapıyoruz?" kartı açılır; tüm bağlantılar doğru wa.me mesajlarına gider.
+// yapıyoruz?" kartı açılır; tüm bağlantılar doğru WhatsApp mesajlarına gider (api.whatsapp.com:
+// wa.me yönlendirmesi emojileri bozuyor).
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ImgHTMLAttributes } from "react";
@@ -18,7 +19,7 @@ vi.mock("next/image", () => ({
   },
 }));
 
-const PHONE = "https://wa.me/905445673430?text=";
+const PHONE = "https://api.whatsapp.com/send?phone=905445673430&text=";
 
 describe("/cansu-kamil", () => {
   beforeEach(() => {
@@ -39,6 +40,9 @@ describe("/cansu-kamil", () => {
     expect(footer.getAttribute("href")).toBe(
       `${PHONE}Siteni%20g%C3%B6rd%C3%BCm,%20inan%C4%B1lmaz%20g%C3%BCzel%20olmu%C5%9F!%20%E2%9D%A4%EF%B8%8F`,
     );
+    // Emoji yüzde kodlu ve bozuk karakter (U+FFFD) yok
+    expect(decodeURIComponent(footer.getAttribute("href") ?? "")).toContain("olmuş! ❤️");
+    expect(document.body.innerHTML).not.toContain("wa.me");
     // Altında numara ya da ek metin yok
     expect(footer.closest("footer")?.textContent).toBe("Bana WhatsApp'tan yaz balım ❤️");
 

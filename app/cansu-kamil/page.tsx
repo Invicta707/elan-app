@@ -7,12 +7,13 @@ import styles from "./cansu.module.css";
 // Sürpriz sayfası (iPhone 11 / iOS Safari, 414×896 CSS px hedefli). Alt gezinme ve
 // kullanıcı adı penceresi bu rotada gizli (lib/navigation.ts, UsernameOnboarding).
 
+// wa.me değil api.whatsapp.com: wa.me yönlendirmesi metindeki emojileri "�" (U+FFFD) yapıyor
 const WA_WILD_RIFT =
-  "https://wa.me/905445673430?text=A%C5%9Fk%C4%B1m%20hemen%20Wild%20Rift'e%20giriyoruz,%20beni%20ta%C5%9F%C4%B1man%20laz%C4%B1m!%20%E2%9A%94%EF%B8%8F%F0%9F%92%96";
+  "https://api.whatsapp.com/send?phone=905445673430&text=A%C5%9Fk%C4%B1m%20hemen%20Wild%20Rift'e%20giriyoruz,%20beni%20ta%C5%9F%C4%B1man%20laz%C4%B1m!%20%E2%9A%94%EF%B8%8F%F0%9F%92%96";
 const WA_VOICE =
-  "https://wa.me/905445673430?text=Hemen%20sesini%20duymak%20istiyorum,%20m%C3%BCsait%20olunca%20ara%20beni!%20%E2%98%8E%EF%B8%8F%E2%9D%A4%EF%B8%8F";
+  "https://api.whatsapp.com/send?phone=905445673430&text=Hemen%20sesini%20duymak%20istiyorum,%20m%C3%BCsait%20olunca%20ara%20beni!%20%E2%98%8E%EF%B8%8F%E2%9D%A4%EF%B8%8F";
 const WA_FOOTER =
-  "https://wa.me/905445673430?text=Siteni%20g%C3%B6rd%C3%BCm,%20inan%C4%B1lmaz%20g%C3%BCzel%20olmu%C5%9F!%20%E2%9D%A4%EF%B8%8F";
+  "https://api.whatsapp.com/send?phone=905445673430&text=Siteni%20g%C3%B6rd%C3%BCm,%20inan%C4%B1lmaz%20g%C3%BCzel%20olmu%C5%9F!%20%E2%9D%A4%EF%B8%8F";
 
 const CALC_MS = 1500;
 const RAIN_MS = 6000;
