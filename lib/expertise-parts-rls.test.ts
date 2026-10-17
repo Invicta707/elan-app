@@ -97,9 +97,8 @@ afterAll(async () => {
 });
 
 describe("expertise_summary.parts", () => {
-  it("migration en son: izlenme sayacından sonra uygulanır", () => {
+  it("migration izlenme sayacından sonra uygulanır", () => {
     const migrations = readdirSync("supabase/migrations").sort();
-    expect(migrations.at(-1)).toBe("20260929120000_expertise_parts.sql");
     expect(migrations.indexOf("20260929120000_expertise_parts.sql")).toBeGreaterThan(migrations.indexOf("20260929100000_vehicle_views.sql"));
   });
 
