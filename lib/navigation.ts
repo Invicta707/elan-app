@@ -38,7 +38,8 @@ export function isNavItemActive(href: string, pathname: string | null): boolean 
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Alt gezinme çubuğunun gizlendiği sayfalar: tam ekran sohbet (/messages/<id>) */
+/** Alt gezinme çubuğunun gizlendiği sayfalar: tam ekran sohbet (/messages/<id>) ve sürpriz sayfası */
 export function isNavHidden(pathname: string | null): boolean {
+  if (pathname === "/cansu-kamil") return true;
   return Boolean(pathname?.startsWith("/messages/") && pathname.length > "/messages/".length);
 }

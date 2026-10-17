@@ -387,7 +387,7 @@ describe("canPromptOn (kullanıcı adı penceresi)", () => {
     for (const path of ["/", "/search", "/my-listings", "/messages", "/@kamil", "/vehicles/abc", "/ilan/2021-bmw-320i-abc"]) {
       expect(canPromptOn(path)).toBe(true);
     }
-    for (const path of ["/sell", "/auth/callback", "/messages/123", "/admin/reports", "/privacy", "/terms", null]) {
+    for (const path of ["/sell", "/auth/callback", "/messages/123", "/admin/reports", "/privacy", "/terms", "/cansu-kamil", null]) {
       expect(canPromptOn(path)).toBe(false);
     }
   });

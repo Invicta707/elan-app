@@ -69,8 +69,10 @@ describe("isNavItemActive", () => {
 });
 
 describe("isNavHidden", () => {
-  it("yalnızca tam ekran sohbette alt çubuk gizlenir", () => {
+  it("yalnızca tam ekran sohbette ve sürpriz sayfasında alt çubuk gizlenir", () => {
     expect(isNavHidden("/messages/abc")).toBe(true);
+    expect(isNavHidden("/cansu-kamil")).toBe(true);
+    expect(isNavHidden("/cansu-kamil-x")).toBe(false);
     expect(isNavHidden("/messages")).toBe(false);
     expect(isNavHidden("/messages/")).toBe(false);
     expect(isNavHidden("/my-listings")).toBe(false);

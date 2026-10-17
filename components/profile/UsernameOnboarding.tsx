@@ -39,7 +39,7 @@ function snooze(userId: string) {
 /** Pencerenin açılabileceği sayfalar */
 export function canPromptOn(pathname: string | null): boolean {
   if (!pathname) return false;
-  return !/^\/(auth|sell|admin|privacy|terms)(\/|$)/.test(pathname) && !/^\/messages\/./.test(pathname);
+  return !/^\/(auth|sell|admin|privacy|terms|cansu-kamil)(\/|$)/.test(pathname) && !/^\/messages\/./.test(pathname);
 }
 
 export default function UsernameOnboarding() {
