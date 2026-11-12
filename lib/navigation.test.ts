@@ -73,6 +73,8 @@ describe("isNavHidden", () => {
     expect(isNavHidden("/messages/abc")).toBe(true);
     expect(isNavHidden("/cansu-kamil")).toBe(true);
     expect(isNavHidden("/cansu-kamil-x")).toBe(false);
+    expect(isNavHidden("/hatunum")).toBe(true);
+    expect(isNavHidden("/hatunum-x")).toBe(false);
     expect(isNavHidden("/messages")).toBe(false);
     expect(isNavHidden("/messages/")).toBe(false);
     expect(isNavHidden("/my-listings")).toBe(false);

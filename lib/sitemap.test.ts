@@ -137,6 +137,6 @@ describe("robots.txt", () => {
     const rules = robots();
     vi.unstubAllEnvs();
     expect(rules.sitemap).toBe("https://gozuyle.com/sitemap.xml");
-    expect(rules.rules).toEqual({ userAgent: "*", allow: ["/", "/api/og/"], disallow: ["/admin", "/api/"] });
+    expect(rules.rules).toEqual({ userAgent: "*", allow: ["/", "/api/og/"], disallow: ["/admin", "/api/", "/hatunum"] });
   });
 });

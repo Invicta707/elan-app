@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import FeedHeader from "./FeedHeader";
 import CommentReportsSection from "./moderation/CommentReportsSection";
+import HatunumToggleSection from "./moderation/HatunumToggleSection";
 import PendingListingsSection from "./moderation/PendingListingsSection";
 import TestListingsSection from "./moderation/TestListingsSection";
 import { useSupabaseSession } from "../lib/auth";
@@ -60,6 +61,7 @@ export default function ModerationView() {
             <ModerationQueue />
             <CommentReportsSection getAccessToken={currentAccessToken} onUnauthorized={goHome} />
             <TestListingsSection getAccessToken={currentAccessToken} onUnauthorized={goHome} />
+            <HatunumToggleSection getAccessToken={currentAccessToken} onUnauthorized={goHome} />
           </div>
         ) : (
           <QueueSkeleton />

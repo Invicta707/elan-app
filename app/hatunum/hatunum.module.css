@@ -1,0 +1,496 @@
+/* /hatunum: koyu kod editörü teması. Not: HAYIR düğmesinin atalarına transform,
+   filter ya da backdrop-filter verme; yoksa position: fixed pencereye göre
+   konumlanır ve düğme ekran dışına kaçabilir. */
+
+.page {
+  --bg: #0d1117;
+  --panel: #1e1e1e;
+  --bar: #252526;
+  --line: #2a2d2e;
+  --text: #d4d4d4;
+  --muted: #858585;
+  --green: #7ee787;
+  --purple: #bc8cff;
+  --pink: #ff7b9c;
+
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono), "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.glowA,
+.glowB {
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.22;
+  pointer-events: none;
+}
+.glowA {
+  top: -18vmax;
+  left: -12vmax;
+  background: var(--purple);
+}
+.glowB {
+  bottom: -20vmax;
+  right: -14vmax;
+  background: var(--green);
+  opacity: 0.14;
+}
+
+.window {
+  position: relative;
+  width: min(100%, 980px);
+  border: 1px solid #3c3c3c;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(188, 140, 255, 0.08);
+  overflow: hidden;
+}
+
+/* --- başlık çubuğu ve sekmeler --- */
+.titleBar {
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  background: var(--bar);
+  border-bottom: 1px solid #1a1a1a;
+  font-size: 13px;
+}
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+.dots i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.dotRed {
+  background: #ff5f57;
+}
+.dotYellow {
+  background: #febc2e;
+}
+.dotGreen {
+  background: #28c840;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-top: 2px solid var(--purple);
+  color: #fff;
+}
+.tabInactive {
+  background: transparent;
+  border-top-color: transparent;
+  color: var(--muted);
+}
+.jsIcon {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f1e05a;
+}
+.tabClose {
+  color: var(--muted);
+}
+.skip {
+  margin-left: auto;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.skip:hover,
+.skip:focus-visible {
+  color: #fff;
+}
+
+/* --- editör --- */
+.editor {
+  padding: 14px 0 16px;
+  font-size: 15px;
+  line-height: 1.65;
+  border-bottom: 1px solid #2b2b2b;
+}
+.line {
+  display: flex;
+  padding-right: 16px;
+}
+.activeLine {
+  background: var(--line);
+}
+.lineNo {
+  flex: 0 0 52px;
+  padding-right: 18px;
+  text-align: right;
+  color: #6e7681;
+  user-select: none;
+}
+.activeLine .lineNo {
+  color: #c6c6c6;
+}
+.lineCode {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.ghost {
+  visibility: hidden;
+}
+.caret {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 1.1em;
+  vertical-align: text-bottom;
+}
+.caret::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: #aeafad;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* söz dizimi renkleri (VS Code Dark+) */
+.kw {
+  color: #c586c0;
+}
+.kw2 {
+  color: #569cd6;
+}
+.cls {
+  color: #4ec9b0;
+}
+.fn {
+  color: #dcdcaa;
+}
+.var {
+  color: #9cdcfe;
+}
+.prop {
+  color: #9cdcfe;
+}
+.str {
+  color: #ce9178;
+}
+.cmt {
+  color: #6a9955;
+}
+.p {
+  color: var(--text);
+}
+
+/* --- önizleme: fotoğraf + soru --- */
+.preview {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 36px;
+  padding: 28px 36px 30px;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+.preview[data-revealed="true"] {
+  opacity: 1;
+}
+
+.photoRing {
+  width: 220px;
+  height: 220px;
+  padding: 4px;
+  border-radius: 50%;
+  background: conic-gradient(from 140deg, var(--green), var(--purple), var(--pink), var(--green));
+  box-shadow: 0 0 28px rgba(126, 231, 135, 0.35), 0 0 60px rgba(188, 140, 255, 0.35);
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 1.4s ease 0.15s,
+    transform 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s;
+}
+.preview[data-revealed="true"] .photoRing {
+  opacity: 1;
+  transform: none;
+}
+.photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--panel);
+}
+
+.ask {
+  min-width: 0;
+}
+.prompt {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.promptSign {
+  color: var(--green);
+}
+.question {
+  margin: 0;
+  font-size: clamp(28px, 3.6vw, 44px);
+  line-height: 1.15;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.name {
+  background: linear-gradient(90deg, var(--green), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 28px;
+  min-height: 96px;
+}
+.yes,
+.no {
+  width: 132px;
+  height: 52px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.yes {
+  position: relative;
+  z-index: 2;
+  border: 0;
+  color: #0d1117;
+  background: linear-gradient(135deg, var(--green), #56d364);
+  box-shadow: 0 0 24px rgba(126, 231, 135, 0.45);
+  transform-origin: left center;
+  transition:
+    transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.2s ease;
+}
+.yes:hover {
+  box-shadow: 0 0 36px rgba(126, 231, 135, 0.7);
+}
+.yes:focus-visible,
+.no:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 3px;
+}
+.noSlot {
+  display: inline-block;
+  width: 132px;
+  height: 52px;
+}
+.no {
+  border: 1px solid #5a5a5a;
+  color: var(--text);
+  background: #2d2d2d;
+  touch-action: none;
+}
+.no[data-floating] {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.warnings {
+  min-height: 52px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.warning {
+  margin: 0 0 4px;
+  color: #cca700;
+  animation: slideIn 0.2s ease;
+}
+.warning:not(:last-child) {
+  opacity: 0.45;
+}
+.warnTag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(204, 167, 0, 0.15);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* --- EVET sonrası terminal --- */
+.terminal {
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px solid rgba(126, 231, 135, 0.35);
+  border-radius: 10px;
+  background: #0d1117;
+  box-shadow: 0 0 30px rgba(126, 231, 135, 0.15);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.terminal p {
+  margin: 0;
+  animation: slideIn 0.25s ease;
+}
+.ok {
+  color: var(--green);
+  font-weight: 700;
+}
+.dim {
+  color: var(--muted);
+}
+.signature {
+  margin-top: 8px !important;
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* --- durum çubuğu --- */
+.statusBar {
+  display: flex;
+  gap: 16px;
+  height: 24px;
+  align-items: center;
+  padding: 0 12px;
+  background: linear-gradient(90deg, #6f42c1, #8957e5);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.statusRight {
+  margin-left: auto;
+}
+
+.canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* --- kısa ekranlar (dizüstü) --- */
+@media (max-height: 760px) and (min-width: 721px) {
+  .editor {
+    font-size: 14px;
+    line-height: 1.55;
+    padding: 10px 0 12px;
+  }
+  .preview {
+    padding: 20px 32px 22px;
+  }
+  .photoRing {
+    width: 170px;
+    height: 170px;
+  }
+  .buttons {
+    margin-top: 18px;
+    min-height: 80px;
+  }
+}
+
+/* --- telefon --- */
+@media (max-width: 720px) {
+  .page {
+    align-items: flex-start;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .tabInactive,
+  .statusBar span:nth-child(n + 4) {
+    display: none;
+  }
+  .editor {
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+  .lineNo {
+    flex-basis: 30px;
+    padding-right: 10px;
+  }
+  .preview {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 20px;
+    padding: 22px 18px 24px;
+    text-align: center;
+  }
+  .photoRing {
+    width: 168px;
+    height: 168px;
+  }
+  .question {
+    font-size: 27px;
+  }
+  .buttons {
+    justify-content: center;
+  }
+  .yes {
+    transform-origin: center;
+  }
+  .terminal {
+    text-align: left;
+    font-size: 13px;
+  }
+  .signature {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview,
+  .photoRing,
+  .yes,
+  .no[data-floating] {
+    transition: none;
+  }
+  .caret::after {
+    animation: none;
+  }
+}

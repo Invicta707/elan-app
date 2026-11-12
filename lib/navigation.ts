@@ -40,6 +40,6 @@ export function isNavItemActive(href: string, pathname: string | null): boolean 
 
 /** Alt gezinme çubuğunun gizlendiği sayfalar: tam ekran sohbet (/messages/<id>) ve sürpriz sayfası */
 export function isNavHidden(pathname: string | null): boolean {
-  if (pathname === "/cansu-kamil") return true;
+  if (pathname === "/cansu-kamil" || pathname === "/hatunum") return true;
   return Boolean(pathname?.startsWith("/messages/") && pathname.length > "/messages/".length);
 }
